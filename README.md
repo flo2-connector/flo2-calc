@@ -99,7 +99,7 @@ Why each value:
   that size one step takes most of a second.
 - **Digits, 2,000 on flo2.io.** Still far past a decision's numbers. Every value in a 500-node graph can then be
   written out exactly within the reply budget, so 128m holds the heaviest call the profile allows. Its measured
-  peak is 71 MiB (Measurements, below).
+  peak is 78 MiB (Measurements, below).
 - **Reply, 8 MiB on a laptop.** That is room for a 500-node graph of large exact values. A record larger than the
   budget is also refused as input, so a host never takes in a record it could not have made.
 - **Reply, 2 MiB on flo2.io.** This is the most flo2's door keeps of a `calcfile` in one reply, well under its
@@ -505,14 +505,15 @@ flo2-tool-sandbox's flags:
 
 | What | Measured |
 |---|---|
-| Peak memory of one session (the cgroup's `memory.peak`) | 71.3 MiB under a 128 MiB cap, 71.1 MiB under 256 MiB |
-| The session | 16 calls: three each of a 500-node graph, its record, the record's re-run, and a refused mixed-unit sum; then the runaway calls below, and one more call that answers |
-| Runaway calls, under the image's own limits (flo2.io's profile) | a 20,000-digit power to the 1000th, and 30 squarings: each stopped at `max_digits`. The heaviest graph the profile allows (500 nodes of about 1,900 digits each), sent whole and recorded: both answered, the record within 2 MiB |
-| Time for the first 12 calls, one CPU, cold start included | 4.9 s |
-| Image size | 182 MB (`python:3.12-slim` and the venv) |
+| Peak memory of one session (the cgroup's `memory.peak`) | 78.2 MiB under a 128 MiB cap, 77.7 MiB under 256 MiB |
+| The session | 27 calls: three each of a 500-node graph, its record, the record's re-run, and a refused mixed-unit sum; three each of a 484-node graph of rounded operators at 1,000 digits each (sqrt, exp, ln, sin, atan, deg-rad, normal_quantile, chi2_sf, t_quantile), its record and the record's re-run; then the runaway calls below, and one more call that answers |
+| Runaway calls, under the image's own limits (flo2.io's profile) | a 20,000-digit power to the 1000th, 30 squarings, `exp(1e5)` and `normal_sf(1e6)`: each stopped at `max_digits`. The heaviest graph the profile allows (500 nodes of about 1,900 digits each), sent whole and recorded: both answered, the record within 2 MiB |
+| Time for the whole session, one CPU, cold start included | 87 s (the 1,000-digit rounded graphs take about 8 s a call; t_quantile is most of it) |
+| Image size | 209 MB (`python:3.12-slim` and the venv; python-flint adds about 26 MB) |
 
-Measured on 2026-10-04 with flo2-calc 0.2.0; 0.1.0 peaked at 62.4 MiB in the first 12 calls. A cap of **128m** is
-still about twice the peak, the same rule flo2 used for flo2-cad's cap. CI runs the image under 128m, and asks it
+Measured on 2026-10-04 with flo2-calc 0.4.0. 0.2.0 peaked at 71.3 MiB in its 16-call session, and 0.1.0 at 62.4 MiB in
+the first 12 calls: python-flint, loaded and working at 1,000 digits, costs about 7 MiB. A cap of **128m** is still
+well above the peak, the same rule flo2 used for flo2-cad's cap. CI runs the image under 128m, and asks it
 every limit's questions there (`tests/test_limits.py`, `tests/test_pending_record.py`).
 
 ## Working on it
@@ -570,8 +571,10 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    still works. A not-yet-computed record is a file like any other, kept as a version of
    `calcfile:///<name>.calc.json`. Its completion, from the same name, is the next version of the same file.
 3. **The helper's description**, its served skill (`skills/support-a-decision-with-math/SKILL.md`), and a row in
-   `HELPERS`. 0.3.0 changed the skill's text (exact for these inputs, units, temperatures, money); the four tools'
-   names and classes are unchanged.
+   `HELPERS`. 0.3.0 changed the skill's text (exact for these inputs, units, temperatures, money), and 0.4.0 again
+   (the rounded operators and their labels). The four tools' names and classes are unchanged: the new operators are
+   new `op` values inside a graph. The record is schema version 3, still one `calcfile` per record. The image is
+   about 26 MB larger (python-flint), and its measured peak, 78 MiB, still fits the 128m cap.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 furlong"`, whose reason starts `Malformed call. graph.nodes[0].value`.
