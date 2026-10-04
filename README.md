@@ -4,10 +4,12 @@ flo2-calc is an MCP server that does a design's arithmetic and logic, so that a 
 computation that supports it: the operators, the inputs with their units and where each came from, and the result.
 The math is done here, exactly, not by the model.
 
-- **Exact.** Every number is an exact fraction. `0.1 + 0.2` is `0.3`, and every unit conversion is exact.
+- **Exact for these inputs.** Every number is an exact fraction. `0.1 + 0.2` is `0.3`, and every unit conversion is
+  exact. A result is exact for the inputs as written, and no more accurate than they are: a typed `3.14159` is taken
+  as that decimal, not as pi, and every reply and record says so.
 - **Units, checked.** A value can carry a unit, spelled as reflow2 designs spell it (`mm`, `g`, `V`, `mA`, ...).
   Units that measure different things are refused, naming the operation and both units, never stripped. A unit
-  flo2-calc does not know is refused, never guessed.
+  flo2-calc does not know is refused, never guessed, and a hint never offers a unit of another size or kind.
 - **Correct or refused.** A computation that cannot be done says which node, which operation and why. It never
   returns a number it cannot stand behind.
 - **Re-runnable.** A computation comes back as a **computation record**, a `.calc.json` file a decision can cite.
@@ -133,7 +135,7 @@ How they are kept (`src/flo2_calc/limits.py`):
 
 | Tool | Class | Arguments | Returns |
 |---|---|---|---|
-| `evaluate_graph` | read | `graph` | `status` (`ok` or `refused`), the `result`, every node's value in evaluation order |
+| `evaluate_graph` | read | `graph` | `status` (`ok` or `refused`), the `result`, every node's value in evaluation order, and `exactness` (below) |
 | `add_node` | read | `node`, `graph?` (the graph so far) | the new node's value, every value so far, and the grown `graph` to pass next time |
 | `record_computation` | write | `graph`, `name`, `supports?`, `output_path?`; or, to complete one, a not-yet-computed `record` | the result, the record's file name, sha256 and content hash, and the record as `calcfile:///<name>.calc.json`. Stopped at a limit: the refusal and a not-yet-computed record |
 | `rerun_record` | read | `record` (the object or its text) or `path` | `reproduces`, whether the content hash matches, and every difference. For a not-yet-computed record: that it has no result yet, and what it needs |
@@ -157,6 +159,9 @@ the same graph, and gives the same result, as the same nodes sent whole.
 - **An input** has a `value`: a number with its unit as text (`"1.4 mm"`), a plain number (`"0.1"`, `"1/3"`, or a
   JSON integer), or `true`/`false`. A JSON number with a fraction part (`0.1`) is refused, because it arrives as a
   binary float whose exact value is already lost: write `"0.1"`.
+- **A value is one number.** Arithmetic typed inside a value (`"3 + * 4"`, `"2^10"`, `"2 1/2"`) is refused as an
+  expression, with how to build it as nodes: `{"id": "a", "value": "3"}`, `{"id": "b", "value": "4"}`,
+  `{"id": "sum", "op": "add", "args": ["a", "b"]}`. It is never read as a number and a strange unit.
 - **Its `source`** says where the value came from: free text, or `{"design_node": "<id>"}` naming a node in a reflow2
   design (add `"design": "<id>"` for another design). flo2-calc records it and never resolves it. A record needs a
   source on every input.
@@ -178,13 +183,18 @@ Spelled as reflow2 spells them, one spelling each. The vocabulary is in `src/flo
 
 | Measures | Units |
 |---|---|
-| length | `m` `km` `cm` `mm` `um` `nm` `in` `ft` |
+| length | `m` `km` `cm` `mm` `um` `nm` `in` `ft` `mil` (a thousandth of an inch) |
 | mass | `kg` `g` `mg` `ug` `t` `ct` `lb` `oz` |
 | time | `s` `ms` `us` `ns` `min` `h` `d` |
-| electrical | `A` `kA` `mA` `uA`, `V` `kV` `mV` `uV`, `ohm` `kohm` `Mohm`, `F` `mF` `uF` `nF` `pF`, `H` `mH` `uH`, `C` `Ah` `mAh` |
-| power, energy | `W` `MW` `kW` `mW` `uW`, `J` `kJ` `MJ` `Wh` `mWh` `kWh` `eV` |
-| frequency, force, pressure | `Hz` `kHz` `MHz` `GHz`, `N` `kN`, `Pa` `kPa` `MPa` `GPa` `bar` |
-| other | `K` (absolute only), `L` `mL`, `deg` `rad`, `%` |
+| electrical | `A` `kA` `mA` `uA` `nA` `pA`, `V` `kV` `mV` `uV`, `ohm` `mohm` `kohm` `Mohm`, `farad` `mF` `uF` `nF` `pF`, `H` `mH` `uH`, `coulomb` `Ah` `mAh` |
+| power, energy | `W` `MW` `kW` `mW` `uW`, `J` `kJ` `MJ` `mJ` `uJ` `Wh` `mWh` `kWh` `MWh` `eV` |
+| frequency, force | `Hz` `mHz` `kHz` `MHz` `GHz`, `N` `kN` `lbf` |
+| pressure | `Pa` `mPa` `kPa` `MPa` `GPa` `bar` `psi` `ksi` |
+| temperature | `K`, `degC` `degF` (a temperature), `delta_degC` `delta_degF` (a change of temperature) |
+| volume | `L` `mL`, `gal_us` (231 in^3, exactly 3.785411784 L), `gal_imp` (exactly 4.54609 L) |
+| angle | `deg` `arcmin` `arcsec`, `rad` |
+| money | `USD` `EUR` `JPY` `GBP` `CNY` `AUD` `CAD` `CHF` `HKD` `SGD` |
+| other | `%` |
 
 - **Compound units:** `*` between units, `^n` for a power, and one `/` with a bracketed product after it, for
   example `mm^2`, `m/s^2`, `N*m`, `kg/(m*s^2)`, `1/s`.
@@ -194,18 +204,95 @@ Spelled as reflow2 spells them, one spelling each. The vocabulary is in `src/flo
 - **Refused:**
   - units that measure different things (`2 mm + 3 g`);
   - a unit against a plain number (`2 mm + 3`);
-  - an unknown spelling. A near miss names the spelling to use: `MM` gives "write mm", and `µm` gives "write um".
-- **Angles** are their own dimension, so `30 deg + 1` is refused. `deg` and `rad` are not converted into each other,
-  because their ratio is pi, which no fraction holds exactly.
-- **Temperatures** are kelvin only. `°C` has an offset and does not add or multiply like a unit.
+  - an unknown spelling, never guessed. A bare `gal` is two units, and the refusal names both.
+- **Angles** are their own dimension, so `30 deg + 1` is refused. `arcmin` and `arcsec` are exact fractions of a
+  `deg` (1/60 and 1/3600). `deg` and `rad` are not converted into each other, because their ratio is pi, which no
+  fraction holds exactly.
+
+#### A hint never changes what you wrote
+
+A spelling flo2-calc does not know may come back with the spelling to use, and that hint never changes what was
+written, in size or in kind:
+
+- **A listed near miss** names its spelling: `µm` gives `Write "um"`, `Ω` gives `Write "ohm"`, `°C` gives
+  `Write "degC"`. Each is tested to mean exactly what its target means.
+- **A slip in the case of a unit's name** is hinted only when it cannot change a prefix: `khz` gives `Write "kHz"`,
+  and `kOhm` gives `Write "kohm"`. The text is read as written. Its SI prefix is taken exactly as typed, because a
+  prefix's case is its size (`m` is milli, `M` is mega; `p` is pico, `P` is peta). Its symbol is checked against
+  every SI symbol, not only flo2-calc's own. Only when that reading is one unit, and the hint is that unit, is
+  there a hint.
+- **Otherwise there is no hint**, only the reason: units are case-sensitive, and flo2-calc does not guess a case.
+  So `MV` (a megavolt as written) is never answered with `mV`, `PF` never with `pF`, and `PA` (a petaampere) never
+  with `Pa`. `mS` (a millisiemens) is never answered with `ms`, and `Nm` with `nm`. `MM` and `Kg` get no hint either:
+  `MM` reads as a megametre or a megamolar, and `K` is not a prefix.
+
+flo2-calc 0.1.0 and 0.2.0 matched a spelling case-insensitively instead. They answered `mJ` with `Write "MJ"`, 10^9
+too large (round 1 of the question set, q022). `tests/test_unit_hints.py` walks every SI prefix with every unit
+symbol, in every case, and fails on any hint that changes a size, a kind or a typed prefix.
+
+#### A bare `C` or `F`
+
+`C` is the SI symbol for the coulomb and `F` for the farad, but people write them for degrees Celsius and
+Fahrenheit. Read as SI, `25 C` would be 25 coulombs, silently. Read as a temperature, `0.1 F` would be wrong for
+whoever meant farads. So flo2-calc reads a bare `C` or `F` as neither, anywhere in a unit (`25 C`, `2.5 C/W`), and
+the refusal says what to write:
+
+- a temperature: `degC` or `degF` (`25 degC`);
+- a change of temperature: `delta_degC` or `delta_degF`, or `degC` inside a compound unit (`2.5 degC/W`);
+- a charge: `coulomb` (or `Ah`, `mAh`);
+- a capacitance: `farad` (or `mF`, `uF`, `nF`, `pF`).
+
+The prefixed spellings (`mF`, `uF`, `nF`, `pF`) are unambiguous and stay. A record made by an earlier flo2-calc with a
+bare `C` or `F` no longer re-runs: `rerun_record` says the unit cannot be read now, and why.
+
+#### Temperatures
+
+`K`, `degC` and `degF`. A value whose whole unit is `degC` or `degF` is a **temperature**: a reading on a scale whose
+zero is not zero temperature. A **change** of temperature is `delta_degC`, `delta_degF`, or a degree inside a compound
+unit (`2.5 degC/W` is `2.5 K/W`). A value in `K` can be either, so each rule says which it is, and where both are
+possible the operation is refused:
+
+| Operation | Rule |
+|---|---|
+| `convert` | A temperature converts exactly between `degC`, `degF` and `K` (`36.6 degC` is `309.75 K`; `98.6 degF` is `37 degC`). A temperature is never turned into a change, nor a change into a temperature. |
+| `add` | At most one temperature. Everything added to it is a change (`delta_degC`, `delta_degF` or `K`), and the sum is a temperature on its scale: `25 degC + 5 K` is `30 degC`. Two temperatures are refused: their sum means nothing. |
+| `sub` | Temperature minus temperature is a change: `30 degC - 77 degF` is `5 delta_degC`. Temperature minus `delta_degC` or `delta_degF` is a temperature. **Temperature minus `K` is refused**: `5 K` could be a change or a temperature, and the answers differ. `K` minus a temperature is a change, in `K`. |
+| `eq` `ne` `lt` `le` `gt` `ge` `min` `max` | Temperatures, and `K` as a temperature, are compared exactly on one scale. `min` and `max` answer in the first one's unit. A temperature is never compared with a change. |
+| `mul` `div` `pow` `neg` `abs` | Refused on a temperature in `degC` or `degF`. Convert it to `K` first, or work with a change. |
+
+A product that comes out in degrees is a change: `1.2 W * 23.25 degC/W` is `27.9 delta_degC`, and adding it to
+`40 degC` gives `67.9 degC`. A temperature refusal is of kind `offset_temperature`. `°C`, `℃`, `°F` and `℉` are
+hinted to `degC` and `degF`.
+
+#### Money
+
+Each currency is its own dimension, named by its ISO 4217 code. flo2-calc knows the ten most traded in the BIS
+Triennial Central Bank Survey of 2022: `USD` `EUR` `JPY` `GBP` `CNY` `AUD` `CAD` `CHF` `HKD` `SGD`.
+
+- Amounts in one currency add, compare and scale exactly: `987.50 USD + 12.50 USD` is `1000 USD`.
+- **flo2-calc holds no exchange rates.** `USD + EUR`, and `convert` from one currency to another, are refused as a
+  unit mismatch naming both, and the reason asks for a rate.
+- Only a rate the caller gives converts. It is an input whose unit holds two currencies, with its source, and it
+  multiplies: `100 USD * 0.92 EUR/USD` is `92 EUR`. **A rate must have a source** (`"ECB reference rate,
+  2026-10-02"`), even in `evaluate_graph`. A rate with none is a malformed call naming its `source` field.
+- `$`, `¥` and `£` are each the sign of more than one currency, so they are refused, naming them. `€` is hinted to
+  `EUR`.
 
 ### Exactness
 
-Every value is an exact fraction, and `+ - * /` and whole-number powers are exact. How a value is written:
+Every value is an exact fraction, and `+ - * /` and whole-number powers are exact. **"Exact" means exact for these
+inputs.** A value follows exactly from the inputs as written, and is no more accurate than they are. flo2-calc cannot
+know that `3.14159265` was typed for pi: it takes it as exactly that decimal. So a value built from a truncated pi
+or e is the exact value of the given inputs, not of the math they stand for. Every answer with a result says so in
+`exactness`, and every record says so in `arithmetic`. (Built-in pi, e and correctly rounded results are a later
+change.)
+
+How a value is written:
 
 - If its decimal ends within 40 significant digits, it is written exactly: `0.3`, `25.4 mm`, `1.602176634e-19 J`.
 - Otherwise it is written rounded half-even to 30 significant digits, with its exact value beside it as a fraction:
-  `"value": "4.44444444444444444444444444444 h", "exact": "40/9 h"`.
+  `"value": "4.44444444444444444444444444444 h", "exact": "40/9 h"`. That fraction is the exact value for these
+  inputs.
 
 Comparisons always use exact values. A value whose numerator or denominator passes the host's digits budget is not
 carried: the calculation stops there, with its reason (Limits, above).
@@ -215,7 +302,8 @@ carried: the calculation stops there, with its reason (Limits, above).
 flo2's helper contract fixes the split.
 
 - **A refused computation** is a normal reply: `{"status": "refused", "refused": {"node", "op", "kind", "reason",
-  "units"}}`, with no result and no record. For example: units that measure different things, a division by zero, or a
+  "units"}}`, with no result and no record. For example: units that measure different things or two currencies
+  (`unit_mismatch`), a temperature used where it has no meaning (`offset_temperature`), a division by zero, or a
   logic operator given a number.
 - **A limit passed** is a refused computation of its own kind, `exceeds_limits`, as above (Limits). It is still a
   normal reply. From `record_computation` it carries a not-yet-computed record.
@@ -236,11 +324,11 @@ flo2-calc 0.1.0) still re-runs: version 2 adds `status`, and a version 1 record 
 | `status` | `"computed"`, or `"not_computed"` (below) |
 | `name` | the record's name; its file is `<name>.calc.json` |
 | `supports` | optional: what it supports, as free text or `{"design_node": "dec:...", "design"?: "..."}` |
-| `arithmetic` | what exactness means in this record |
+| `arithmetic` | what exactness means in this record: exact for these inputs, and no more accurate than they are |
 | `graph` | the graph exactly as read, every value as text |
 | `inputs` | each input's `id`, `value`, `unit` and `source` (free text or `{"design_node"}`) |
 | `values` | every node's value, in evaluation order |
-| `result` | `{"node", "value"}`, plus `"exact"` when the value is rounded |
+| `result` | `{"node", "value"}`, plus `"exact"` (the exact value for these inputs) when the value is rounded |
 | `produced_by` | `{"flo2_calc", "pint"}` versions |
 | `content_hash` | `sha256:` over the canonical JSON (keys sorted, no spaces, UTF-8) of every other field |
 
@@ -342,7 +430,10 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
 /tmp/flo2-calc-venv/bin/python -m pytest -v
 ```
 
-- `tests/test_evaluator.py`, `tests/test_units.py`: exactness, every operator, every unit, and every refusal.
+- `tests/test_evaluator.py`, `tests/test_units.py`: exactness, every operator, every unit, money, and every refusal.
+- `tests/test_unit_hints.py`: every SI prefix with every unit symbol, in every case, through the hint. No hint may
+  change a size, a kind or a typed prefix. It also holds round 1's list, one by one.
+- `tests/test_temperature.py`: `degC` and `degF`, converted exactly; a difference of temperatures stays correct.
 - `tests/test_record.py`: the record is deterministic and fits its schema; it re-runs; tampering is caught.
 - `tests/test_server.py`: the four tools over a real MCP client session. Every refusal's reason is read on the
   client's side.
@@ -382,8 +473,9 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    gained an optional `record` argument, and its `graph` and `name` became optional; every call that worked before
    still works. A not-yet-computed record is a file like any other, kept as a version of
    `calcfile:///<name>.calc.json`. Its completion, from the same name, is the next version of the same file.
-3. **The helper's description**, its served skill (`skills/support-a-decision-with-math/SKILL.md`, unchanged), and a
-   row in `HELPERS`.
+3. **The helper's description**, its served skill (`skills/support-a-decision-with-math/SKILL.md`), and a row in
+   `HELPERS`. 0.3.0 changed the skill's text (exact for these inputs, units, temperatures, money); the four tools'
+   names and classes are unchanged.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 furlong"`, whose reason starts `Malformed call. graph.nodes[0].value`.

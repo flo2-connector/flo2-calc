@@ -20,6 +20,7 @@
   list.
 - **Reliability first** (`dec:quality-reliability`): every result is correct or refused, and every record re-runs to
   the same result. Exact fractions only: no float is ever made. A rounded value always carries its exact fraction.
+  "Exact" means exact FOR THESE INPUTS: a typed decimal of pi is that decimal, and every reply and record says so.
 - **Operators** (`dec:first-increment-operators`): arithmetic, logic (AND, OR, NOT, NOR, NAND, XOR) and comparison.
   Set operations come later.
 - **Two ways in** (`dec:graph-submission-modes`): a whole graph, or node by node through `add_node`. Both end in
@@ -27,7 +28,10 @@
 - **Units** (`dec:optional-units`, `dec:unit-mismatch-rejects`, `dec:units-use-reflow2-spellings`):
   - A value may carry a unit, spelled as reflow2 designs spell it, one spelling per unit (`units.VOCABULARY`).
   - A mismatch is refused, naming the operation and both units.
-  - An unknown spelling is refused, never guessed.
+  - An unknown spelling is refused, never guessed. A hint never changes what was written, in size or in kind: an SI
+    prefix's case is its size (`tests/test_unit_hints.py` walks every prefix, symbol and case).
+  - Each currency is its own dimension, with no exchange rates; only a sourced rate the caller gives converts.
+  - `degC` and `degF` are temperatures with an offset (`temperature.py`); a bare `C` or `F` is refused as ambiguous.
   - pint gives dimensions and exact factors; our code does the arithmetic.
 - **Host-set limits; a calculation never runs away**
   (`req:a-calculation-past-the-hosts-limits-is-stopped-and-handed-on`, options (b), (c) and (d) of
@@ -93,7 +97,8 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | `src/flo2_calc/evaluator.py` | reading and evaluating a graph, the operators | `cmp:evaluator` |
 | `src/flo2_calc/limits.py` | the host-set limits, and the guard that checks them while evaluating | `cmp:evaluator`, `cap:a-calculation-is-stopped-at-the-hosts-limits` |
 | `src/flo2_calc/numbers.py` | exact numbers: read, check, write | `cmp:evaluator` |
-| `src/flo2_calc/units.py` | the unit vocabulary, dimensions, exact conversion | `cmp:units` |
+| `src/flo2_calc/units.py` | the unit vocabulary, dimensions, exact conversion, the near-miss hint | `cmp:units` |
+| `src/flo2_calc/temperature.py` | degC and degF: what a temperature with an offset may do | `cmp:units` |
 | `src/flo2_calc/record.py`, `src/flo2_calc/schemas/` | the computation record (computed or not yet computed), its schemas, the root folder | `cmp:computation-record`, `cap:a-not-yet-computed-record-is-completed-on-a-larger-machine` |
 | `src/flo2_calc/server.py`, `cli.py`, `errors.py` | the four MCP tools, the command line, the two kinds of no | `cmp:mcp-server` |
 | `plugin.json`, `mcp.json`, `.claude-plugin/`, `.mcp.json`, `skills/` | the plugin package | `cap:serve-over-mcp` |
