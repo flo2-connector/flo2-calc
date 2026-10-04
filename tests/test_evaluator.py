@@ -108,10 +108,14 @@ def test_an_absurd_exponent_is_refused_rather_than_carried():
     assert "1e1000" in e.problem
 
 
-def test_a_value_that_grows_too_large_is_refused_not_carried():
+def test_a_value_that_grows_too_large_is_stopped_at_the_digits_budget_not_carried():
+    """It used to be a fixed 20,000-bit cap (kind too_large); it is now the
+    host's digits budget (limits.py), and passing it is kind exceeds_limits.
+    tests/test_limits.py holds every limit's own tests."""
     nodes = [inp("x", "1e999"), inp("n", "1000"), op("big", "pow", "x", "n"), op("bigger", "mul", "big", "big", "big", "big", "big", "big", "big")]
     r = refused(*nodes)
-    assert r["kind"] == "too_large"
+    assert r["kind"] == "exceeds_limits"
+    assert r["node"] == "big" and r["limit"]["name"] == "max_digits"
 
 
 # ---------------------------------------------------------------- arithmetic

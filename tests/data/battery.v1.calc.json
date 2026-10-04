@@ -1,0 +1,166 @@
+{
+  "arithmetic": "Exact rational arithmetic: no binary floating point. + - * / and integer powers are exact, and so is every unit conversion. A value whose decimal ends (at most 40 significant digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact value is given beside it as a fraction. Comparisons use exact values.",
+  "content_hash": "sha256:911b5ba5de3efd9c3fc3db016c3a55f3bb9af185212cb50af29d3ea171bc508a",
+  "graph": {
+    "nodes": [
+      {
+        "id": "capacity",
+        "source": "cell datasheet",
+        "value": "2400 mAh"
+      },
+      {
+        "id": "draw",
+        "source": {
+          "design_node": "con:led-current"
+        },
+        "value": "180 mA"
+      },
+      {
+        "args": [
+          "capacity",
+          "draw"
+        ],
+        "id": "hours",
+        "op": "div"
+      },
+      {
+        "args": [
+          "hours"
+        ],
+        "id": "in_h",
+        "op": "convert",
+        "unit": "h"
+      },
+      {
+        "id": "wanted",
+        "source": "requirement: lit through one night",
+        "value": "12 h"
+      },
+      {
+        "args": [
+          "in_h",
+          "wanted"
+        ],
+        "id": "enough",
+        "op": "ge"
+      },
+      {
+        "id": "thirds",
+        "source": "a plain ratio",
+        "value": "1/3"
+      },
+      {
+        "args": [
+          "in_h",
+          "thirds"
+        ],
+        "id": "third_of_hours",
+        "op": "mul"
+      },
+      {
+        "id": "flag",
+        "source": "assumed",
+        "value": "true"
+      },
+      {
+        "args": [
+          "enough",
+          "flag"
+        ],
+        "id": "both",
+        "op": "and"
+      }
+    ]
+  },
+  "inputs": [
+    {
+      "id": "capacity",
+      "source": "cell datasheet",
+      "unit": "mAh",
+      "value": "2400 mAh"
+    },
+    {
+      "id": "draw",
+      "source": {
+        "design_node": "con:led-current"
+      },
+      "unit": "mA",
+      "value": "180 mA"
+    },
+    {
+      "id": "wanted",
+      "source": "requirement: lit through one night",
+      "unit": "h",
+      "value": "12 h"
+    },
+    {
+      "exact": "1/3",
+      "id": "thirds",
+      "source": "a plain ratio",
+      "unit": "",
+      "value": "0.333333333333333333333333333333"
+    },
+    {
+      "id": "flag",
+      "source": "assumed",
+      "value": "true"
+    }
+  ],
+  "name": "battery",
+  "produced_by": {
+    "flo2_calc": "0.1.0",
+    "pint": "0.26.1"
+  },
+  "record_format": "flo2-calc computation record",
+  "result": {
+    "node": "both",
+    "value": "true"
+  },
+  "schema_version": 1,
+  "values": [
+    {
+      "node": "capacity",
+      "value": "2400 mAh"
+    },
+    {
+      "node": "draw",
+      "value": "180 mA"
+    },
+    {
+      "exact": "40/3 mAh/mA",
+      "node": "hours",
+      "value": "13.3333333333333333333333333333 mAh/mA"
+    },
+    {
+      "exact": "40/3 h",
+      "node": "in_h",
+      "value": "13.3333333333333333333333333333 h"
+    },
+    {
+      "node": "wanted",
+      "value": "12 h"
+    },
+    {
+      "node": "enough",
+      "value": "true"
+    },
+    {
+      "exact": "1/3",
+      "node": "thirds",
+      "value": "0.333333333333333333333333333333"
+    },
+    {
+      "exact": "40/9 h",
+      "node": "third_of_hours",
+      "value": "4.44444444444444444444444444444 h"
+    },
+    {
+      "node": "flag",
+      "value": "true"
+    },
+    {
+      "node": "both",
+      "value": "true"
+    }
+  ]
+}

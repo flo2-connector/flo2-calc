@@ -45,8 +45,8 @@ def clean_env(home: Path) -> dict[str, str]:
     return {"PATH": os.path.dirname(sys.executable) + os.pathsep + "/usr/bin:/bin", "HOME": str(home), "LANG": "C.UTF-8"}
 
 
-async def alone(steps, *, root: Path | None, work: Path):
-    args = ["--root", str(root)] if root is not None else []
+async def alone(steps, *, root: Path | None, work: Path, extra: tuple[str, ...] = ()):
+    args = (["--root", str(root)] if root is not None else []) + list(extra)
     params = StdioServerParameters(command=installed_command(), args=args, env=clean_env(work / "home"), cwd=str(work))
     out = []
     async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
@@ -158,11 +158,82 @@ def test_with_no_root_writing_and_reading_files_are_refused_with_a_clear_reason(
     assert not any(p.is_file() for p in work.rglob("*"))
 
 
+GROWING = graph(
+    inp("ratio", "1234567/1000000", {"design_node": "con:gain-per-stage"}),
+    op("r2", "mul", "ratio", "ratio"),
+    op("r4", "mul", "r2", "r2"),
+    op("r8", "mul", "r4", "r4"),
+    op("r16", "mul", "r8", "r8"),
+    op("r32", "mul", "r16", "r16"),
+    inp("limit", "1e6", "requirement"),
+    op("under", "lt", "r32", "limit"),
+)
+
+
+def test_a_pending_record_saved_on_a_small_machine_is_completed_in_place_on_a_larger_one(work: Path):
+    """The whole of option (c), standalone: the small machine (--max-digits 100)
+    saves a not-yet-computed record under its root; the larger one (the
+    defaults) completes it to the same path, which replaces the pending file
+    and nothing else; the completed file is the direct computation's, byte for
+    byte, and re-runs from its path."""
+    root = work / "records"
+    path = "decisions/stage-gain.calc.json"
+    [made] = anyio.run(
+        lambda: alone([("record_computation", {"graph": GROWING, "name": "stage-gain", "output_path": path})],
+                      root=root, work=work, extra=("--max-digits", "100"))
+    )
+    answer = answer_of(made)
+    assert answer["status"] == "refused" and answer["record"]["status"] == "not_computed"
+    assert answer["record"]["saved"]["written"] is True
+    pending_text = (root / path).read_text(encoding="utf-8")
+    assert json.loads(pending_text)["status"] == "not_computed"
+
+    completed, again, direct, rerun = anyio.run(
+        lambda: alone(
+            [
+                ("record_computation", {"record": pending_text, "output_path": path}),
+                ("record_computation", {"record": pending_text, "output_path": path}),
+                ("record_computation", {"graph": GROWING, "name": "stage-gain"}),
+                ("rerun_record", {"path": path}),
+            ],
+            root=root,
+            work=work,
+        )
+    )
+    done = answer_of(completed)
+    assert done["status"] == "ok" and done["record"]["saved"]["written"] is True
+    assert "replaced" in done["record"]["saved"]
+    on_disk = (root / path).read_text(encoding="utf-8")
+    assert on_disk == completed.content[1].resource.text == direct.content[1].resource.text
+    assert answer_of(again)["record"]["saved"]["written"] is False, "completing it again gives the same file, left alone"
+    assert answer_of(rerun)["reproduces"] is True
+    # Once computed, the file is never written over, not even by a not-yet-computed record of it.
+    [small_again] = anyio.run(
+        lambda: alone([("record_computation", {"graph": GROWING, "name": "stage-gain", "output_path": path})],
+                      root=root, work=work, extra=("--max-digits", "100"))
+    )
+    reason = reason_of(small_again)
+    assert "already exists" in reason and "never written over" in reason
+    assert (root / path).read_text(encoding="utf-8") == on_disk
+    assert sorted(p.relative_to(work).as_posix() for p in work.rglob("*") if p.is_file()) == [f"records/{path}"]
+
+
+def test_a_pending_record_is_never_replaced_by_a_different_calculation(work: Path):
+    root = work / "records"
+    [first] = anyio.run(lambda: alone([("record_computation", {"graph": GROWING, "name": "n", "output_path": "n.calc.json"})],
+                                      root=root, work=work, extra=("--max-digits", "100")))
+    assert answer_of(first)["record"]["status"] == "not_computed"
+    [other] = anyio.run(lambda: alone([("record_computation", {"graph": BATTERY, "name": "n", "output_path": "n.calc.json"})],
+                                      root=root, work=work))
+    assert "already exists" in reason_of(other)
+    assert json.loads((root / "n.calc.json").read_text())["status"] == "not_computed"
+
+
 def test_the_package_imports_nothing_of_flo2_reflow2_or_another_helper():
     """Nothing in it may import, call or assume flo2, reflow2 or flo2-cad/ifc."""
     allowed = {
         "__future__", "argparse", "ast", "dataclasses", "decimal", "fractions", "functools", "hashlib", "importlib",
-        "json", "os", "pathlib", "re", "sys", "tempfile", "typing",
+        "json", "os", "pathlib", "re", "sys", "tempfile", "time", "typing",
         "flo2_calc", "mcp", "pydantic", "pint", "jsonschema",
     }
     package = Path(flo2_calc.__file__).parent

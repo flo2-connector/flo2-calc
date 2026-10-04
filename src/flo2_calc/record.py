@@ -1,9 +1,11 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-1.schema.json):
+A record is one JSON object (schemas/calc-record-2.schema.json; a version 1
+record, schemas/calc-record-1.schema.json, still re-runs):
 
     record_format   "flo2-calc computation record"
-    schema_version  1
+    schema_version  2
+    status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
     arithmetic      what exactness means here (numbers.ARITHMETIC_NOTE)
@@ -14,10 +16,22 @@ A record is one JSON object (schemas/calc-record-1.schema.json):
     produced_by     {"flo2_calc": version, "pint": version}
     content_hash    "sha256:<hex>" over the canonical JSON of all of the above
 
+NOT YET COMPUTED (cap:a-not-yet-computed-record-is-completed-on-a-larger-machine).
+When a recorded calculation passes a limit of the host it runs on (limits.py),
+the record still comes back, with status "not_computed": the graph, the inputs
+with their units and sources, `stopped` (the limit it passed, where, why, how
+far it got) and `limits_in_force`, and NO values and NO result. flo2-calc on a
+machine with more room completes it: record_computation takes it in place of a
+graph, checks its seal, and evaluates its graph. The completed record is the
+record a direct computation of that graph gives, byte for byte: completing
+adds nothing about where it was first tried.
+
 DETERMINISTIC. There is no timestamp and no machine name, and the file is
 written with sorted keys, so the same graph (and name, and supports) gives a
 byte-identical file wherever it is made. When it was made is the business of
 whatever keeps it: flo2 keeps every version, git keeps every commit.
+
+A COMPUTED RECORD CARRIES NO HOST LIMITS, so it stays deterministic.
 
 THE HASH IS A SEAL, NOT A SIGNATURE. It catches a record edited by hand or
 damaged in transit. It cannot stop someone from editing a record and then
@@ -45,31 +59,40 @@ from pathlib import Path
 from typing import Any
 
 from flo2_calc import __version__
+from flo2_calc import limits as L
 from flo2_calc import units as U
-from flo2_calc.errors import CallError
+from flo2_calc.errors import CallError, LimitExceeded
 from flo2_calc.evaluator import (
     Evaluation,
+    Graph,
     InputNode,
     Quantity,
     evaluate,
     read_graph,
     value_json,
+    values_json,
 )
 from flo2_calc.numbers import ARITHMETIC_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 1
-SCHEMA_FILE = "calc-record-1.schema.json"
+SCHEMA_VERSION = 2
+SCHEMA_FILES = {1: "calc-record-1.schema.json", 2: "calc-record-2.schema.json"}
+COMPUTED = "computed"
+NOT_COMPUTED = "not_computed"
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 SUFFIX = ".calc.json"
 URI_PREFIX = "calcfile:///"
-MAX_RECORD_BYTES = 2 * 1024 * 1024
 
 
 @cache
-def schema() -> dict[str, Any]:
-    text = resources.files("flo2_calc").joinpath("schemas", SCHEMA_FILE).read_text(encoding="utf-8")
+def schema(version: int = SCHEMA_VERSION) -> dict[str, Any]:
+    text = resources.files("flo2_calc").joinpath("schemas", SCHEMA_FILES[version]).read_text(encoding="utf-8")
     return json.loads(text)
+
+
+def status_of(record: dict[str, Any]) -> str:
+    """A version 1 record has no status: it is always a computed one."""
+    return record.get("status", COMPUTED)
 
 
 def canonical(obj: Any) -> bytes:
@@ -121,12 +144,10 @@ def check_supports(supports: Any, path: str = "supports") -> str | dict[str, str
     raise CallError(path, "supports is free text, or {\"design_node\": \"<id>\"} naming the decision in a reflow2 design.")
 
 
-def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | None) -> dict[str, Any]:
-    """The record of an evaluation that answered. Every input must say where
-    it came from: a decision rests on its inputs, and an input with no source
-    is one nobody can check later."""
-    assert evaluation.ok
-    graph = evaluation.graph
+def check_sources(graph: Graph) -> None:
+    """Every input must say where it came from: a decision rests on its inputs,
+    and an input with no source is one nobody can check later. Checked before
+    anything is computed."""
     missing = [n.id for n in graph.nodes if isinstance(n, InputNode) and n.source is None]
     if missing:
         raise CallError(
@@ -135,6 +156,10 @@ def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | No
             'has none. Give each a "source": free text (a datasheet, a measurement, "assumed") or '
             '{"design_node": "<id>"} naming where it lives in a reflow2 design.',
         )
+
+
+def inputs_of(graph: Graph) -> list[dict[str, Any]]:
+    """Each input with its value, its unit and its source, in the graph's order."""
     inputs = []
     for n in graph.nodes:
         if not isinstance(n, InputNode):
@@ -143,21 +168,67 @@ def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | No
         if isinstance(n.value, Quantity):
             entry["unit"] = U.format_unit(n.value.unit)
         inputs.append(entry)
+    return inputs
+
+
+def _head(status: str, name: str, graph: Graph, supports: str | dict[str, str] | None) -> dict[str, Any]:
     record: dict[str, Any] = {
         "record_format": RECORD_FORMAT,
         "schema_version": SCHEMA_VERSION,
+        "status": status,
         "name": name,
         "arithmetic": ARITHMETIC_NOTE,
         "graph": graph.to_json(),
-        "inputs": inputs,
-        "values": [{"node": nid, **value_json(evaluation.values[nid])} for nid in evaluation.order],
-        "result": {"node": graph.result, **value_json(evaluation.values[graph.result])},
-        "produced_by": {"flo2_calc": __version__, "pint": U.pint_version()},
+        "inputs": inputs_of(graph),
     }
     if supports is not None:
         record["supports"] = supports
+    return record
+
+
+def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | None) -> dict[str, Any]:
+    """The record of an evaluation that answered. Writing its values out is
+    counted against the call's deadline and reply budget (LimitExceeded)."""
+    assert evaluation.ok
+    graph = evaluation.graph
+    check_sources(graph)
+    record = _head(COMPUTED, name, graph, supports)
+    record["values"] = values_json(evaluation)
+    record["result"] = {"node": graph.result, **value_json(evaluation.values[graph.result])}
+    record["produced_by"] = {"flo2_calc": __version__, "pint": U.pint_version()}
     record["content_hash"] = content_hash(record)
     return record
+
+
+def build_pending(graph: Graph, name: str, supports: str | dict[str, str] | None, refusal: dict[str, Any], limits: L.Limits) -> dict[str, Any]:
+    """The NOT-YET-COMPUTED record of a calculation stopped at a limit: the
+    graph, the inputs, the limit it passed and the limits in force; no values,
+    no result."""
+    check_sources(graph)
+    record = _head(NOT_COMPUTED, name, graph, supports)
+    record["stopped"] = L.stopped_for_record(refusal)
+    record["limits_in_force"] = limits.describe()
+    record["produced_by"] = {"flo2_calc": __version__, "pint": U.pint_version()}
+    record["content_hash"] = content_hash(record)
+    return record
+
+
+def pending_problems(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """What does not hold in a schema-valid not-yet-computed record, beyond its
+    seal: its inputs must be the ones its graph gives, and the node it stopped
+    at must be in its graph. (Its values cannot be checked: it has none.)"""
+    try:
+        graph = read_graph(record["graph"], "record.graph")
+    except CallError as e:
+        return [{"field": e.path, "recorded": "(as written)", "now": f"cannot be read: {e.problem}"}]
+    out = []
+    again = inputs_of(graph)
+    if again != record["inputs"]:
+        out.append({"field": "inputs", "recorded": record["inputs"], "from_its_graph": again})
+    stopped_at = record["stopped"].get("node")
+    if stopped_at is not None and stopped_at not in graph.by_id():
+        out.append({"field": "stopped.node", "recorded": stopped_at, "from_its_graph": "no such node"})
+    return out
 
 
 # ---------------------------------------------------------------- the folder it may write in
@@ -196,38 +267,74 @@ def place(root: Path | None, requested: Any, field: str) -> Path:
     return target
 
 
+def _same_calculation(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    return all(a.get(k) == b.get(k) for k in ("record_format", "name", "supports", "graph", "inputs"))
+
+
+def _replaceable_pending(target: Path, new: dict[str, Any]) -> bool:
+    """Whether the file at `target` is an intact not-yet-computed record of
+    the same calculation as `new`: the one kind of file a record may replace."""
+    try:
+        if target.stat().st_size > 64 * 1024 * 1024:
+            return False
+        old = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(old, dict) or old.get("schema_version") != 2 or old.get("status") != NOT_COMPUTED:
+        return False
+    import jsonschema
+
+    if not jsonschema.Draft202012Validator(schema(2)).is_valid(old):
+        return False
+    return old["content_hash"] == content_hash(old) and _same_calculation(old, new)
+
+
 def write(root: Path | None, requested: Any, data: bytes, field: str = "output_path") -> dict[str, Any]:
-    """Write a record's file under root. Never replaces a different file."""
+    """Write a record's file under root. Never replaces a different file, with
+    one exception: a NOT-YET-COMPUTED record of the same calculation (same
+    name, supports, graph and inputs, its seal intact) is replaced by its
+    completion, or by a newer not-yet-computed record of it. A computed record
+    is never replaced."""
     target = place(root, requested, field)
     target.parent.mkdir(parents=True, exist_ok=True)
     if not _inside(target.parent.resolve(), root):  # type: ignore[arg-type]
         raise CallError(field, f'"{requested}" leads outside the folder flo2-calc may use.')
+    replaces = False
     if target.exists():
         if target.is_file() and target.read_bytes() == data:
             return {"path": str(target), "written": False, "note": "the file was already there, byte for byte the same"}
-        raise CallError(
-            field,
-            f'"{requested}" already exists and holds something else. A record is never written over; '
-            "choose another path, or another name.",
-        )
+        if not (target.is_file() and _replaceable_pending(target, json.loads(data))):
+            raise CallError(
+                field,
+                f'"{requested}" already exists and holds something else. A record is never written over (only a '
+                "not-yet-computed record of the same calculation is replaced, by its completion); choose another "
+                "path, or another name.",
+            )
+        replaces = True
     fd, tmp = tempfile.mkstemp(prefix=".calc-", dir=target.parent)
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
-        os.link(tmp, target)  # fails if the name was taken meanwhile: still never an overwrite
+        if replaces:
+            os.replace(tmp, target)
+        else:
+            os.link(tmp, target)  # fails if the name was taken meanwhile: still never an overwrite
     except FileExistsError:
         raise CallError(field, f'"{requested}" appeared while writing; it was not written over.') from None
     finally:
-        os.unlink(tmp)
-    return {"path": str(target), "written": True}
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+    out: dict[str, Any] = {"path": str(target), "written": True}
+    if replaces:
+        out["replaced"] = "the not-yet-computed record of this same calculation that was there"
+    return out
 
 
-def read_file(root: Path | None, requested: Any, field: str = "path") -> str:
+def read_file(root: Path | None, requested: Any, guard: L.Guard, field: str = "path") -> str:
     target = place(root, requested, field)
     if not target.is_file():
         raise CallError(field, f'there is no record file "{requested}" in the folder flo2-calc may use.')
-    if target.stat().st_size > MAX_RECORD_BYTES:
-        raise CallError(field, f"a record file is at most {MAX_RECORD_BYTES // 1024 // 1024} MB.")
+    guard.check_reply(target.stat().st_size, f'the record file "{requested}"')
     try:
         return target.read_text(encoding="utf-8")
     except UnicodeDecodeError:
@@ -237,16 +344,20 @@ def read_file(root: Path | None, requested: Any, field: str = "path") -> str:
 # ---------------------------------------------------------------- re-running
 
 
-def load(record: Any, field: str = "record") -> dict[str, Any]:
+def load(record: Any, field: str = "record", guard: L.Guard | None = None) -> dict[str, Any]:
     """A record from its content (an object, or its JSON text), checked
-    against the schema. Raises CallError naming what does not fit."""
+    against the schema of its version. Raises CallError naming what does not
+    fit, and LimitExceeded for a record larger than this host's reply budget
+    (a record this host could not have returned is not one it takes in)."""
+    guard = guard if guard is not None else L.Guard()
     if isinstance(record, str):
-        if len(record.encode("utf-8")) > MAX_RECORD_BYTES:
-            raise CallError(field, f"a record is at most {MAX_RECORD_BYTES // 1024 // 1024} MB.")
+        guard.check_reply(len(record.encode("utf-8")), "this record")
         try:
             record = json.loads(record)
         except json.JSONDecodeError as e:
             raise CallError(field, f"this is not JSON, so it is not a record: {e.msg} at line {e.lineno}, column {e.colno}.") from None
+    elif isinstance(record, dict):
+        guard.check_reply(len(canonical(record)), "this record")
     if not isinstance(record, dict):
         raise CallError(field, "a record is a JSON object.")
     version = record.get("schema_version")
@@ -258,7 +369,7 @@ def load(record: Any, field: str = "record") -> dict[str, Any]:
         )
     import jsonschema
 
-    validator = jsonschema.Draft202012Validator(schema())
+    validator = jsonschema.Draft202012Validator(schema(1 if version == 1 else SCHEMA_VERSION))
     errors = sorted(validator.iter_errors(record), key=lambda e: list(e.absolute_path))
     if errors:
         e = errors[0]
@@ -285,22 +396,104 @@ def _differences(recorded: dict[str, Any], again: dict[str, Any]) -> list[dict[s
     return out
 
 
-def rerun(record: dict[str, Any]) -> dict[str, Any]:
+def needs_of(stopped: dict[str, Any]) -> str:
+    """What a not-yet-computed record needs, in words."""
+    limit = stopped["limit"]
+    name, value = limit["name"], limit["value"]
+    flag, env = L.SETTINGS[name]
+    if "needed_at_least" in limit:
+        what = f"{name} of at least {limit['needed_at_least']:,}" + (" digits" if name == "max_digits" else " bytes")
+    else:
+        what = f"a {name} longer than {value}"
+    return f"{what} (it was stopped at {name} = {value}; set it with {flag} or {env})"
+
+
+def _room_here(stopped: dict[str, Any], limits: L.Limits) -> bool:
+    """Whether this host's limit is above the one the record was stopped at."""
+    limit = stopped["limit"]
+    name = limit["name"]
+    try:
+        if name == "deadline":
+            return limits.deadline_ms > L.parse_deadline(str(limit["value"]))
+        here = limits.max_digits if name == "max_digits" else limits.max_reply_bytes
+        return here >= int(limit.get("needed_at_least", int(limit["value"]) + 1))
+    except (ValueError, TypeError):  # a value the record should not hold: say no room, never fail
+        return False
+
+
+def _rerun_pending(record: dict[str, Any], answer: dict[str, Any], hash_ok: bool, guard: L.Guard) -> dict[str, Any]:
+    stopped = record["stopped"]
+    problems = pending_problems(record)
+    intact = hash_ok and not problems
+    answer.update(
+        status=NOT_COMPUTED,
+        result=None,
+        reproduces=None if intact else False,
+        differences=problems,
+        stopped=stopped,
+        limits_in_force=record["limits_in_force"],
+        needs=needs_of(stopped),
+    )
+    where = f' at node "{stopped["node"]}" ({stopped["op"]})' if stopped["node"] is not None and stopped["op"] else (
+        f' at input "{stopped["node"]}"' if stopped["node"] is not None else " while writing its reply"
+    )
+    if not intact:
+        why = []
+        if not hash_ok:
+            why.append("its content hash does not match its content")
+        if problems:
+            why.append(f"{len(problems)} field(s) do not follow from its graph")
+        answer["verdict"] = (
+            "This not-yet-computed record was changed after it was made (" + "; and ".join(why) + "). It has no "
+            "result yet, and it should not be completed as it stands: make it again from its graph with "
+            "record_computation."
+        )
+        return answer
+    here = guard.limits
+    answer["verdict"] = (
+        "This record has not been computed yet, so it has no result to check. It is intact: its content hash "
+        f"matches and its inputs are the ones its graph gives. It was stopped{where} by the limits of the "
+        f"flo2-calc that made it, and needs {needs_of(stopped)}. "
+        + (
+            f"This flo2-calc's limits are higher ({here.in_words()}): complete it here by passing it as `record` "
+            "to record_computation."
+            if _room_here(stopped, here)
+            else "This flo2-calc's limits are no higher, so complete it on a machine with more room: pass it as "
+            "`record` to record_computation on a flo2-calc started with a higher limit."
+        )
+    )
+    return answer
+
+
+def rerun(record: dict[str, Any], guard: L.Guard | None = None) -> dict[str, Any]:
     """Re-run a schema-valid record. Always a normal answer: whether it
-    reproduces, and every way it does not."""
+    reproduces, and every way it does not. A not-yet-computed record has no
+    result to reproduce: the answer says so, checks its seal, and says what it
+    needs. A record that passes THIS host's limits while being re-run is
+    neither confirmed nor denied: the answer says which limit, and where."""
+    guard = guard if guard is not None else L.Guard()
     computed_hash = content_hash(record)
     hash_ok = computed_hash == record["content_hash"]
     answer: dict[str, Any] = {
+        "status": "ok",
         "name": record["name"],
+        "record_status": status_of(record),
         "content_hash": {"recorded": record["content_hash"], "computed": computed_hash, "matches": hash_ok},
         "recorded_with": record["produced_by"],
         "rerun_with": {"flo2_calc": __version__, "pint": U.pint_version()},
     }
+    if record["produced_by"].get("flo2_calc") != __version__:
+        answer["note"] = f"recorded with flo2-calc {record['produced_by'].get('flo2_calc')}, re-run with {__version__}."
+    if status_of(record) == NOT_COMPUTED:
+        return _rerun_pending(record, answer, hash_ok, guard)
     differences: list[dict[str, Any]] = []
+    stopped: dict[str, Any] | None = None
     try:
         graph = read_graph(record["graph"], "record.graph")
-        evaluation = evaluate(graph)
-        if not evaluation.ok:
+        evaluation = evaluate(graph, guard)
+        if evaluation.stopped:
+            stopped = evaluation.refusal
+        elif not evaluation.ok:
             differences.append({"field": "result", "recorded": record["result"], "rerun": {"refused": evaluation.refusal}})
             answer["result"] = None
         else:
@@ -310,9 +503,20 @@ def rerun(record: dict[str, Any]) -> dict[str, Any]:
     except CallError as e:
         differences.append({"field": e.path, "recorded": "(as written)", "rerun": f"cannot be read now: {e.problem}"})
         answer["result"] = None
+    except LimitExceeded as e:
+        stopped = e.refusal
+    if stopped is not None and hash_ok:
+        answer.update(status="refused", refused=stopped, result=None, reproduces=None, differences=[])
+        answer["verdict"] = (
+            "This record could not be re-run here: it passes this flo2-calc's limits (" + stopped["reason"] + ") "
+            "So it is neither confirmed nor contradicted. Its content hash matches. Re-run it with a flo2-calc whose "
+            f"{stopped['limit']['name']} is higher ({stopped['limit']['setting']})."
+        )
+        return answer
     reproduces = hash_ok and not differences
     answer["reproduces"] = reproduces
     answer["differences"] = differences
+    answer.setdefault("result", None)
     if reproduces:
         answer["verdict"] = "The record re-runs to exactly the values it holds, and its content hash matches."
     else:
@@ -322,6 +526,4 @@ def rerun(record: dict[str, Any]) -> dict[str, Any]:
         if differences:
             why.append(f"{len(differences)} recorded field(s) differ from what its graph gives now")
         answer["verdict"] = "The record does NOT reproduce: " + "; and ".join(why) + "."
-    if record["produced_by"].get("flo2_calc") != __version__:
-        answer["note"] = f"recorded with flo2-calc {record['produced_by'].get('flo2_calc')}, re-run with {__version__}."
     return answer

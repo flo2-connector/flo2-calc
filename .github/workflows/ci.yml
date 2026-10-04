@@ -37,11 +37,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install --disable-pip-version-check ".[test]"
-      # The conformance check (flo2's MUST tier, asked as flo2's plug asks it)
-      # and the tools over a real client session, asked of the image under
-      # flo2-tool-sandbox's flags. 128m is the cap README.md's measurement
-      # supports; flo2's broker sets its own from that measurement.
-      - name: It meets flo2's helper contract and answers every tool, confined like flo2's slot
+      # The conformance check (flo2's MUST tier, asked as flo2's plug asks it),
+      # the tools over a real client session, and every host-set limit and the
+      # not-yet-computed record, asked of the image under flo2-tool-sandbox's
+      # flags and the image's own limits (flo2.io's profile). 128m is the cap
+      # README.md's measurement supports; flo2's broker sets its own from that
+      # measurement. Runaway calculations must be stopped with their reason and
+      # the container must answer the next call: never a sandbox kill.
+      - name: It meets flo2's helper contract, answers every tool, and stops at its limits, confined like flo2's slot
         env:
           FLO2_CALC_SERVER: >-
             docker run --rm -i --network none --read-only --tmpfs /tmp:rw,nosuid,nodev,size=64m
@@ -49,4 +52,4 @@ jobs:
             --cap-drop ALL --security-opt no-new-privileges --user 65534:65534
             --mount type=bind,source=${{ github.workspace }}/tests,target=/design,readonly
             flo2-calc:ci
-        run: python -m pytest -v tests/test_conformance.py tests/test_server.py
+        run: python -m pytest -v tests/test_conformance.py tests/test_server.py tests/test_limits.py tests/test_pending_record.py

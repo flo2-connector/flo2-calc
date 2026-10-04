@@ -16,6 +16,17 @@ REPLIES. One text block of JSON, then, for record_computation, the record as
 an embedded resource `calcfile:///<name>.calc.json` (application/json). flo2
 reads each text block as JSON and keeps each resource as a file.
 
+LIMITS (limits.py). Every call runs under the host's limits, set at start-up:
+a deadline, a digits budget for exact numbers, and a reply budget. Passing one
+is a NORMAL reply, status "refused" with kind "exceeds_limits", naming the
+limit, its value, the node reached and how large the numbers had grown. When
+record_computation is stopped that way, the record still comes back, as a
+NOT-YET-COMPUTED record (status "not_computed": the graph, the inputs, the
+limit it passed, no result), and record_computation on a flo2-calc with more
+room completes it: it takes that record in place of a graph. The four tools,
+their names and their read/write classes are unchanged by this: flo2's door
+holds exactly these four.
+
 ERRORS (contract point 4; dec:unit-mismatch-rejects). A computation that
 cannot be done is a NORMAL reply: {"status": "refused", "refused": {node, op,
 kind, reason, units}}, with no result and no record. isError is reserved for
@@ -39,9 +50,10 @@ from mcp.types import CallToolResult, EmbeddedResource, TextContent, TextResourc
 from pydantic import Field
 
 from flo2_calc import __version__
+from flo2_calc import limits as L
 from flo2_calc import record as R
-from flo2_calc.errors import CallError
-from flo2_calc.evaluator import OPS, evaluate, evaluation_json, read_graph, read_nodes
+from flo2_calc.errors import CallError, LimitExceeded
+from flo2_calc.evaluator import OPS, STOPPED_NEXT, evaluate, evaluation_json, read_graph, read_nodes
 
 INSTRUCTIONS = (
     "flo2-calc does exact math and logic for the decisions in a design, so a decision can carry the computation "
@@ -68,20 +80,38 @@ GRAPH_HELP = (
 Graph = Annotated[dict[str, Any], Field(description=GRAPH_HELP)]
 
 
-def _reply(payload: dict[str, Any], files: tuple[tuple[str, str], ...] = ()) -> CallToolResult:
-    content: list[Any] = [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False, indent=1))]
-    for name, text in files:
+def _text(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False, indent=1)
+
+
+def _reply(payload: dict[str, Any], files: tuple[tuple[str, str], ...] = (), guard: L.Guard | None = None) -> CallToolResult:
+    """The reply. With a guard, it is first held to the host's reply budget: a
+    reply too large to send becomes a refusal saying so (exceeds_limits)."""
+    text = _text(payload)
+    if guard is not None:
+        size = len(text.encode("utf-8")) + sum(len(t.encode("utf-8")) for _, t in files)
+        try:
+            guard.check_reply(size)
+        except LimitExceeded as e:
+            return _reply(_stopped_answer(e.refusal))
+    content: list[Any] = [TextContent(type="text", text=text)]
+    for name, body in files:
         content.append(
             EmbeddedResource(
                 type="resource",
-                resource=TextResourceContents(uri=f"{R.URI_PREFIX}{name}", mime_type="application/json", text=text),
+                resource=TextResourceContents(uri=f"{R.URI_PREFIX}{name}", mime_type="application/json", text=body),
             )
         )
     return CallToolResult(content=content, is_error=False)
 
 
+def _stopped_answer(refusal: dict[str, Any]) -> dict[str, Any]:
+    return {"status": "refused", "refused": refusal, "result": None, "values": None, "next": STOPPED_NEXT}
+
+
 def _guarded(fn: Callable[..., CallToolResult]) -> Callable[..., CallToolResult]:
-    """Every failure leaves as a ToolError whose text the agent can read."""
+    """Every failure leaves as a ToolError whose text the agent can read; a
+    limit passed leaves as a normal reply that says which."""
 
     @functools.wraps(fn)
     def call(*args: Any, **kwargs: Any) -> CallToolResult:
@@ -89,6 +119,8 @@ def _guarded(fn: Callable[..., CallToolResult]) -> Callable[..., CallToolResult]
             return fn(*args, **kwargs)
         except ToolError:
             raise
+        except LimitExceeded as e:
+            return _reply(_stopped_answer(e.refusal))
         except CallError as e:
             raise ToolError(f"Malformed call. {e.path}: {e.problem}") from e
         except Exception as e:  # noqa: BLE001 - a bug, said as one rather than hidden
@@ -100,10 +132,19 @@ def _guarded(fn: Callable[..., CallToolResult]) -> Callable[..., CallToolResult]
     return call
 
 
-def build_server(root: Path | None = None) -> MCPServer:
+def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPServer:
     """The server. `root` is the one folder it may write records in and read
-    them from (None: no files at all, as when hosted)."""
-    server = MCPServer(name="flo2-calc", version=__version__, instructions=INSTRUCTIONS)
+    them from (None: no files at all, as when hosted). `limits` are the host's
+    limits for every call (limits.py)."""
+    L.allow_int_text(limits.max_digits)
+    server = MCPServer(
+        name="flo2-calc",
+        version=__version__,
+        instructions=INSTRUCTIONS
+        + f" This flo2-calc's limits: {limits.in_words()}. A calculation past one is stopped with its reason "
+        "(status refused, kind exceeds_limits), never cut short, and record_computation then returns a "
+        "not-yet-computed record that flo2-calc on a machine with more room completes.",
+    )
     reading = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 
     @server.tool(
@@ -119,7 +160,8 @@ def build_server(root: Path | None = None) -> MCPServer:
     )
     @_guarded
     def evaluate_graph(graph: Graph) -> CallToolResult:
-        return _reply(evaluation_json(evaluate(read_graph(graph))))
+        guard = L.Guard(limits)
+        return _reply(evaluation_json(evaluate(read_graph(graph), guard)), guard=guard)
 
     @server.tool(
         name="add_node",
@@ -147,11 +189,12 @@ def build_server(root: Path | None = None) -> MCPServer:
             if not isinstance(graph, dict) or set(graph) - {"nodes", "result"} or not isinstance(graph.get("nodes"), list):
                 raise CallError("graph", 'the graph so far is {"nodes": [...]}, as the last add_node returned it.')
             before = graph["nodes"]
+        guard = L.Guard(limits)
         items = [(n, f"graph.nodes[{i}]") for i, n in enumerate(before)] + [(node, "node")]
         grown = read_nodes(items)
-        ev = evaluate(grown)
+        ev = evaluate(grown, guard)
         answer = evaluation_json(ev)
-        if ev.ok:
+        if answer["status"] == "ok":
             answer = {
                 "status": "ok",
                 "added": {"node": grown.result, **{k: v for k, v in answer["result"].items() if k != "node"}},
@@ -161,7 +204,7 @@ def build_server(root: Path | None = None) -> MCPServer:
         else:
             answer["graph"] = {"nodes": [n for n in before]}
             answer["note"] = "The node was not added; the graph is as you sent it."
-        return _reply(answer)
+        return _reply(answer, guard=guard)
 
     @server.tool(
         name="record_computation",
@@ -173,13 +216,23 @@ def build_server(root: Path | None = None) -> MCPServer:
             "result, flo2-calc's version and a content hash. Link that file to the decision it supports, with the "
             "design tool's own tools. Every input needs a source. The same graph always gives the same file. Run "
             "locally, output_path also writes it inside the folder flo2-calc was started with (--root), never "
-            "elsewhere and never over a different file. A refused computation gives no record."
+            "elsewhere and never over a different file. A refused computation gives no record. A calculation that "
+            "passes this host's limits (a deadline, a digits budget, a reply budget) still gives a record, marked "
+            'status "not_computed": the graph, the inputs and the limit it passed, with no result. To complete '
+            "one, pass it as `record` (instead of `graph` and `name`) to record_computation on a flo2-calc with more "
+            "room: it returns the computed record, the same one a direct computation of that graph gives."
         ),
     )
     @_guarded
     def record_computation(
-        graph: Graph,
-        name: Annotated[str, Field(description='The record\'s name, e.g. "fiber-bend-margin"; its file is <name>.calc.json.')],
+        graph: Annotated[
+            dict[str, Any] | None,
+            Field(description=GRAPH_HELP + " Leave it out when completing a not-yet-computed `record`."),
+        ] = None,
+        name: Annotated[
+            str | None,
+            Field(description='The record\'s name, e.g. "fiber-bend-margin"; its file is <name>.calc.json. Needed with a graph; a completed record keeps its own.'),
+        ] = None,
         supports: Annotated[
             str | dict[str, str] | None,
             Field(description='Optional: what this computation supports, free text or {"design_node": "dec:..."} (recorded, never resolved).'),
@@ -188,33 +241,121 @@ def build_server(root: Path | None = None) -> MCPServer:
             str | None,
             Field(description="Optional, local runs only: where to also write the file, a path ending in .calc.json inside the folder flo2-calc was started with (--root)."),
         ] = None,
+        record: Annotated[
+            dict[str, Any] | str | None,
+            Field(description='Instead of a graph: a not-yet-computed record (status "not_computed", the object or its JSON text) to complete here.'),
+        ] = None,
     ) -> CallToolResult:
-        name = R.check_name(name)
-        supports_ = R.check_supports(supports)
+        guard = L.Guard(limits)
+        if record is not None:
+            if graph is not None:
+                raise CallError("graph", "pass a graph to compute, or a not-yet-computed `record` to complete, not both.")
+            pending = R.load(record, "record", guard)
+            if R.status_of(pending) != R.NOT_COMPUTED:
+                raise CallError(
+                    "record.status",
+                    "record_computation completes a not-yet-computed record (status \"not_computed\"); this one is "
+                    "already computed. Check it with rerun_record.",
+                )
+            for given, key in ((name, "name"), (supports, "supports")):
+                if given is not None and given != pending.get(key):
+                    raise CallError(key, f"a not-yet-computed record is completed with its own {key}; leave {key} out, or give the record's.")
+            hash_ok = pending["content_hash"] == R.content_hash(pending)
+            problems = R.pending_problems(pending)
+            if not hash_ok or problems:
+                why = (["its content hash does not match its content"] if not hash_ok else []) + (
+                    [f"{len(problems)} field(s) do not follow from its graph"] if problems else []
+                )
+                return _reply(
+                    {
+                        "status": "refused",
+                        "refused": {
+                            "node": None,
+                            "op": None,
+                            "kind": "record_changed",
+                            "reason": "This not-yet-computed record was changed after it was made ("
+                            + "; and ".join(why)
+                            + "), so it was not completed: a completed record must be the calculation that was "
+                            "stopped. Make it again from its graph, or complete the record as it was made.",
+                            "differences": problems,
+                        },
+                        "result": None,
+                    },
+                    guard=guard,
+                )
+            name_, supports_ = pending["name"], pending.get("supports")
+            g = read_graph(pending["graph"], "record.graph")
+        else:
+            if graph is None:
+                raise CallError("graph", "pass the graph to compute (or, to complete one, a not-yet-computed `record`).")
+            if name is None:
+                raise CallError("name", 'give the record a name, e.g. "fiber-bend-margin"; its file is <name>.calc.json.')
+            name_ = R.check_name(name)
+            supports_ = R.check_supports(supports)
+            g = read_graph(graph)
         if output_path is not None:
             R.place(root, output_path, "output_path")  # refuse before computing, not after
-        ev = evaluate(read_graph(graph))
-        if not ev.ok:
+        R.check_sources(g)
+        ev = evaluate(g, guard)
+        if not ev.ok and not ev.stopped:
             answer = evaluation_json(ev)
             answer["note"] = "No record was made: a record holds only a computation that answered."
-            return _reply(answer)
-        rec = R.build(ev, name, supports_)
-        data = R.file_bytes(rec)
-        file_name = f"{name}{R.SUFFIX}"
-        answer = {
-            "status": "ok",
-            "result": rec["result"],
-            "record": {
-                "file": file_name,
-                "uri": f"{R.URI_PREFIX}{file_name}",
-                "sha256": hashlib.sha256(data).hexdigest(),
-                "bytes": len(data),
-                "content_hash": rec["content_hash"],
-            },
-            "values": rec["values"],
-            "next": "Link this record to the decision it supports in the design (an Artifact that documents the "
-            "decision), and quote its result there. rerun_record checks it any time later.",
+            return _reply(answer, guard=guard)
+        file_name = f"{name_}{R.SUFFIX}"
+        if ev.ok:
+            try:
+                rec = R.build(ev, name_, supports_)
+                data = R.file_bytes(rec)
+                answer = {
+                    "status": "ok",
+                    "result": rec["result"],
+                    "record": _record_facts(rec, data, file_name),
+                    "values": rec["values"],
+                    "next": "Link this record to the decision it supports in the design (an Artifact that documents "
+                    "the decision), and quote its result there. rerun_record checks it any time later.",
+                }
+                guard.check_reply(len(_text(answer).encode("utf-8")) + len(data))
+                if output_path is not None:
+                    answer["record"]["saved"] = R.write(root, output_path, data)
+                return _reply(answer, ((file_name, data.decode("utf-8")),))
+            except LimitExceeded as e:
+                stop = e.refusal
+        else:
+            stop = ev.refusal
+        return _pending_reply(g, name_, supports_, stop, file_name, output_path)
+
+    def _record_facts(rec: dict[str, Any], data: bytes, file_name: str) -> dict[str, Any]:
+        return {
+            "status": rec["status"],
+            "file": file_name,
+            "uri": f"{R.URI_PREFIX}{file_name}",
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "bytes": len(data),
+            "content_hash": rec["content_hash"],
         }
+
+    def _pending_reply(g: Any, name_: str, supports_: Any, stop: dict[str, Any], file_name: str, output_path: str | None) -> CallToolResult:
+        """A calculation stopped at a limit: the refusal, and the not-yet-computed record."""
+        pending = R.build_pending(g, name_, supports_, stop, limits)
+        data = R.file_bytes(pending)
+        answer: dict[str, Any] = {
+            "status": "refused",
+            "refused": stop,
+            "result": None,
+            "record": _record_facts(pending, data, file_name),
+            "next": "The record came back NOT YET COMPUTED: it holds the graph, the inputs with their sources and the "
+            f"limit it passed, and no result. It needs {R.needs_of(pending['stopped'])}. Keep it with the decision, "
+            "and complete it on a machine with more room: pass it as `record` to record_computation on a flo2-calc "
+            "started with a higher limit. The completed record is the one a direct computation gives.",
+        }
+        if len(data) + len(_text(answer).encode("utf-8")) > limits.max_reply_bytes:
+            answer["record"] = None
+            answer["next"] = (
+                f"Even the not-yet-computed record ({len(data):,} bytes) is larger than this host's reply budget "
+                f"({limits.max_reply_bytes:,} bytes), so it was not returned. Run this graph with a flo2-calc that "
+                "has more room."
+            )
+            return _reply(answer)
         if output_path is not None:
             answer["record"]["saved"] = R.write(root, output_path, data)
         return _reply(answer, ((file_name, data.decode("utf-8")),))
@@ -227,7 +368,10 @@ def build_server(root: Path | None = None) -> MCPServer:
             "Re-run a computation record and say whether it reproduces: its content hash must match its content, "
             "and its graph must give exactly the values it holds. Pass the record itself (`record`, the object or "
             "its JSON text) or, run locally, `path` to a .calc.json file inside the folder flo2-calc was started "
-            "with. Every difference is named. A record that does not reproduce is a normal answer, not an error."
+            "with. Every difference is named. A record that does not reproduce is a normal answer, not an error. "
+            'A not-yet-computed record (status "not_computed") has no result yet: the answer checks its seal and '
+            "says what it needs to be completed (record_computation completes it). A record that passes this "
+            "host's limits while being re-run is neither confirmed nor contradicted, and the answer says which limit."
         ),
     )
     @_guarded
@@ -243,11 +387,12 @@ def build_server(root: Path | None = None) -> MCPServer:
     ) -> CallToolResult:
         if (record is None) == (path is None):
             raise CallError("record", "pass exactly one: `record` (the record itself) or `path` (its file).")
+        guard = L.Guard(limits)
         if path is not None:
-            loaded = R.load(R.read_file(root, path, "path"), "path")
+            loaded = R.load(R.read_file(root, path, guard, "path"), "path", guard)
         else:
-            loaded = R.load(record, "record")
-        return _reply(R.rerun(loaded))
+            loaded = R.load(record, "record", guard)
+        return _reply(R.rerun(loaded, guard), guard=guard)
 
     return server
 
