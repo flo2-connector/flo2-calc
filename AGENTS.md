@@ -109,7 +109,7 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 |---|---|---|
 | `src/flo2_calc/evaluator.py` | reading and evaluating a graph, the operators | `cmp:evaluator` |
 | `src/flo2_calc/limits.py` | the host-set limits, and the guard that checks them while evaluating | `cmp:evaluator`, `cap:a-calculation-is-stopped-at-the-hosts-limits` |
-| `src/flo2_calc/realmath.py` | the rounded class: correctly rounded values from Arb enclosures, and their bounds | `cmp:evaluator` |
+| `src/flo2_calc/realmath.py` | the rounded class: correctly rounded values from Arb enclosures, and their bounds | `cmp:evaluator`, `cap:a-rounded-result-is-correctly-rounded-and-labelled`, `cap:trigonometry-and-rounding-to-places`, `cap:statistical-distributions` |
 | `src/flo2_calc/numbers.py` | exact numbers: read, check, write | `cmp:evaluator` |
 | `src/flo2_calc/units.py` | the unit vocabulary, dimensions, exact conversion, the near-miss hint | `cmp:units` |
 | `src/flo2_calc/temperature.py` | degC and degF: what a temperature with an offset may do | `cmp:units` |
