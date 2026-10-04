@@ -15,7 +15,11 @@ An INPUT node has a `value`: a number with its unit as text ("1.4 mm"), a
 plain number ("0.1", or a JSON integer), or true/false. Its `source` says
 where the value came from: free text, or {"design_node": "<id>"} naming a node
 in a reflow2 design (with "design": "<design id>" when it is another design).
-flo2-calc records a source and never resolves it.
+flo2-calc records a source and never resolves it. An exchange rate (a value
+whose unit holds two currencies, "0.92 EUR/USD") must have one: flo2-calc
+holds no rates, so the rate is the caller's, and must say where it came from.
+A value is one number: text that holds arithmetic ("3 + 4") is refused as an
+expression, to be built as nodes.
 
 An OPERATION node has an `op` and `args`, the ids of the nodes it takes, in
 order. `convert` also takes the `unit` to convert to. Any node may carry a
@@ -24,7 +28,8 @@ free-text `note`.
 READING. A graph that cannot be read is a CallError naming the field: no
 nodes, a repeated id, an unknown operator or field, the wrong number of
 arguments, a reference to a node that is not there, a cycle, a value that is
-not a number, an unknown unit.
+not a number, an unknown unit, an expression typed as a value, an exchange
+rate with no source.
 
 EVALUATING. Nodes are evaluated in one fixed order: each as soon as every node
 it takes is done, ties broken by the order they are listed in. The first node
@@ -47,10 +52,19 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import Any
 
-from flo2_calc import units as U
 from flo2_calc import limits as L
+from flo2_calc import temperature as T
+from flo2_calc import units as U
 from flo2_calc.errors import CallError, LimitExceeded, Refusal, at
-from flo2_calc.numbers import MAX_NUMBER_TEXT, NUMBER_THEN_REST, format_number, parse_number
+from flo2_calc.numbers import (
+    EXACT_FOR_THESE_INPUTS,
+    MAX_NUMBER_TEXT,
+    NUMBER_THEN_REST,
+    expression_problem,
+    format_number,
+    looks_like_expression,
+    parse_number,
+)
 
 MAX_NODES = 500
 MAX_ARGS = 100
@@ -179,7 +193,8 @@ class Evaluation:
 
 def value_json(v: Value) -> dict[str, str]:
     """A value as replies and records write it: {"value": "0.3 mm"}, plus
-    "exact" when the text is rounded."""
+    "exact" when the text is rounded: the exact value FOR THESE INPUTS (the
+    inputs as written, no more accurate than they are)."""
     if isinstance(v, bool):
         return {"value": "true" if v else "false"}
     text, exact = format_number(v.magnitude)
@@ -217,10 +232,14 @@ def parse_value(raw: Any, path: str) -> tuple[str, Value]:
         return raw, text == "true"
     m = NUMBER_THEN_REST.match(text)
     if not m:
+        if looks_like_expression(text, whole=True):  # "(3+4)", "pi*2"
+            raise CallError(path, expression_problem(raw))
         raise CallError(
             path,
             f'"{raw}" is not a value: write a number with its unit ("1.4 mm"), a plain number ("0.1" or "1/3"), or true/false.',
         )
+    if looks_like_expression(m.group(2)):  # "3 + * 4", "3*4", "2^10", "1/2/3", "2 1/2"
+        raise CallError(path, expression_problem(raw))
     try:
         number = parse_number(m.group(1))
         unit = U.parse_unit(m.group(2))
@@ -283,7 +302,14 @@ def _node(obj: Any, path: str) -> Node:
         if unknown:
             raise CallError(at(path, unknown[0]), f"an input node has only {', '.join(INPUT_KEYS)}.")
         raw, value = parse_value(obj["value"], at(path, "value"))
-        return InputNode(nid, raw, value, _source(obj, path), _note(obj, path))
+        source = _source(obj, path)
+        if source is None and isinstance(value, Quantity) and len(U.currencies_in(value.unit)) > 1:
+            raise CallError(
+                at(path, "source"),
+                f'"{raw}" is an exchange rate, and an exchange rate must say where it came from and when: give it a '
+                '"source", for example "ECB reference rate, 2026-10-02". flo2-calc holds no rates of its own.',
+            )
+        return InputNode(nid, raw, value, source, _note(obj, path))
     if "op" not in obj:
         raise CallError(path, f'node "{nid}" has neither "value" (an input) nor "op" (an operation).')
     unknown = [k for k in obj if k not in OP_KEYS]
@@ -444,6 +470,9 @@ def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value:
     if op in ("eq", "ne") and (isinstance(args[0], bool) != isinstance(args[1], bool)):
         raise Refusal(f"{op} compares like with like, and one of {names[0]!r}, {names[1]!r} is true/false and the other a number.", kind="type_mismatch")
     qs = _numbers(op, args, names)
+    if T.involved(op, [q.unit for q in qs], node.unit):  # a temperature on degC or degF: temperature.py
+        out = T.apply(op, [(q.magnitude, q.unit) for q in qs], names, node.unit)
+        return out if isinstance(out, bool) else Quantity(*out)
     first = qs[0]
     if family == "comparison":
         a, b = first.magnitude, _in_unit_of(first, qs[1], op)
@@ -572,7 +601,12 @@ def evaluation_json(ev: Evaluation) -> dict[str, Any]:
             values = values_json(ev)
         except LimitExceeded as e:
             return {"status": "refused", "refused": e.refusal, "result": None, "values": None, "next": STOPPED_NEXT}
-        return {"status": "ok", "result": {"node": ev.graph.result, **value_json(ev.values[ev.graph.result])}, "values": values}
+        return {
+            "status": "ok",
+            "result": {"node": ev.graph.result, **value_json(ev.values[ev.graph.result])},
+            "values": values,
+            "exactness": EXACT_FOR_THESE_INPUTS,
+        }
     try:
         values = values_json(ev)
     except LimitExceeded:

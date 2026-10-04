@@ -6,6 +6,14 @@ No binary float is ever made, so 0.1 + 0.2 is exactly 0.3. Addition,
 subtraction, multiplication, division and integer powers are exact, and so is
 every unit conversion flo2-calc offers.
 
+EXACT FOR THESE INPUTS. A value is exact for the inputs AS WRITTEN, and no
+more accurate than they are. flo2-calc cannot know that "3.14159265" was typed
+for pi: it takes it as exactly that decimal. So a value built from a truncated
+pi or e is the exact value of the given inputs, not of the math they stand
+for, and every reply and record says so (EXACT_FOR_THESE_INPUTS,
+ARITHMETIC_NOTE). Round 1 of the question set found results built on a typed
+pi labelled "exact" with nothing more said.
+
 HOW A VALUE IS WRITTEN BACK. When its decimal ends (the denominator has no
 prime factor but 2 and 5) and has at most 40 significant digits, it is written
 exactly, e.g. "0.3", "25.4", "1.602176634e-19". Otherwise it is written rounded
@@ -16,7 +24,9 @@ operations always use the exact value, never the rounded text.
 HOW A NUMBER IS READ. From text: a decimal ("0.1", "-2.5e3") or a fraction of
 integers ("1/3"). A JSON integer is accepted too. A JSON number with a fraction
 part is REFUSED: it reached Python as a binary float, so its exact value is
-already lost. Write it as text ("0.1").
+already lost. Write it as text ("0.1"). A value is ONE number: text that holds
+arithmetic ("3 + 4", "2^10", "2 1/2") is refused as an expression, with how to
+build it as nodes, rather than read as a number and a strange unit.
 """
 
 from __future__ import annotations
@@ -35,15 +45,55 @@ MAX_NUMBER_TEXT = 80
 # budget in limits.py (--max-digits), checked by the guard on every value.
 
 ARITHMETIC_NOTE = (
-    "Exact rational arithmetic: no binary floating point. + - * / and integer powers are exact, and so is "
-    "every unit conversion. A value whose decimal ends (at most 40 significant digits) is written exactly; "
-    "any other is written rounded half-even to 30 significant digits, and its exact value is given beside it "
-    "as a fraction. Comparisons use exact values."
+    "Exact rational arithmetic on the inputs as written: no binary floating point. + - * / and integer powers are "
+    "exact, and so is every unit conversion, so every value is exact FOR THESE INPUTS and no more accurate than "
+    "they are: a decimal typed for an irrational number (a truncated pi or e) is taken as exactly that decimal, "
+    "not as the number it stands for. A value whose decimal ends (at most 40 significant digits) is written "
+    "exactly; any other is written rounded half-even to 30 significant digits, and its exact value for these "
+    "inputs is given beside it as a fraction. Comparisons use exact values."
+)
+
+EXACT_FOR_THESE_INPUTS = (
+    "Exact for these inputs: every value follows exactly from the inputs as written, and is no more accurate than "
+    "they are. A decimal typed for pi, e or another irrational number is taken as exactly that decimal, so a value "
+    "built from it is exact for that decimal, not for the number it stands for."
 )
 
 _DECIMAL = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 _FRACTION = r"[+-]?\d+/\d+"
 NUMBER_THEN_REST = re.compile(rf"^\s*({_FRACTION}|{_DECIMAL})(.*)$", re.S)
+
+# What a unit's text never holds: an operator at its start, a + = × or ÷, a
+# minus that is not a negative power (m^-2), or a number that is not a power
+# (mm^2) and not the 1 of "1/s".
+_OPERATOR_FIRST = re.compile(r"^\s*[-+*/^×÷=]")
+_NO_UNIT_HOLDS = re.compile(r"[+=×÷]|(?<!\^)-")
+_LONE_NUMBER = re.compile(r"(?<![A-Za-z_µμ°%\d.^])(?<!\^-)\d+(?:\.\d*)?")
+_ARITHMETIC = re.compile(r"[-+*/^()×÷=]")
+
+
+def looks_like_expression(text: str, whole: bool = False) -> bool:
+    """Whether `text` is arithmetic rather than a unit: the text after a
+    value's number ("+ * 4", "*4", "^10", "/3", "1/2"), or, with `whole`, a
+    value that does not start with a number ("(3+4)", "pi*2")."""
+    t = text.strip()
+    if not t:
+        return False
+    if whole:
+        return bool(_ARITHMETIC.search(t)) and any(c.isdigit() for c in t)
+    if _OPERATOR_FIRST.match(t) or _NO_UNIT_HOLDS.search(t):
+        return True
+    lone = [m for m in _LONE_NUMBER.finditer(t) if not (m.start() == 0 and m.group() == "1" and t.startswith("1/"))]
+    return bool(lone)
+
+
+def expression_problem(raw: str) -> str:
+    return (
+        f'"{raw}" looks like an expression, and flo2-calc does not read arithmetic inside a value: a value is one '
+        'number with an optional unit ("1.4 mm", "1/3", "-2.5e3"). Build the expression as a graph of nodes, one '
+        'operation each, e.g. {"id": "a", "value": "3"}, {"id": "b", "value": "4"}, '
+        '{"id": "sum", "op": "add", "args": ["a", "b"]}.'
+    )
 
 
 def parse_number(text: str) -> Fraction:
