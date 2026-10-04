@@ -57,7 +57,7 @@ def validator():
 def test_a_record_holds_what_a_decision_needs():
     rec = make(supports={"design_node": "dec:fiber-route"})
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 3
+    assert rec["schema_version"] == 4
     assert rec["status"] == "computed"
     assert "stopped" not in rec and "limits_in_force" not in rec, "a computed record carries no host limits"
     assert rec["graph"] == FIBER
@@ -181,7 +181,7 @@ def test_a_record_whose_input_was_edited_and_hash_recomputed_is_still_caught():
 
 def test_a_record_from_a_newer_schema_is_refused_by_name():
     rec = make()
-    rec["schema_version"] = 4
+    rec["schema_version"] = 5
     with pytest.raises(CallError) as caught:
         R.load(rec)
     assert caught.value.path == "record.schema_version"

@@ -256,7 +256,11 @@ def test_an_operator_outside_the_first_increment_is_a_malformed_call_naming_the_
 
 def test_the_operator_families_are_the_accepted_ones():
     families = {v[0] for v in OPS.values()}
-    assert families == {"arithmetic", "logic", "comparison", "functions", "constants", "trigonometry", "rounding", "statistics"}
+    assert families == {
+        "arithmetic", "logic", "comparison", "functions", "constants", "trigonometry", "rounding", "statistics",
+        # 0.6.0, arrays (req:flo2-calc-computes-over-arrays)
+        "reductions", "statistics over data", "transforms", "complex values", "making and shaping arrays",
+    }
     assert {k for k, v in OPS.items() if v[0] == "logic"} == {"and", "or", "not", "nor", "nand", "xor"}
 
 

@@ -43,6 +43,20 @@ comparison, ceil, floor or round of a rounded value is answered only when the
 bound decides it, and refused (kind "undecidable") otherwise: a true/false or
 a whole number is never a guess.
 
+ARRAYS (arrays.py; req:flo2-calc-computes-over-arrays). An input's value may
+be an array, {"array": [...], "unit": "<unit>"} (one or two dimensions, one
+unit), or, run locally, {"file": "<path>"}. Every operator works element by
+element on arrays, with numpy's broadcasting; reductions (sum, product, mean,
+min, max, count_true, any, all, argmin, argmax, with "axis" for a grid),
+statistics over data (variance_sample, variance_population, sd_sample,
+sd_population, and the fit_* least-squares results), the FFT (fft, ifft,
+fft2, ifft2), complex parts (magnitude, phase, real, imag, conj) and making
+and shaping arrays (linspace, column, transpose, element) are operators of
+their own. An exact array stays exact through rational operations; an FFT, a
+function over an array or a large array is FLOAT64, labelled with a rigorous
+bound on every element. `_apply` hands any operation with an array among its
+arguments, or an operator only arrays have, to arrays.apply.
+
 READING. A graph that cannot be read is a CallError naming the field: no
 nodes, a repeated id, an unknown operator or field, the wrong number of
 arguments, a reference to a node that is not there, a cycle, a value that is
@@ -73,6 +87,7 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import Any
 
+from flo2_calc import arrays as A
 from flo2_calc import limits as L
 from flo2_calc import numbers as N
 from flo2_calc import realmath as RM
@@ -119,10 +134,13 @@ class Quantity:
         return self.rounding.error if self.rounding is not None else Fraction(0)
 
 
-Value = Quantity | bool
+Value = Quantity | bool  # | arrays.Array: an array, or a single float64 value (shape ())
 
 ARITHMETIC, FUNCTIONS, CONSTANTS, TRIG, ROUNDING, STATISTICS = (
     "arithmetic", "functions", "constants", "trigonometry", "rounding", "statistics",
+)
+REDUCTION, DATA, TRANSFORM, COMPLEX, ARRAY = (
+    "reductions", "statistics over data", "transforms", "complex values", "making and shaping arrays",
 )
 
 # (family, fewest args, most args or None for "any number up to MAX_ARGS"), and what it does
@@ -136,8 +154,10 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "pow": (ARITHMETIC, 2, 2, "the first raised to the second, a plain number: exact for a whole exponent; a non-whole one "
             "(\"1/3\", \"0.44\") gives a rounded value unless the result is rational, needs a base >= 0, and keeps a unit "
             "only when its root is exact (m^2 to the 1/2 is m)"),
-    "min": (ARITHMETIC, 2, None, "the smallest, in the first one's unit"),
-    "max": (ARITHMETIC, 2, None, "the largest, in the first one's unit"),
+    "min": (ARITHMETIC, 1, None, "the smallest, in the first one's unit; element by element for arrays; with ONE array, "
+            "the smallest of its elements (\"axis\" 0 or 1 for each column or row of a grid)"),
+    "max": (ARITHMETIC, 1, None, "the largest, in the first one's unit; element by element for arrays; with ONE array, "
+            "the largest of its elements (\"axis\" as for min)"),
     "convert": (ARITHMETIC, 1, 1, 'the value in the node\'s "unit" ("" for a plain number); it must measure the same thing. '
                 "deg to rad (or back) is a rounded value, since pi/180 is irrational; every other conversion is exact"),
     "sqrt": (FUNCTIONS, 1, 1, "the square root of a value >= 0; exact when it is rational (sqrt(9/4) is 3/2), else rounded; "
@@ -177,6 +197,42 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "nand": ("logic", 2, None, "not and"),
     "nor": ("logic", 2, None, "not or"),
     "xor": ("logic", 2, None, "true when an odd number of arguments are true"),
+    "sum": (REDUCTION, 1, 1, 'the sum of an array\'s elements, in its unit; "axis" 0 sums each column of a grid, 1 each row '
+            "(a discretised integral is a sum of an element-wise product); exact for exact data"),
+    "product": (REDUCTION, 1, 1, 'the product of a plain array\'s elements ("axis" as for sum)'),
+    "mean": (REDUCTION, 1, 1, 'the mean of an array\'s elements, in its unit ("axis" as for sum); exact for exact data'),
+    "count_true": (REDUCTION, 1, None, 'the number of true elements of a true/false array ("axis" as for sum), or of true values '
+                   "among several true/false values; an exact whole number"),
+    "any": (REDUCTION, 1, 1, 'true when any element of a true/false array is ("axis" as for sum)'),
+    "all": (REDUCTION, 1, 1, 'true when every element of a true/false array is ("axis" as for sum)'),
+    "argmin": (REDUCTION, 1, 1, "the index (0 for the first) of the smallest element of a 1-D array; the first of exact ties"),
+    "argmax": (REDUCTION, 1, 1, "the index (0 for the first) of the largest element of a 1-D array; the first of exact ties"),
+    "variance_sample": (DATA, 1, 1, "the sample variance of a 1-D array (divides by n - 1), in its unit squared; exact for exact data"),
+    "variance_population": (DATA, 1, 1, "the population variance of a 1-D array (divides by n), in its unit squared; exact for exact data"),
+    "sd_sample": (DATA, 1, 1, "the sample standard deviation (n - 1), in the data's unit; correctly rounded for exact data"),
+    "sd_population": (DATA, 1, 1, "the population standard deviation (n), in the data's unit; correctly rounded for exact data"),
+    "fit_slope": (DATA, 2, 2, "the least-squares slope of y on x, for args [x, y] (1-D, the same length), in y's unit per x's; "
+                  "exact for exact data"),
+    "fit_intercept": (DATA, 2, 2, "the least-squares intercept, for args [x, y], in y's unit; exact for exact data"),
+    "fit_slope_se": (DATA, 2, 2, "the slope's standard error, s / sqrt(Sxx), for args [x, y]; correctly rounded for exact data"),
+    "fit_intercept_se": (DATA, 2, 2, "the intercept's standard error, s sqrt(1/n + mean(x)^2 / Sxx), for args [x, y]"),
+    "fit_residual_se": (DATA, 2, 2, "the residual standard error s = sqrt(SSR / (n - 2)), for args [x, y], in y's unit"),
+    "fft": (TRANSFORM, 1, 1, "the discrete Fourier transform of a 1-D array, numpy's convention (no scaling); complex, float64, "
+            "labelled with its error bound"),
+    "ifft": (TRANSFORM, 1, 1, "the inverse transform of a 1-D array (scaled by 1/n); complex, float64, labelled"),
+    "fft2": (TRANSFORM, 1, 1, "the 2-D discrete Fourier transform of a grid; complex, float64, labelled"),
+    "ifft2": (TRANSFORM, 1, 1, "the inverse 2-D transform of a grid (scaled by 1/(m n)); complex, float64, labelled"),
+    "magnitude": (COMPLEX, 1, 1, "the modulus |z| of each element (of a real array: its absolute value); float64"),
+    "phase": (COMPLEX, 1, 1, 'the angle of each element, in (-180, 180] deg, in the node\'s "unit" ("deg" or "rad"); float64; '
+              "an element at (or, within its bound, possibly at) zero is refused"),
+    "real": (COMPLEX, 1, 1, "the real part of each element"),
+    "imag": (COMPLEX, 1, 1, "the imaginary part of each element"),
+    "conj": (COMPLEX, 1, 1, "the complex conjugate of each element"),
+    "linspace": (ARRAY, 3, 3, "args [start, stop, count]: count evenly spaced values from start to stop, both ends included, in "
+                 "start's unit; exact for exact ends"),
+    "column": (ARRAY, 1, 1, "a 1-D array of n as a column (n x 1), to meet a row element by element as a grid"),
+    "transpose": (ARRAY, 1, 1, "a grid's rows as columns"),
+    "element": (ARRAY, 2, 3, "args [array, i] or [array, row, col]: one element (indices from 0)"),
     "eq": ("comparison", 2, 2, "equal (numbers after converting to the first one's unit, or two true/false values)"),
     "ne": ("comparison", 2, 2, "not equal"),
     "lt": ("comparison", 2, 2, "the first is less than the second"),
@@ -188,12 +244,13 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
 # Operators that may give a rounded value, and so take "digits".
 ROUNDED_OPS = frozenset(
     k for k, v in OPS.items() if v[0] in (FUNCTIONS, CONSTANTS, TRIG, STATISTICS)
-) | {"pow", "convert"}
-UNIT_OPS = frozenset({"convert", "asin", "acos", "atan", "atan2"})
+) | {"pow", "convert", "sd_sample", "sd_population", "fit_slope_se", "fit_intercept_se", "fit_residual_se"}
+UNIT_OPS = frozenset({"convert", "asin", "acos", "atan", "atan2", "phase"})
+AXIS_OPS = frozenset({"sum", "product", "mean", "min", "max", "count_true", "any", "all"})
 ROUND_MODES = ("half_even", "half_away_from_zero", "half_toward_zero", "half_up", "half_down")
 
 INPUT_KEYS = ("id", "value", "source", "note")
-OP_KEYS = ("id", "op", "args", "unit", "digits", "places", "mode", "note")
+OP_KEYS = ("id", "op", "args", "unit", "digits", "places", "mode", "axis", "note")
 GRAPH_KEYS = ("nodes", "result")
 SOURCE_KEYS = ("design_node", "design")
 
@@ -201,7 +258,7 @@ SOURCE_KEYS = ("design_node", "design")
 @dataclass(frozen=True)
 class InputNode:
     id: str
-    raw: str  # the value's text as given (a JSON integer or true/false made text)
+    raw: str | dict[str, Any]  # the value's text as given (a JSON integer or true/false made text); an array's object
     value: Value
     source: str | dict[str, str] | None
     note: str | None
@@ -218,6 +275,7 @@ class OpNode:
     digits: int | None = None
     places: int | None = None
     mode: str | None = None
+    axis: int | None = None
 
 
 Node = InputNode | OpNode
@@ -245,7 +303,7 @@ class Graph:
                 d = {"id": n.id, "op": n.op, "args": list(n.args)}
                 if n.unit_text is not None:
                     d["unit"] = n.unit_text
-                for key in ("digits", "places", "mode"):
+                for key in ("digits", "places", "mode", "axis"):
                     if getattr(n, key) is not None:
                         d[key] = getattr(n, key)
             if n.note is not None:
@@ -290,6 +348,8 @@ def value_json(v: Value) -> dict[str, Any]:
     "exact", and is never exact."""
     if isinstance(v, bool):
         return {"value": "true" if v else "false"}
+    if isinstance(v, A.Array):
+        return A.value_json(v)
     unit = U.format_unit(v.unit)
 
     def with_unit(text: str) -> str:
@@ -317,8 +377,13 @@ def value_text(v: Value) -> str:
     return value_json(v)["value"]
 
 
-def parse_value(raw: Any, path: str) -> tuple[str, Value]:
-    """(the value's text, the value) from what a call gave."""
+def parse_value(raw: Any, path: str, data_root: Any = None) -> tuple[Any, Value]:
+    """(the value's text, the value) from what a call gave; an array's object
+    (arrays.py) comes back as the object a record keeps, and the array."""
+    if isinstance(raw, dict):
+        return A.parse_input(raw, path, data_root)
+    if isinstance(raw, list):
+        raise CallError(path, 'an array is written {"array": [...], "unit": "<unit>"}, so its one unit is given once.')
     if isinstance(raw, bool):
         return ("true" if raw else "false"), raw
     if isinstance(raw, int):
@@ -416,7 +481,7 @@ def _known_ops() -> str:
     return "; ".join(f"{family} ({', '.join(names)})" for family, names in families.items())
 
 
-def _node(obj: Any, path: str) -> Node:
+def _node(obj: Any, path: str, data_root: Any = None) -> Node:
     if not isinstance(obj, dict):
         raise CallError(path, 'a node is an object: {"id", "value"} for an input, or {"id", "op", "args"} for an operation.')
     nid = obj.get("id")
@@ -431,9 +496,9 @@ def _node(obj: Any, path: str) -> Node:
         unknown = [k for k in obj if k not in INPUT_KEYS]
         if unknown:
             raise CallError(at(path, unknown[0]), f"an input node has only {', '.join(INPUT_KEYS)}.")
-        raw, value = parse_value(obj["value"], at(path, "value"))
+        raw, value = parse_value(obj["value"], at(path, "value"), data_root)
         source = _source(obj, path)
-        if source is None and isinstance(value, Quantity) and len(U.currencies_in(value.unit)) > 1:
+        if source is None and not isinstance(value, bool) and len(U.currencies_in(value.unit)) > 1:
             raise CallError(
                 at(path, "source"),
                 f'"{raw}" is an exchange rate, and an exchange rate must say where it came from and when: give it a '
@@ -480,7 +545,7 @@ def _node(obj: Any, path: str) -> Node:
     elif "unit" in obj:
         raise CallError(
             at(path, "unit"),
-            f'only convert, asin, acos, atan and atan2 take a "unit"; "{op}" keeps the units of what it takes.',
+            f'only convert, asin, acos, atan, atan2 and phase take a "unit"; "{op}" keeps the units of what it takes.',
         )
     if "digits" in obj and op not in ROUNDED_OPS:
         raise CallError(at(path, "digits"), f'"{op}" gives an exact result, so it takes no "digits".')
@@ -496,11 +561,19 @@ def _node(obj: Any, path: str) -> Node:
         mode = obj["mode"]
         if mode not in ROUND_MODES:
             raise CallError(at(path, "mode"), f"round's mode is one of {', '.join(ROUND_MODES)}; half_even is the default.")
-    return OpNode(nid, op, tuple(args), unit, unit_text, _note(obj, path), digits_, places, mode)
+    axis = None
+    if "axis" in obj:
+        if op not in AXIS_OPS:
+            raise CallError(at(path, "axis"), f'only {", ".join(sorted(AXIS_OPS))} take "axis"; "{op}" does not.')
+        axis = obj["axis"]
+        if axis not in (0, 1) or isinstance(axis, bool):
+            raise CallError(at(path, "axis"), 'a grid\'s "axis" is 0 (down each column) or 1 (along each row).')
+    return OpNode(nid, op, tuple(args), unit, unit_text, _note(obj, path), digits_, places, mode, axis)
 
 
-def read_nodes(items: list[tuple[Any, str]], result: Any = None, result_path: str = "graph.result") -> Graph:
-    """A graph from (node, field path) pairs. Raises CallError."""
+def read_nodes(items: list[tuple[Any, str]], result: Any = None, result_path: str = "graph.result", data_root: Any = None) -> Graph:
+    """A graph from (node, field path) pairs. Raises CallError. `data_root` is
+    the folder an array's data file may be read from (None: none)."""
     if not items:
         raise CallError("graph.nodes", "a graph needs at least one node.")
     if len(items) > MAX_NODES:
@@ -508,7 +581,7 @@ def read_nodes(items: list[tuple[Any, str]], result: Any = None, result_path: st
     nodes: list[Node] = []
     seen: dict[str, str] = {}
     for obj, path in items:
-        node = _node(obj, path)
+        node = _node(obj, path, data_root)
         if node.id in seen:
             raise CallError(at(path, "id"), f'"{node.id}" is already the id of {seen[node.id]}; every id names one node.')
         seen[node.id] = path
@@ -532,7 +605,7 @@ def read_nodes(items: list[tuple[Any, str]], result: Any = None, result_path: st
     return graph
 
 
-def read_graph(obj: Any, path: str = "graph") -> Graph:
+def read_graph(obj: Any, path: str = "graph", data_root: Any = None) -> Graph:
     if not isinstance(obj, dict):
         raise CallError(path, 'a graph is an object: {"nodes": [...], "result": "<id>"}.')
     unknown = [k for k in obj if k not in GRAPH_KEYS]
@@ -541,7 +614,7 @@ def read_graph(obj: Any, path: str = "graph") -> Graph:
     nodes = obj.get("nodes")
     if not isinstance(nodes, list):
         raise CallError(at(path, "nodes"), "a graph's nodes are a list.")
-    return read_nodes([(n, at(at(path, "nodes"), i)) for i, n in enumerate(nodes)], obj.get("result"), at(path, "result"))
+    return read_nodes([(n, at(at(path, "nodes"), i)) for i, n in enumerate(nodes)], obj.get("result"), at(path, "result"), data_root)
 
 
 def evaluation_order(graph: Graph) -> list[str]:
@@ -1135,6 +1208,8 @@ def _temperature(node: OpNode, qs: list[Quantity]) -> Value:
 
 def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value:
     op, names = node.op, node.args
+    if A.uses_arrays(op, args):
+        return A.apply(node, args, guard)  # an array among the arguments, or an operator only arrays have
     family = OPS[op][0]
     if family == "logic":
         bs = _booleans(op, args, names)
@@ -1185,11 +1260,15 @@ def evaluate(graph: Graph, guard: L.Guard | None = None) -> Evaluation:
             if isinstance(node, InputNode):
                 if isinstance(node.value, Quantity):
                     guard.check_number(node.value.magnitude, "value")
+                elif isinstance(node.value, A.Array):
+                    A.check(node.value, guard, "array")
                 ev.values[nid] = node.value
                 continue
             value = _apply(node, [ev.values[a] for a in node.args], guard)
             if isinstance(value, Quantity):
                 guard.check_number(value.magnitude)
+            elif isinstance(value, A.Array):
+                A.check(value, guard)
         except LimitExceeded as e:
             ev.refusal = e.refusal
             return ev
@@ -1232,8 +1311,12 @@ def values_json(ev: Evaluation) -> list[dict[str, Any]]:
 
 def exactness(ev: Evaluation) -> str:
     """What "exact" means in an answer: exact for these inputs, and, when any
-    value is a rounded one, that those values are not exact."""
-    if any(isinstance(v, Quantity) and v.rounding is not None for v in ev.values.values()):
+    value is a rounded one or a float64 one, that those values are not exact."""
+    rounded = any(isinstance(v, Quantity) and v.rounding is not None for v in ev.values.values())
+    floats = any(isinstance(v, A.Array) and v.inexact for v in ev.values.values())
+    if floats:
+        return N.EXACT_BUT_ROUNDED_AND_FLOAT64 if rounded else N.EXACT_BUT_FLOAT64
+    if rounded:
         return EXACT_BUT_ROUNDED
     return EXACT_FOR_THESE_INPUTS
 

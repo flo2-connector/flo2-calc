@@ -1,11 +1,11 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-3.schema.json; version 1 and
-2 records, schemas/calc-record-1.schema.json and calc-record-2.schema.json,
+A record is one JSON object (schemas/calc-record-4.schema.json; version 1, 2
+and 3 records, schemas/calc-record-1.schema.json to calc-record-3.schema.json,
 still re-run):
 
     record_format   "flo2-calc computation record"
-    schema_version  3
+    schema_version  4
     status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
@@ -15,9 +15,12 @@ still re-run):
     values          every node's value, in the order evaluated: "exact" beside
                     an exact value whose text is rounded; "rounded" (digits,
                     correctly_rounded, error_at_most, from) on a value of the
-                    rounded class (realmath.py), which never has an "exact"
+                    rounded class (realmath.py), which never has an "exact";
+                    "array" (shape, kind, unit, sha256, and every element up
+                    to 1,024 of them) on an array, and "float64" (error_at_most,
+                    how, from) on a float64 value (arrays.py)
     result          {"node", "value"}, labelled the same way
-    produced_by     {"flo2_calc", "pint", "python_flint": versions}
+    produced_by     {"flo2_calc", "pint", "python_flint", "numpy": versions}
     content_hash    "sha256:<hex>" over the canonical JSON of all of the above
 
 NOT YET COMPUTED (cap:a-not-yet-computed-record-is-completed-on-a-larger-machine).
@@ -36,6 +39,14 @@ byte-identical file wherever it is made. When it was made is the business of
 whatever keeps it: flo2 keeps every version, git keeps every commit.
 
 A COMPUTED RECORD CARRIES NO HOST LIMITS, so it stays deterministic.
+
+ARRAYS (arrays.py). An inline array is kept in the graph element for element;
+an array read from a data file is kept as the file's path and the sha256 of
+its bytes, so the content hash covers the data either way. Re-running reads
+the file again from the folder flo2-calc may read (--root) and checks that
+sha256: a changed file is a difference, and a file that is not there leaves
+the record neither confirmed nor contradicted. A large array's values are
+kept as the sha256 of every element's text, which re-running compares.
 
 THE HASH IS A SEAL, NOT A SIGNATURE. It catches a record edited by hand or
 damaged in transit. It cannot stop someone from editing a record and then
@@ -63,6 +74,7 @@ from pathlib import Path
 from typing import Any
 
 from flo2_calc import __version__
+from flo2_calc import arrays as A
 from flo2_calc import limits as L
 from flo2_calc import realmath as RM
 from flo2_calc import units as U
@@ -77,11 +89,16 @@ from flo2_calc.evaluator import (
     value_json,
     values_json,
 )
-from flo2_calc.numbers import ARITHMETIC_NOTE
+from flo2_calc.numbers import ARITHMETIC_NOTE, ARRAYS_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 3
-SCHEMA_FILES = {1: "calc-record-1.schema.json", 2: "calc-record-2.schema.json", 3: "calc-record-3.schema.json"}
+SCHEMA_VERSION = 4
+SCHEMA_FILES = {
+    1: "calc-record-1.schema.json",
+    2: "calc-record-2.schema.json",
+    3: "calc-record-3.schema.json",
+    4: "calc-record-4.schema.json",
+}
 COMPUTED = "computed"
 NOT_COMPUTED = "not_computed"
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -163,13 +180,26 @@ def check_sources(graph: Graph) -> None:
         )
 
 
+def uses_arrays(graph: Graph) -> bool:
+    """Whether a graph holds an array, or an operator only arrays have."""
+    return any(
+        isinstance(n.value, A.Array) if isinstance(n, InputNode) else n.op in A.ARRAY_ONLY for n in graph.nodes
+    )
+
+
 def inputs_of(graph: Graph) -> list[dict[str, Any]]:
     """Each input with its value, its unit and its source, in the graph's order."""
     inputs = []
     for n in graph.nodes:
         if not isinstance(n, InputNode):
             continue
-        entry: dict[str, Any] = {"id": n.id, **value_json(n.value), "source": n.source}
+        if isinstance(n.value, A.Array):  # its elements are in the graph; here, what it is and its sha256
+            entry: dict[str, Any] = {"id": n.id, **A.value_json(n.value, elements=False), "source": n.source}
+            if n.value.kind != A.BOOL:
+                entry["unit"] = U.format_unit(n.value.unit)
+            inputs.append(entry)
+            continue
+        entry = {"id": n.id, **value_json(n.value), "source": n.source}
         if isinstance(n.value, Quantity):
             entry["unit"] = U.format_unit(n.value.unit)
         inputs.append(entry)
@@ -182,7 +212,7 @@ def _head(status: str, name: str, graph: Graph, supports: str | dict[str, str] |
         "schema_version": SCHEMA_VERSION,
         "status": status,
         "name": name,
-        "arithmetic": ARITHMETIC_NOTE,
+        "arithmetic": ARITHMETIC_NOTE + (" " + ARRAYS_NOTE if uses_arrays(graph) else ""),
         "graph": graph.to_json(),
         "inputs": inputs_of(graph),
     }
@@ -207,8 +237,11 @@ def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | No
 
 def produced_by() -> dict[str, str]:
     """The versions that decide a record's values: flo2-calc, pint (what a unit
-    is) and python-flint (the enclosures a rounded value is decided from)."""
-    return {"flo2_calc": __version__, "pint": U.pint_version(), "python_flint": RM.flint_version()}
+    is), python-flint (the enclosures a rounded value is decided from) and
+    numpy (the FFT, and float64 arithmetic)."""
+    import numpy
+
+    return {"flo2_calc": __version__, "pint": U.pint_version(), "python_flint": RM.flint_version(), "numpy": numpy.__version__}
 
 
 def build_pending(graph: Graph, name: str, supports: str | dict[str, str] | None, refusal: dict[str, Any], limits: L.Limits) -> dict[str, Any]:
@@ -224,12 +257,12 @@ def build_pending(graph: Graph, name: str, supports: str | dict[str, str] | None
     return record
 
 
-def pending_problems(record: dict[str, Any]) -> list[dict[str, Any]]:
+def pending_problems(record: dict[str, Any], data_root: Path | None = None) -> list[dict[str, Any]]:
     """What does not hold in a schema-valid not-yet-computed record, beyond its
     seal: its inputs must be the ones its graph gives, and the node it stopped
     at must be in its graph. (Its values cannot be checked: it has none.)"""
     try:
-        graph = read_graph(record["graph"], "record.graph")
+        graph = read_graph(record["graph"], "record.graph", data_root)
     except CallError as e:
         return [{"field": e.path, "recorded": "(as written)", "now": f"cannot be read: {e.problem}"}]
     out = []
@@ -291,7 +324,7 @@ def _replaceable_pending(target: Path, new: dict[str, Any]) -> bool:
         old = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return False
-    if not isinstance(old, dict) or old.get("schema_version") not in (2, 3) or old.get("status") != NOT_COMPUTED:
+    if not isinstance(old, dict) or old.get("schema_version") not in (2, 3, 4) or old.get("status") != NOT_COMPUTED:
         return False
     import jsonschema
 
@@ -426,15 +459,15 @@ def _room_here(stopped: dict[str, Any], limits: L.Limits) -> bool:
     try:
         if name == "deadline":
             return limits.deadline_ms > L.parse_deadline(str(limit["value"]))
-        here = limits.max_digits if name == "max_digits" else limits.max_reply_bytes
+        here = getattr(limits, name)
         return here >= int(limit.get("needed_at_least", int(limit["value"]) + 1))
     except (ValueError, TypeError):  # a value the record should not hold: say no room, never fail
         return False
 
 
-def _rerun_pending(record: dict[str, Any], answer: dict[str, Any], hash_ok: bool, guard: L.Guard) -> dict[str, Any]:
+def _rerun_pending(record: dict[str, Any], answer: dict[str, Any], hash_ok: bool, guard: L.Guard, data_root: Path | None) -> dict[str, Any]:
     stopped = record["stopped"]
-    problems = pending_problems(record)
+    problems = pending_problems(record, data_root)
     intact = hash_ok and not problems
     answer.update(
         status=NOT_COMPUTED,
@@ -476,7 +509,7 @@ def _rerun_pending(record: dict[str, Any], answer: dict[str, Any], hash_ok: bool
     return answer
 
 
-def rerun(record: dict[str, Any], guard: L.Guard | None = None) -> dict[str, Any]:
+def rerun(record: dict[str, Any], guard: L.Guard | None = None, data_root: Path | None = None) -> dict[str, Any]:
     """Re-run a schema-valid record. Always a normal answer: whether it
     reproduces, and every way it does not. A not-yet-computed record has no
     result to reproduce: the answer says so, checks its seal, and says what it
@@ -496,11 +529,11 @@ def rerun(record: dict[str, Any], guard: L.Guard | None = None) -> dict[str, Any
     if record["produced_by"].get("flo2_calc") != __version__:
         answer["note"] = f"recorded with flo2-calc {record['produced_by'].get('flo2_calc')}, re-run with {__version__}."
     if status_of(record) == NOT_COMPUTED:
-        return _rerun_pending(record, answer, hash_ok, guard)
+        return _rerun_pending(record, answer, hash_ok, guard, data_root)
     differences: list[dict[str, Any]] = []
     stopped: dict[str, Any] | None = None
     try:
-        graph = read_graph(record["graph"], "record.graph")
+        graph = read_graph(record["graph"], "record.graph", data_root)
         evaluation = evaluate(graph, guard)
         if evaluation.stopped:
             stopped = evaluation.refusal
@@ -511,6 +544,17 @@ def rerun(record: dict[str, Any], guard: L.Guard | None = None) -> dict[str, Any
             again = build(evaluation, record["name"], record.get("supports"))
             differences += _differences(record, again)
             answer["result"] = again["result"]
+    except A.DataUnavailable as e:
+        answer.update(status="refused", result=None, reproduces=None, differences=[])
+        answer["refused"] = {"node": None, "op": None, "kind": "data_unavailable", "reason": f"{e.path}: {e.problem}"}
+        answer["verdict"] = (
+            "This record could not be re-run here: a data file its graph reads is not in the folder this flo2-calc "
+            f"may read ({e.path}: {e.problem}) So it is neither confirmed nor contradicted. Its content hash "
+            + ("matches" if hash_ok else "does NOT match")
+            + ". Re-run it with a flo2-calc started with --root at the folder that holds the file; the record names "
+            "the file's sha256, so a changed file is caught."
+        )
+        return answer
     except CallError as e:
         differences.append({"field": e.path, "recorded": "(as written)", "rerun": f"cannot be read now: {e.problem}"})
         answer["result"] = None

@@ -63,7 +63,7 @@ def direct_of(g=GROWING, name="stage-gain", supports=SUPPORTS):
 def test_a_pending_record_holds_the_graph_the_inputs_and_the_limit_and_no_result():
     rec = pending_of()
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 3 and rec["status"] == "not_computed"
+    assert rec["schema_version"] == 4 and rec["status"] == "not_computed"
     assert rec["graph"] == GROWING
     assert rec["supports"] == SUPPORTS
     assert "values" not in rec and "result" not in rec, "no values and no result"
@@ -76,7 +76,7 @@ def test_a_pending_record_holds_the_graph_the_inputs_and_the_limit_and_no_result
     assert (stopped["node"], stopped["op"]) == ("r32", "mul")
     assert stopped["reached"] == {"nodes_done": 5, "nodes": 9, "largest_digits": 195}
     assert "budget of 100 digits" in stopped["reason"]
-    assert rec["limits_in_force"] == {"deadline": "45 s", "max_digits": 100, "max_reply_bytes": 8388608}
+    assert rec["limits_in_force"] == {"deadline": "45 s", "max_digits": 100, "max_reply_bytes": 8388608, "max_array_bytes": 536870912}
     assert rec["produced_by"]["flo2_calc"] == __version__
     assert rec["content_hash"] == R.content_hash(rec)
     jsonschema.Draft202012Validator(R.schema()).validate(rec)
@@ -295,7 +295,7 @@ def test_a_version_2_not_yet_computed_record_completes_to_this_versions_direct_r
     assert answer_of(completed)["status"] == "ok"
     direct = one("record_computation", {"graph": GROWING, "name": "stage-gain", "supports": SUPPORTS})
     assert completed.content[1].resource.text == direct.content[1].resource.text
-    assert json.loads(completed.content[1].resource.text)["schema_version"] == 3
+    assert json.loads(completed.content[1].resource.text)["schema_version"] == 4
 
 
 def test_a_tampered_version_1_record_is_still_caught():

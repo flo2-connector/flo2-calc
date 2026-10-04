@@ -19,7 +19,9 @@
   reflow2, flo2-cad or flo2-ifc, and no feature degrades without them. `tests/test_standalone.py` holds the import
   list.
 - **Reliability first** (`dec:quality-reliability`): every result is correct or refused, and every record re-runs to
-  the same result. No binary float of fixed precision is ever made. An EXACT value is an exact fraction, and when its
+  the same result. No binary float of fixed precision is made for a single value; only a FLOAT64 array value (an FFT,
+  a function over an array, a large array) is one, and it is labelled with a rigorous bound. An EXACT value is an exact
+  fraction, and when its
   text is rounded for display it carries its exact fraction. "Exact" means exact FOR THESE INPUTS: a typed decimal of
   pi is that decimal, and every reply and record says so (the `pi` and `e` operators are the constants themselves).
 - **The rounded class** (`dec:round-1-fixes-one-to-six`, groups 1, 2, 5 and 6; `realmath.py`): pi, e, sqrt, exp, ln,
@@ -60,6 +62,14 @@
 - **Results reach reflow2 through the agent** (`dec:agent-carries-results`): flo2-calc never writes to reflow2. The
   record comes back as a file (`calcfile:///<name>.calc.json`), which flo2 keeps when hosted.
 - **Generic math only:** no jewelry, building or other domain formula belongs here.
+- **Arrays** (`req:flo2-calc-computes-over-arrays`, `dec:idea-how-arrays-are-computed`, option (a)): one unit per
+  array; an exact array stays exact through rational operations; an FFT, a rounded-class function over an array, an
+  array of more than 4,096 elements, or anything mixed with such a value is float64, labelled `float64` with a
+  rigorous `error_at_most` and its basis (`how`). A float64 value must be the same on every machine: functions go
+  through Arb and round once, sums through `math.fsum`, complex products one IEEE operation at a time. Only the FFT's
+  last bits are numpy's (pocketfft), which is why `produced_by` names numpy.
+- **The agent reasons, flo2-calc calculates** (`rule:the-agent-reasons-flo2-calc-calculates`): flo2-calc never
+  chooses an equation or judges an approximation; it computes what it is given, or refuses with a reason.
 
 ## The seam with flo2 (its helper contract, version 1)
 
@@ -108,6 +118,7 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | Path | Part | In the design |
 |---|---|---|
 | `src/flo2_calc/evaluator.py` | reading and evaluating a graph, the operators | `cmp:evaluator` |
+| `src/flo2_calc/arrays.py` | arrays: reading them (inline, or a data file under `--root`), element-wise operations, reductions, statistics over data, the FFT, the float64 label and its bounds | `cmp:evaluator`, `req:flo2-calc-computes-over-arrays` |
 | `src/flo2_calc/limits.py` | the host-set limits, and the guard that checks them while evaluating | `cmp:evaluator`, `cap:a-calculation-is-stopped-at-the-hosts-limits` |
 | `src/flo2_calc/realmath.py` | the rounded class: correctly rounded values from Arb enclosures, and their bounds | `cmp:evaluator`, `cap:a-rounded-result-is-correctly-rounded-and-labelled`, `cap:trigonometry-and-rounding-to-places`, `cap:statistical-distributions` |
 | `src/flo2_calc/numbers.py` | exact numbers: read, check, write | `cmp:evaluator` |
