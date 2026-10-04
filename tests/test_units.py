@@ -54,7 +54,7 @@ def refusal(*nodes):
     ([inp("a", "2 mm"), inp("n", "-1"), op("r", "pow", "a", "n")], "0.5 1/mm"),
     ([inp("a", "5 mm"), inp("b", "3 mm"), op("r", "min", "a", "b")], "3 mm"),
     ([inp("a", "10 m"), inp("t", "4 s"), op("r", "div", "a", "t")], "2.5 m/s"),
-    ([inp("f", "12 N"), inp("a", "4 m/s^2"), op("r", "div", "f", "a")], "3 N*s^2/m"),
+    ([inp("f", "12 N"), inp("a", "4 m/s^2"), op("r", "div", "f", "a")], "3 kg"),  # N*s^2/m is exactly kg (units.simplify)
 ])
 def test_a_unit_survives_every_operation(nodes, expected):
     assert value(*nodes) == expected
@@ -155,7 +155,7 @@ def test_the_integrated_designs_units_are_in_the_vocabulary():
 
 
 @pytest.mark.parametrize("text, hint", [
-    ("furlong", None),
+    ("notaunit", None),
     ("khz", 'Write "kHz"'),
     ("kOhm", 'Write "kohm"'),
     ("µm", 'Write "um"'),
@@ -187,7 +187,7 @@ def test_an_unknown_spelling_is_refused_never_guessed(text, hint):
 
 def test_an_unknown_unit_in_convert_is_refused_at_the_unit_field():
     with pytest.raises(CallError) as caught:
-        read_graph(graph(inp("a", "2 mm"), op("r", "convert", "a", unit="furlong")))
+        read_graph(graph(inp("a", "2 mm"), op("r", "convert", "a", unit="notaunit")))
     assert caught.value.path == "graph.nodes[1].unit"
 
 
@@ -344,3 +344,95 @@ def test_a_currency_sign_shared_by_several_currencies_is_refused_naming_them(sig
     with pytest.raises(CallError) as caught:
         read_graph(graph(inp("a", f"5 {sign}")))
     assert named in caught.value.problem and 'Write "' not in caught.value.problem
+
+
+# ---------------------------------------------------------------- furlong and fortnight (round 2, fix 6)
+
+
+def test_a_furlong_is_exactly_660_international_feet_and_a_fortnight_14_days():
+    """q088's agent typed 660 ft and 14 d. pint's furlong is the US survey one; flo2-calc's is the international."""
+    assert U.atom("furlong").factor == Fraction(201168, 1000) == 660 * U.atom("ft").factor
+    assert U.atom("fortnight").factor == 14 * U.atom("d").factor
+    assert value(inp("a", "1 furlong"), op("r", "convert", "a", unit="ft")) == "660 ft"
+    assert value(inp("a", "1 fortnight"), op("r", "convert", "a", unit="h")) == "336 h"
+    answer = run(inp("l", "1 furlong"), inp("t", "1 fortnight"), op("v", "div", "l", "t"), op("r", "convert", "v", unit="m/s"))
+    assert answer["result"]["exact"] == "1397/8400000 m/s"
+
+
+# ---------------------------------------------------------------- a computed unit shown simpler (round 2, fix 8)
+
+
+@pytest.mark.parametrize("a, b, how, shown, simplified_from", [
+    ("450 mAh", "13 mA", "div", "34.6153846153846153846153846154 h", "mAh/mA"),
+    ("3.3 V", "20 mA", "div", "0.165 kohm", "V/mA"),
+    ("3.3 V", "20 mA", "mul", "66 mW", "V*mA"),
+    ("2 kPa", "3 m^2", "mul", "6 kN", "kPa*m^2"),
+    ("12 N", "4 m/s^2", "div", "3 kg", "N*s^2/m"),
+    ("1105 um^2/m", "1", "mul", "0.001105 um", "um^2/m"),
+    ("9 mm/m", "100", "mul", "0.9", "mm/m"),
+])
+def test_a_computed_compound_unit_is_shown_in_a_simpler_unit_of_the_same_size(a, b, how, shown, simplified_from):
+    """q001, q003, q004, q006, q016, q022 needed a convert; q012 showed um^2/(m*K) and um^2/m."""
+    r = run(inp("a", a), inp("b", b), op("r", how, "a", "b"))["result"]
+    assert r["value"] == shown and r["simplified_from"] == simplified_from
+
+
+def test_the_exact_value_is_unchanged_only_the_unit_it_is_shown_in():
+    r = run(inp("a", "450 mAh"), inp("b", "13 mA"), op("r", "div", "a", "b"))["result"]
+    assert r["exact"] == "450/13 h"
+    same = run(inp("a", "450 mAh"), inp("b", "13 mA"), op("r", "div", "a", "b"), inp("h", "1 h"), op("x", "eq", "r", "h"),
+               inp("t", "450/13 h"), op("y", "eq", "r", "t"))
+    assert {v["node"]: v["value"] for v in same["values"]}["y"] == "true"
+
+
+@pytest.mark.parametrize("unit", ["mm", "mm^2", "1/s", "degC", "%", "m/s", "J/kg", "lbf*ft", "EUR/USD", "deg/s"])
+def test_a_unit_of_one_spelling_or_with_no_simpler_one_is_shown_as_it_is(unit):
+    assert U.simplify(U.parse_unit(unit)) is None
+
+
+def test_a_unit_the_graph_chose_is_never_simplified():
+    """convert's target, with_unit's stated unit, an input's unit: shown as given."""
+    assert value(inp("a", "1 kohm"), op("r", "convert", "a", unit="V/mA")) == "1 V/mA"
+    assert value(inp("a", "2"), op("r", "with_unit", "a", unit="V/mA", source="a datasheet's units")) == "2 V/mA"
+    assert run(inp("a", "3 V/mA"))["result"] == {"node": "a", "value": "3 V/mA"}
+
+
+def test_a_rounded_value_is_shown_simpler_only_by_a_power_of_ten():
+    r = run(inp("x", "2 in^4/ft^2"), op("r", "sqrt", "x"))["result"]
+    assert r["value"].endswith(" in^2/ft") and "simplified_from" not in r, "in would take a factor 1/12 and re-round its digits"
+    exact = run(inp("x", "4 in^4/ft^2"), op("r", "sqrt", "x"))["result"]
+    assert exact["exact"] == "1/6 in" and exact["simplified_from"] == "in^2/ft", "an exact value takes any exact factor"
+    r = run(inp("x", "2 mm^2/m^2"), op("r", "sqrt", "x"))["result"]
+    assert r["value"] == "0.00141421356237309504880168872421" and r["simplified_from"] == "mm/m"
+    assert r["rounded"]["error_at_most"] == "5e-33"
+
+
+def test_no_two_units_share_a_size_so_rule_two_never_chooses():
+    seen: dict = {}
+    for spelling in U.VOCABULARY:
+        if spelling in ("degC", "degF", "%", "delta_degC", "delta_degF", "dBm", "dBW"):
+            continue
+        key = (U.atom(spelling).dimension, U.atom(spelling).factor)
+        assert key not in seen, (spelling, seen.get(key))
+        seen[key] = spelling
+
+
+def test_simplifying_never_changes_what_a_value_measures_or_its_size():
+    """Every compound of two vocabulary units, both ways: the shown unit
+    measures the same thing, and number times factor is the same quantity."""
+    spellings = [s for s in U.VOCABULARY if s not in U.LEVELS]
+    checked = 0
+    for a in spellings:
+        for b in spellings:
+            for unit in (((a, 1), (b, 1)) if a != b else ((a, 2),), ((a, 1), (b, -1)) if a != b else ()):
+                if len(unit) < 2:
+                    continue
+                simpler = U.simplify(unit)
+                if simpler is None:
+                    continue
+                to, k = simpler
+                assert U.dimension(to) == U.dimension(unit), (unit, to)
+                assert U.factor(unit) == k * U.factor(to), (unit, to, k)
+                assert not any(s in ("degC", "degF", "%") for s, _ in to), (unit, to)
+                checked += 1
+    assert checked > 1000

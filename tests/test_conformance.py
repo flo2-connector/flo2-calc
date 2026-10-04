@@ -109,6 +109,17 @@ def test_initialize_answers_flo2s_revision_offers_tools_and_names_itself(plug):
     assert "limits" in result["instructions"] and "not-yet-computed record" in result["instructions"]
 
 
+def test_initialize_offers_the_served_skill_as_a_prompt_and_a_resource_beside_the_tools(plug):
+    """0.5.0 serves its skill over MCP. Prompts and resources are not tools:
+    flo2's door, which allows exactly the four tools, is unchanged by them."""
+    caps = plug.hello["result"]["capabilities"]
+    assert "prompts" in caps and "resources" in caps and "tools" in caps
+    prompts = plug.send("prompts/list", {})["result"]["prompts"]
+    assert [p["name"] for p in prompts] == ["support-a-decision-with-math"]
+    resources = plug.send("resources/list", {})["result"]["resources"]
+    assert [r["uri"] for r in resources] == ["skill://flo2-calc/support-a-decision-with-math/SKILL.md"]
+
+
 def test_the_four_tools_and_their_classes_are_the_ones_flo2s_door_holds():
     """flo2's calc door is written against exactly these names and read/write
     classes (a fail-closed allow-list): the host-set limits and the
@@ -151,13 +162,14 @@ def test_a_file_comes_back_inside_the_reply_as_flo2_keeps_it(plug):
 
 
 def test_one_failing_call_whose_reason_reaches_the_caller(plug):
-    reply = plug.send("tools/call", {"name": "evaluate_graph", "arguments": {"graph": {"nodes": [{"id": "a", "value": "2 furlong"}]}}})
+    # A genuinely unknown unit: "furlong", the example before 0.5.0, is a unit now.
+    reply = plug.send("tools/call", {"name": "evaluate_graph", "arguments": {"graph": {"nodes": [{"id": "a", "value": "2 notaunit"}]}}})
     result = reply["result"]
     assert result["isError"] is True
     said = " ".join(b.get("text", "") for b in result["content"])
     told = re.sub(r"^Error executing tool [A-Za-z0-9_]+(?::\s*|\s*$)", "", said).strip()  # as flo2's door reads it
     assert told, "a reason, not a bare preamble"
-    assert re.search(r"graph\.nodes\[0\]\.value: \"furlong\" is not a unit", told), told
+    assert re.search(r"graph\.nodes\[0\]\.value: \"notaunit\" is not a unit", told), told
 
 
 def test_nothing_but_json_rpc_reaches_stdout(plug):

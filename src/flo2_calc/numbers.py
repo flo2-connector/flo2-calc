@@ -51,15 +51,17 @@ MAX_NUMBER_TEXT = 80
 
 ARITHMETIC_NOTE = (
     "Exact rational arithmetic on the inputs as written: no binary floating point. + - * / and integer powers are "
-    "exact, and so is every unit conversion but deg-rad, so every value not marked \"rounded\" is exact FOR THESE "
-    "INPUTS and no more accurate than they are: a decimal typed for an irrational number (a truncated pi or e) is "
-    "taken as exactly that decimal, not as the number it stands for (the pi and e operators are the constants "
-    "themselves). A value whose decimal ends (at most 40 significant digits) is written exactly; any other is "
-    "written rounded half-even to 30 significant digits, and its exact value for these inputs is given beside it "
-    "as a fraction. Comparisons use exact values. A value marked \"rounded\" is NOT exact: it comes from pi, e, a "
-    "root, exp, ln, log10, a non-whole power, trigonometry, a deg-rad conversion or a distribution, or from "
-    "arithmetic on such a value. It is a decimal of the stated number of significant digits, given no \"exact\" "
-    "fraction, and \"error_at_most\" bounds its distance from the true value. Where it says "
+    "exact, and so is every unit conversion but deg-rad and dBm-mW, so every value not marked \"rounded\" is exact "
+    "FOR THESE INPUTS and no more accurate than they are: a decimal typed for an irrational number (a truncated pi or "
+    "e) is taken as exactly that decimal, not as the number it stands for (the pi and e operators are the constants "
+    "themselves). A whole number is written in full. Any other value whose decimal ends (at most 40 significant "
+    "digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact "
+    "value for these inputs is given beside it as a fraction. A computed value whose compound unit is exactly a "
+    "simpler unit is shown in it (\"simplified_from\" names the unit it was computed in); the value does not "
+    "change. Comparisons use exact values. A value marked \"rounded\" is NOT exact: it comes from pi, e, a root, "
+    "exp, ln, log10, a non-whole power, trigonometry, a deg-rad conversion, a decibel conversion or a distribution, "
+    "or from arithmetic on such a value. It is a decimal of the stated number of significant digits, every one "
+    "written, given no \"exact\" fraction, and \"error_at_most\" bounds its distance from the true value. Where it says "
     "\"correctly_rounded\", it is the true value rounded half-even, decided from a rigorous enclosure (Arb ball "
     "arithmetic, python-flint). A comparison, ceil, floor or round of a rounded value is answered only when its "
     "error bound decides it, and refused otherwise."
@@ -80,7 +82,7 @@ EXACT_BUT_ROUNDED = (
 )
 
 _DECIMAL = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
-_FRACTION = r"[+-]?\d+/\d+"
+_FRACTION = r"[+-]?\d+/\d+(?![\d.])"  # "1/0.725" is an expression, never the fraction 1/0
 NUMBER_THEN_REST = re.compile(rf"^\s*({_FRACTION}|{_DECIMAL})(.*)$", re.S)
 
 # What a unit's text never holds: an operator at its start, a + = × or ÷, a
@@ -107,12 +109,95 @@ def looks_like_expression(text: str, whole: bool = False) -> bool:
     return bool(lone)
 
 
+# How an input is built, in the refusal of an expression: the SHAPE of a node,
+# with no number and no operator of the input's own, so it can never be read as
+# a guess at what a malformed expression meant (round 2, q092: "3 + * 4" was
+# answered with an example adding 3 and 4).
+NODE_SHAPE = (
+    'Build it as a graph of nodes, one operation each: an input is {"id": "<name>", "value": "<number> <unit>", '
+    '"source": "<where it came from>"}, and an operation is {"id": "<name>", "op": "<operator>", "args": '
+    '["<id>", "<id>"]}.'
+)
+
+_TOKEN = re.compile(
+    r"\s*(?:(?P<num>(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)|(?P<op>[-+*/^×÷=])|(?P<open>\()|(?P<close>\))"
+    r"|(?P<word>[^\s\-+*/^×÷=()\d][^\s\-+*/^×÷=()]*))"
+)
+
+
+def malformed_at(text: str) -> str | None:
+    """Where an expression is malformed, in words, or None when it is a
+    well-formed one (a number, with a unit, is one operand; + and - may be a
+    sign)."""
+    want_operand = True
+    last: tuple[str, int] | None = None  # the last operator, sign or bracket, and where
+    last_kind: str | None = None
+    opened: list[int] = []
+    pos = 0
+    while pos < len(text):
+        m = _TOKEN.match(text, pos)
+        if m is None or m.end() == pos:
+            if text[pos:].strip() == "":
+                break
+            return f'"{text[pos]}" at character {pos + 1} is not part of a number, a unit or an operator'
+        start = m.start(m.lastgroup) + 1  # 1-based, for people
+        kind, tok = m.lastgroup, m.group(m.lastgroup)
+        pos = m.end()
+        if kind in ("num", "word"):
+            if not want_operand:
+                if kind == "word" and last_kind == "num":  # "4 mm": a number's unit
+                    last_kind = "word"
+                    continue
+                return f'two values stand side by side with no operator between them, at character {start}'
+            want_operand, last_kind = False, kind
+        elif kind == "op":
+            if want_operand:
+                if tok in "+-":  # a sign
+                    last = (tok, start)
+                    continue
+                if last is None:
+                    return f'there is nothing before "{tok}" at character {start}'
+                if last[0] == "(":
+                    return f'there is nothing between "(" at character {last[1]} and "{tok}" at character {start}'
+                return f'there is no operand between "{last[0]}" at character {last[1]} and "{tok}" at character {start}'
+            want_operand, last = True, (tok, start)
+        elif kind == "open":
+            if not want_operand:
+                return f'"(" at character {start} follows a value with no operator between them'
+            opened.append(start)
+            last = ("(", start)
+        else:  # close
+            if not opened:
+                return f'")" at character {start} closes no "("'
+            if want_operand:
+                if last is not None and last[0] == "(":
+                    return f'there is nothing between "(" at character {last[1]} and ")" at character {start}'
+                return f'there is nothing after "{last[0]}" at character {last[1]}' if last else f'there is nothing before ")" at character {start}'
+            opened.pop()
+            last_kind = "close"
+    if opened:
+        return f'"(" at character {opened[-1]} is never closed'
+    if want_operand:
+        if last is None:
+            return None
+        return f'there is nothing after "{last[0]}" at character {last[1]}'
+    return None
+
+
 def expression_problem(raw: str) -> str:
+    """The refusal of arithmetic typed inside a value. A malformed expression is
+    called malformed, with where; it is never answered with an example built
+    from its own numbers, which would be a guess at what it meant."""
+    where = malformed_at(raw.strip())
+    if where is not None:
+        return (
+            f'"{raw}" is a malformed expression: {where}. flo2-calc does not read arithmetic inside a value, and it '
+            "does not guess what a malformed expression was meant to say: do not repair it yourself; send it back to "
+            "whoever wrote it and ask what was meant. A value is one number with an optional unit. " + NODE_SHAPE
+        )
     return (
-        f'"{raw}" looks like an expression, and flo2-calc does not read arithmetic inside a value: a value is one '
-        'number with an optional unit ("1.4 mm", "1/3", "-2.5e3"). Build the expression as a graph of nodes, one '
-        'operation each, e.g. {"id": "a", "value": "3"}, {"id": "b", "value": "4"}, '
-        '{"id": "sum", "op": "add", "args": ["a", "b"]}.'
+        f'"{raw}" is an expression, and flo2-calc does not read arithmetic inside a value: a value is one number with '
+        "an optional unit. " + NODE_SHAPE
     )
 
 
@@ -217,10 +302,21 @@ def _rounded(q: Fraction) -> Decimal:
     return ctx.plus(raw)
 
 
-def format_number(q: Fraction) -> tuple[str, str | None]:
+def format_number(q: Fraction, whole_in_full: bool = False) -> tuple[str, str | None]:
     """(text, exact) for a value: `exact` is None when `text` is already exact,
-    else the exact fraction "p/q" the rounded text stands for."""
+    else the exact fraction "p/q" the rounded text stands for.
+
+    With `whole_in_full` (records of schema version 4 and every reply, from
+    flo2-calc 0.5.0), a whole number is written as an integer, every digit,
+    never with "/1": 2^1000 is its 302 digits, not 30 of them and a fraction.
+    Only a whole number of more than 40 digits whose significant digits number
+    40 or fewer (1e+5000) keeps its short exact e-notation. The host's digits
+    budget bounds how long one can be."""
     exact = _short_terminating(q)
+    if whole_in_full and q.denominator == 1:
+        if exact is not None and digits(abs(q.numerator)) > EXACT_DIGITS_MAX:
+            return _plain(exact), None
+        return str(q.numerator), None
     if exact is not None:
         return _plain(exact), None
     return _plain(_rounded(q)), f"{q.numerator}/{q.denominator}"
@@ -286,6 +382,41 @@ def half_unit(q: Fraction, places: int) -> Fraction:
     ten times smaller, so this stays a bound."""
     unit = decade(q) - places + 1
     return Fraction(ten_to(unit), 2) if unit >= 0 else Fraction(1, 2 * ten_to(-unit))
+
+
+def significant_text(q: Fraction, places: int) -> str:
+    """A rounded value written with exactly `places` significant digits,
+    trailing zeros kept: sqrt(2) at 40 digits is 1.414213562373095048801688724209698078570,
+    not the 39 digits decimal_text writes. q is a decimal of at most `places`
+    significant digits (a rounded value always is); if it ever had more, it is
+    written in full rather than cut. 0 is written "0"."""
+    if q == 0:
+        return "0"
+    num, den = q.numerator, q.denominator
+    twos = (den & -den).bit_length() - 1
+    fives = _power_of_five(den >> twos)
+    if fives is None:
+        raise ValueError(f"{q} has no ending decimal")
+    k = max(twos, fives)
+    m = abs(num) * (1 << (k - twos)) * 5 ** (k - fives)
+    if k == 0:  # a whole number: its trailing zeros are not significant digits
+        text = str(m)
+        kept = text.rstrip("0")
+        m, k = int(kept), -(len(text) - len(kept))
+    have = digits(m)
+    if have > places:
+        return decimal_text(q)
+    mantissa = str(m) + "0" * (places - have)  # exactly `places` digits
+    adjusted = have - 1 - k  # the exponent of the first digit
+    sign = "-" if num < 0 else ""
+    if -7 <= adjusted < 21:
+        if adjusted >= 0:
+            whole, frac = mantissa[: adjusted + 1], mantissa[adjusted + 1:]
+            whole = whole + "0" * (adjusted + 1 - len(whole))
+            return sign + whole + (f".{frac}" if frac else "")
+        return sign + "0." + "0" * (-adjusted - 1) + mantissa
+    rest = mantissa[1:]
+    return sign + mantissa[0] + (f".{rest}" if rest else "") + f"e{adjusted:+d}"
 
 
 def decimal_text(q: Fraction) -> str:

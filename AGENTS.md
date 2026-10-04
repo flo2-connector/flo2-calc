@@ -15,6 +15,15 @@
 
 ## Settled rules (the design's decisions, in short)
 
+- **The calculator of record** (`dec:idea-what-sets-flo2-calc-apart-from-other-math-mcps`): trust and traceability,
+  not breadth. Operators are added on evidence from a question set or a real design, never for parity with Wolfram,
+  MATLAB or SciPy. **The agent reasons; flo2-calc calculates** (`rule:the-agent-reasons-flo2-calc-calculates`): it
+  never decides which equation applies or whether an approximation holds.
+- **Shown back** (`dec:idea-show-a-computation-in-math-notation`, and option (b) of the decision above): every reply
+  and record carries the computation as a `formula` and a numbered `working`, plain text with LaTeX beside it, rendered
+  from what was evaluated (`formula.py`), never written separately. A reply shows a readable view; the record holds
+  every step. The rendering is part of the record format: change it only with a new `schema_version`.
+
 - **Standalone** (`req:sister-mcp`, Anthony's words of 2026-10-04): flo2-calc never imports, calls or assumes flo2,
   reflow2, flo2-cad or flo2-ifc, and no feature degrades without them. `tests/test_standalone.py` holds the import
   list.
@@ -31,10 +40,15 @@
     rounding test end.
   - Arithmetic on a rounded value stays rounded, its bound carried. A comparison, ceil, floor or round of one is
     answered only when the bound decides it, else refused as `undecidable`.
-- **Operators** (`dec:first-increment-operators`, then `dec:round-1-fixes-one-to-six`): arithmetic, logic (AND, OR,
-  NOT, NOR, NAND, XOR), comparison, functions (sqrt, exp, ln, log10), constants (pi, e), trigonometry, rounding (ceil,
-  floor, round) and statistics. Set operations come later. The units side (more units, degC/degF, currencies) is
+  - Its text shows every one of its `digits`, trailing zeros kept. A whole exact number is written in full.
+- **Operators** (`dec:first-increment-operators`, then `dec:round-1-fixes-one-to-six`, then `dec:round-2-fixes`):
+  arithmetic, logic (AND, OR, NOT, NOR, NAND, XOR), comparison, functions (sqrt, exp, ln, log10), constants (pi, e),
+  trigonometry, rounding (ceil, floor, round), statistics, counting (count_true, k_of_n), units for empirical formulas
+  (magnitude, with_unit, whose stated unit needs a `source`) and decibels (db_to_ratio, ratio_to_db, whose `kind`,
+  power or amplitude, is never defaulted). Set operations come later. Arrays, statistics over data and the FFT are
+  v0.6.0's (`req:flo2-calc-computes-over-arrays`). The units side (more units, degC/degF, currencies, dB) is
   `units.py`'s, not the evaluator's.
+- **Results** may be one node or a list (`"result": ["lo", "hi"]`), each reported by name as `results`.
 - **Two ways in** (`dec:graph-submission-modes`): a whole graph, or node by node through `add_node`. Both end in
   `evaluator.evaluate`, which is why they agree. `add_node` is stateless.
 - **Units** (`dec:optional-units`, `dec:unit-mismatch-rejects`, `dec:units-use-reflow2-spellings`):
@@ -44,6 +58,10 @@
     prefix's case is its size (`tests/test_unit_hints.py` walks every prefix, symbol and case).
   - Each currency is its own dimension, with no exchange rates; only a sourced rate the caller gives converts.
   - `degC` and `degF` are temperatures with an offset (`temperature.py`); a bare `C` or `F` is refused as ambiguous.
+  - `dB` is its own dimension, like a currency; `dBm` and `dBW` are power levels with an offset (`decibels.py`), read
+    only as a value's whole unit.
+  - A computed compound unit is SHOWN in a simpler unit of the same size where one exists (`units.simplify`, rules 0 to
+    4); only the display changes, never the value or its dimension, and never a unit the graph chose itself.
   - pint gives dimensions and exact factors; our code does the arithmetic.
 - **Host-set limits; a calculation never runs away**
   (`req:a-calculation-past-the-hosts-limits-is-stopped-and-handed-on`, options (b), (c) and (d) of
@@ -57,6 +75,9 @@
     result). `record_computation` takes it in place of a graph and completes it to the direct computation's record,
     byte for byte. `rerun_record` says it has no result yet.
   - None of this changes the four tool names or their read/write classes. flo2's door holds exactly those.
+- **The skill is served, from one file** (`dec:round-2-fixes`, fix 7): `skills/support-a-decision-with-math/SKILL.md`
+  is the only copy. `pyproject.toml` maps that folder into the wheel, and `skill.py` serves it as an MCP prompt and a
+  resource. Never copy its text into code.
 - **Results reach reflow2 through the agent** (`dec:agent-carries-results`): flo2-calc never writes to reflow2. The
   record comes back as a file (`calcfile:///<name>.calc.json`), which flo2 keeps when hosted.
 - **Generic math only:** no jewelry, building or other domain formula belongs here.
@@ -91,8 +112,10 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 - The record format is `ifc:computation-record-format` in the design. A change to it is a new `schema_version`, in a
   new schema file beside the old one. Never edit an older `calc-record-<n>.schema.json` in place. Version 2
   (flo2-calc 0.2.0) added `status`; version 3 (0.4.0) added the `rounded` label, the new operators' fields and
-  `python_flint` in `produced_by`. Every older version must still re-run: `tests/data/*.v1.calc.json` were made by
-  0.1.0 and `tests/data/*.v2.calc.json` by 0.2.0.
+  `python_flint` in `produced_by`; version 4 (0.5.0) added `formula`, `working`, `results`, `simplified_from`, the
+  round-2 operators' fields, and a new writing of values. Every older version must still re-run, each under its own
+  version's writing (`evaluator.LEGACY` for 1 to 3): `tests/data/*.v1.calc.json` were made by 0.1.0,
+  `tests/data/*.v2.calc.json` by 0.2.0, and `tests/data/display.v3.calc.json` by 0.4.0.
 - Nothing goes to stdout except MCP messages.
 - The licence is Apache-2.0. No secrets.
 - Record what you build on the design:
@@ -113,6 +136,9 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | `src/flo2_calc/numbers.py` | exact numbers: read, check, write | `cmp:evaluator` |
 | `src/flo2_calc/units.py` | the unit vocabulary, dimensions, exact conversion, the near-miss hint | `cmp:units` |
 | `src/flo2_calc/temperature.py` | degC and degF: what a temperature with an offset may do | `cmp:units` |
+| `src/flo2_calc/decibels.py` | dB, and the power levels dBm and dBW: what a level may do | `cmp:units`, `cap:decibels-are-their-own-kind-and-their-ratio-is-stated` |
+| `src/flo2_calc/formula.py` | the computation shown back: its formula and its numbered working, plain text and LaTeX | `cmp:computation-record`, `cap:every-reply-shows-its-formula-and-working` |
+| `src/flo2_calc/skill.py` | the served skill: an MCP prompt and a resource, read from `skills/` | `cap:serve-over-mcp` |
 | `src/flo2_calc/record.py`, `src/flo2_calc/schemas/` | the computation record (computed or not yet computed), its schemas, the root folder | `cmp:computation-record`, `cap:a-not-yet-computed-record-is-completed-on-a-larger-machine` |
 | `src/flo2_calc/server.py`, `cli.py`, `errors.py` | the four MCP tools, the command line, the two kinds of no | `cmp:mcp-server` |
 | `plugin.json`, `mcp.json`, `.claude-plugin/`, `.mcp.json`, `skills/` | the plugin package | `cap:serve-over-mcp` |
