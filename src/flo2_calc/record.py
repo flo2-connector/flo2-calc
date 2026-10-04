@@ -1,19 +1,23 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-2.schema.json; a version 1
-record, schemas/calc-record-1.schema.json, still re-runs):
+A record is one JSON object (schemas/calc-record-3.schema.json; version 1 and
+2 records, schemas/calc-record-1.schema.json and calc-record-2.schema.json,
+still re-run):
 
     record_format   "flo2-calc computation record"
-    schema_version  2
+    schema_version  3
     status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
     arithmetic      what exactness means here (numbers.ARITHMETIC_NOTE)
     graph           the graph exactly as read, every value as text
     inputs          each input: id, value (with its unit), unit, source
-    values          every node's value, in the order evaluated
-    result          {"node", "value"} (and "exact" when the value is rounded)
-    produced_by     {"flo2_calc": version, "pint": version}
+    values          every node's value, in the order evaluated: "exact" beside
+                    an exact value whose text is rounded; "rounded" (digits,
+                    correctly_rounded, error_at_most, from) on a value of the
+                    rounded class (realmath.py), which never has an "exact"
+    result          {"node", "value"}, labelled the same way
+    produced_by     {"flo2_calc", "pint", "python_flint": versions}
     content_hash    "sha256:<hex>" over the canonical JSON of all of the above
 
 NOT YET COMPUTED (cap:a-not-yet-computed-record-is-completed-on-a-larger-machine).
@@ -60,6 +64,7 @@ from typing import Any
 
 from flo2_calc import __version__
 from flo2_calc import limits as L
+from flo2_calc import realmath as RM
 from flo2_calc import units as U
 from flo2_calc.errors import CallError, LimitExceeded
 from flo2_calc.evaluator import (
@@ -75,8 +80,8 @@ from flo2_calc.evaluator import (
 from flo2_calc.numbers import ARITHMETIC_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 2
-SCHEMA_FILES = {1: "calc-record-1.schema.json", 2: "calc-record-2.schema.json"}
+SCHEMA_VERSION = 3
+SCHEMA_FILES = {1: "calc-record-1.schema.json", 2: "calc-record-2.schema.json", 3: "calc-record-3.schema.json"}
 COMPUTED = "computed"
 NOT_COMPUTED = "not_computed"
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -195,9 +200,15 @@ def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | No
     record = _head(COMPUTED, name, graph, supports)
     record["values"] = values_json(evaluation)
     record["result"] = {"node": graph.result, **value_json(evaluation.values[graph.result])}
-    record["produced_by"] = {"flo2_calc": __version__, "pint": U.pint_version()}
+    record["produced_by"] = produced_by()
     record["content_hash"] = content_hash(record)
     return record
+
+
+def produced_by() -> dict[str, str]:
+    """The versions that decide a record's values: flo2-calc, pint (what a unit
+    is) and python-flint (the enclosures a rounded value is decided from)."""
+    return {"flo2_calc": __version__, "pint": U.pint_version(), "python_flint": RM.flint_version()}
 
 
 def build_pending(graph: Graph, name: str, supports: str | dict[str, str] | None, refusal: dict[str, Any], limits: L.Limits) -> dict[str, Any]:
@@ -208,7 +219,7 @@ def build_pending(graph: Graph, name: str, supports: str | dict[str, str] | None
     record = _head(NOT_COMPUTED, name, graph, supports)
     record["stopped"] = L.stopped_for_record(refusal)
     record["limits_in_force"] = limits.describe()
-    record["produced_by"] = {"flo2_calc": __version__, "pint": U.pint_version()}
+    record["produced_by"] = produced_by()
     record["content_hash"] = content_hash(record)
     return record
 
@@ -280,11 +291,11 @@ def _replaceable_pending(target: Path, new: dict[str, Any]) -> bool:
         old = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return False
-    if not isinstance(old, dict) or old.get("schema_version") != 2 or old.get("status") != NOT_COMPUTED:
+    if not isinstance(old, dict) or old.get("schema_version") not in (2, 3) or old.get("status") != NOT_COMPUTED:
         return False
     import jsonschema
 
-    if not jsonschema.Draft202012Validator(schema(2)).is_valid(old):
+    if not jsonschema.Draft202012Validator(schema(old["schema_version"])).is_valid(old):
         return False
     return old["content_hash"] == content_hash(old) and _same_calculation(old, new)
 
@@ -369,7 +380,7 @@ def load(record: Any, field: str = "record", guard: L.Guard | None = None) -> di
         )
     import jsonschema
 
-    validator = jsonschema.Draft202012Validator(schema(1 if version == 1 else SCHEMA_VERSION))
+    validator = jsonschema.Draft202012Validator(schema(version if version in SCHEMA_FILES else SCHEMA_VERSION))
     errors = sorted(validator.iter_errors(record), key=lambda e: list(e.absolute_path))
     if errors:
         e = errors[0]
@@ -480,7 +491,7 @@ def rerun(record: dict[str, Any], guard: L.Guard | None = None) -> dict[str, Any
         "record_status": status_of(record),
         "content_hash": {"recorded": record["content_hash"], "computed": computed_hash, "matches": hash_ok},
         "recorded_with": record["produced_by"],
-        "rerun_with": {"flo2_calc": __version__, "pint": U.pint_version()},
+        "rerun_with": produced_by(),
     }
     if record["produced_by"].get("flo2_calc") != __version__:
         answer["note"] = f"recorded with flo2-calc {record['produced_by'].get('flo2_calc')}, re-run with {__version__}."

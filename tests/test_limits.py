@@ -353,3 +353,46 @@ def test_the_heaviest_legal_work_fits_in_the_confined_container():
     if rec["status"] == "refused":
         assert rec["record"]["status"] == "not_computed"
     assert_alive(alive)
+
+
+def test_rounded_runaway_calculations_are_stopped_with_their_reason_and_the_server_stays_alive():
+    """An exponential, a far tail and a precision past any budget: each stopped
+    by flo2-calc, never by the sandbox, and the next call is answered."""
+    exp_r, tail_r, alive = calls([
+        ("evaluate_graph", {"graph": graph(inp("x", "1e5"), op("y", "exp", "x"))}),
+        ("evaluate_graph", {"graph": graph(inp("x", "1e6"), op("q", "normal_sf", "x"))}),
+        ALIVE,
+    ])
+    for r in (exp_r, tail_r):
+        answer = answer_of(r)
+        assert answer["status"] == "refused" and answer["refused"]["kind"] == "exceeds_limits"
+        assert answer["refused"]["limit"]["name"] == "max_digits"
+    assert_alive(alive)
+    precise, alive = calls([("evaluate_graph", {"graph": graph(inp("x", "2"), op("s", "sqrt", "x", digits=1000))}), ALIVE],
+                           "--max-digits", "500")
+    answer = answer_of(precise)
+    assert answer["refused"]["limit"]["name"] == "max_digits" and "working precision" in answer["refused"]["reason"]
+    assert_alive(alive)
+
+
+@pytest.mark.skipif(not under_image(), reason="the memory question is the confined image's (CI's image job, 128m)")
+def test_the_heaviest_rounded_work_fits_in_the_confined_container():
+    """Every rounded operator at 1,000 digits, 480 nodes of them, sent whole
+    and recorded under flo2.io's profile: answered (or stopped at a limit with
+    its reason), and the container is still alive."""
+    nodes = [inp("x", "0.7", "t"), inp("p", "0.975", "t"), inp("k", "4", "t"), inp("a", "37.5 deg", "t")]
+    kinds = [("sqrt", ["x"], {}), ("exp", ["x"], {}), ("ln", ["x"], {}), ("sin", ["a"], {}), ("atan", ["x"], {"unit": "rad"}),
+             ("normal_quantile", ["p"], {}), ("chi2_sf", ["x", "k"], {}), ("t_quantile", ["p", "k"], {})]
+    for i in range(480):
+        name, args, extra = kinds[i % len(kinds)]
+        nodes.append(op(f"n{i}", name, *args, digits=1000, **extra))
+    g = graph(*nodes)
+    evaluated, recorded, alive = calls([
+        ("evaluate_graph", {"graph": g}),
+        ("record_computation", {"graph": g, "name": "heaviest-rounded"}),
+        ALIVE,
+    ])
+    for r in (evaluated, recorded):
+        answer = answer_of(r)
+        assert answer["status"] == "ok" or answer["refused"]["kind"] == "exceeds_limits", json.dumps(answer)[:500]
+    assert_alive(alive)

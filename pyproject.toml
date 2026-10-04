@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flo2-calc"
-version = "0.2.0"
+version = "0.4.0"
 description = "Exact math and logic for the decisions in a design, as an MCP server: units checked, results re-runnable, every computation kept as a record a decision can cite."
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [{ name = "Anthony Sligar" }]
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-keywords = ["MCP", "calculator", "units", "exact arithmetic", "design decisions", "reflow2"]
+keywords = ["MCP", "calculator", "units", "exact arithmetic", "correct rounding", "design decisions", "reflow2"]
 
 # EVERY dependency is pinned exactly. This list IS the set the image and the
 # plugin install: the Dockerfile installs this package and nothing else, and
@@ -28,10 +28,16 @@ dependencies = [
   "flexcache==0.3",
   # Re-running a record checks it against its JSON Schema first.
   "jsonschema==4.26.0",
+  # The rounded class (realmath.py): FLINT's Arb ball arithmetic, whose every
+  # result is a ball that contains the true value. Correct rounding is decided
+  # from those enclosures, so a rounded result does not depend on its version.
+  "python-flint==0.9.0",
 ]
 
 [project.optional-dependencies]
-test = ["pytest==9.1.1"]
+# mpmath: the tests' independent oracle for every rounded result (60+ digits),
+# a different implementation from Arb. Never imported by the package.
+test = ["pytest==9.1.1", "mpmath==1.4.1"]
 
 [project.scripts]
 flo2-calc = "flo2_calc:main"

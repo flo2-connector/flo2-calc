@@ -19,9 +19,21 @@
   reflow2, flo2-cad or flo2-ifc, and no feature degrades without them. `tests/test_standalone.py` holds the import
   list.
 - **Reliability first** (`dec:quality-reliability`): every result is correct or refused, and every record re-runs to
-  the same result. Exact fractions only: no float is ever made. A rounded value always carries its exact fraction.
-- **Operators** (`dec:first-increment-operators`): arithmetic, logic (AND, OR, NOT, NOR, NAND, XOR) and comparison.
-  Set operations come later.
+  the same result. No binary float of fixed precision is ever made. An EXACT value is an exact fraction, and when its
+  text is rounded for display it carries its exact fraction.
+- **The rounded class** (`dec:round-1-fixes-one-to-six`, groups 1, 2, 5 and 6; `realmath.py`): pi, e, sqrt, exp, ln,
+  log10, non-whole powers, trigonometry, deg-rad conversion and the normal, chi-square and Student-t distributions.
+  - Each result is CORRECTLY ROUNDED (30 significant digits, or a node's `digits` up to 1000), decided by Ziv's test
+    on Arb's rigorous enclosures (python-flint), and LABELLED `rounded` with its digits and a rigorous
+    `error_at_most`. It is never given an `exact` fraction and never called exact.
+  - Where the result is rational it stays exact. Every such case is detected before rounding; it is what lets the
+    rounding test end.
+  - Arithmetic on a rounded value stays rounded, its bound carried. A comparison, ceil, floor or round of one is
+    answered only when the bound decides it, else refused as `undecidable`.
+- **Operators** (`dec:first-increment-operators`, then `dec:round-1-fixes-one-to-six`): arithmetic, logic (AND, OR,
+  NOT, NOR, NAND, XOR), comparison, functions (sqrt, exp, ln, log10), constants (pi, e), trigonometry, rounding (ceil,
+  floor, round) and statistics. Set operations come later. The units side (more units, degC/degF, currencies) is
+  `units.py`'s, not the evaluator's.
 - **Two ways in** (`dec:graph-submission-modes`): a whole graph, or node by node through `add_node`. Both end in
   `evaluator.evaluate`, which is why they agree. `add_node` is stateless.
 - **Units** (`dec:optional-units`, `dec:unit-mismatch-rejects`, `dec:units-use-reflow2-spellings`):
@@ -73,9 +85,10 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
   everything. Docker, if present, builds the image, and `tools/measure.py` measures its peak memory under flo2's flags.
 - Every dependency is pinned exactly. Bump one per pull request, and say what it changes.
 - The record format is `ifc:computation-record-format` in the design. A change to it is a new `schema_version`, in a
-  new schema file beside the old one. Never edit `calc-record-1.schema.json` or `calc-record-2.schema.json` in
-  place. Version 2 (flo2-calc 0.2.0) added `status`. Every older version must still re-run:
-  `tests/data/*.v1.calc.json` are records made by 0.1.0.
+  new schema file beside the old one. Never edit an older `calc-record-<n>.schema.json` in place. Version 2
+  (flo2-calc 0.2.0) added `status`; version 3 (0.4.0) added the `rounded` label, the new operators' fields and
+  `python_flint` in `produced_by`. Every older version must still re-run: `tests/data/*.v1.calc.json` were made by
+  0.1.0 and `tests/data/*.v2.calc.json` by 0.2.0.
 - Nothing goes to stdout except MCP messages.
 - The licence is Apache-2.0. No secrets.
 - Record what you build on the design:
@@ -92,6 +105,7 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 |---|---|---|
 | `src/flo2_calc/evaluator.py` | reading and evaluating a graph, the operators | `cmp:evaluator` |
 | `src/flo2_calc/limits.py` | the host-set limits, and the guard that checks them while evaluating | `cmp:evaluator`, `cap:a-calculation-is-stopped-at-the-hosts-limits` |
+| `src/flo2_calc/realmath.py` | the rounded class: correctly rounded values from Arb enclosures, and their bounds | `cmp:evaluator` |
 | `src/flo2_calc/numbers.py` | exact numbers: read, check, write | `cmp:evaluator` |
 | `src/flo2_calc/units.py` | the unit vocabulary, dimensions, exact conversion | `cmp:units` |
 | `src/flo2_calc/record.py`, `src/flo2_calc/schemas/` | the computation record (computed or not yet computed), its schemas, the root folder | `cmp:computation-record`, `cap:a-not-yet-computed-record-is-completed-on-a-larger-machine` |

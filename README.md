@@ -5,6 +5,11 @@ computation that supports it: the operators, the inputs with their units and whe
 The math is done here, exactly, not by the model.
 
 - **Exact.** Every number is an exact fraction. `0.1 + 0.2` is `0.3`, and every unit conversion is exact.
+- **Or correctly rounded, and labelled so.** pi, e, roots, `exp`, `ln`, `log10`, non-whole powers, trigonometry,
+  deg-rad conversion and the normal, chi-square and Student-t distributions are irrational in general. Their results
+  are **correctly rounded** to 30 significant digits (or as many as a node asks, up to 1000), labelled `rounded` with
+  a rigorous `error_at_most`, and never called exact. Where the result is rational it stays exact: `sqrt(9/4)` is
+  `3/2`, and `sin(30 deg)` is `1/2`.
 - **Units, checked.** A value can carry a unit, spelled as reflow2 designs spell it (`mm`, `g`, `V`, `mA`, ...).
   Units that measure different things are refused, naming the operation and both units, never stripped. A unit
   flo2-calc does not know is refused, never guessed.
@@ -164,13 +169,46 @@ the same graph, and gives the same result, as the same nodes sent whole.
   missing id or an unknown operator is a malformed call naming the field.
 - `result` names the result node, and defaults to the last node listed.
 
-**Operators** (the first increment: set operations come later):
+**Operators** (set operations come later):
 
 | Family | Operators |
 |---|---|
-| arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `abs`, `pow` (a plain whole exponent), `min`, `max`, `convert` (with `"unit"`) |
+| arithmetic | `add`, `sub`, `mul`, `div`, `neg`, `abs`, `pow`, `min`, `max`, `convert` (with `"unit"`) |
+| functions | `sqrt`, `exp`, `ln`, `log10` |
+| constants | `pi`, `e` (no `args`) |
+| trigonometry | `sin`, `cos`, `tan` (of an angle in `deg` or `rad`); `asin`, `acos`, `atan`, `atan2` (with `"unit"`: `"deg"` or `"rad"`, the unit of the angle they give) |
+| rounding | `ceil`, `floor`, `round` (with `"places"`, and for `round` a `"mode"`) |
+| statistics | `normal_cdf`, `normal_sf`, `normal_quantile`, `chi2_sf`, `t_quantile` |
 | logic | `and`, `or`, `not`, `nand`, `nor`, `xor` |
 | comparison | `eq`, `ne`, `lt`, `le`, `gt`, `ge` |
+
+- **`pow`** is exact for a whole exponent, as before. A non-whole exponent (`"1/3"`, `"0.44"`) needs a base of 0 or
+  more and gives a rounded value, unless the result is rational: `27` to the `1/3` is exactly `3`. A unit survives only
+  an exact root: `9 m^2` to the `1/2` is `3 m`, and `2 m` to the `0.5` is refused.
+- **`sqrt`** takes a value of 0 or more. `m^2` gives `m`, and `m/s` squared gives `m/s`. A unit with no exact square
+  root (`m`, `m^3`) is refused. `%` is folded in first: `sqrt(4 %)` is `0.2`.
+- **`exp`, `ln`, `log10`** take a plain number. A unit is refused, never dropped: divide by a value in the same unit
+  first. `ln` and `log10` need a number above 0.
+- **Trigonometry.** `sin`, `cos` and `tan` take an angle with its unit. A plain number is refused, so an angle is never
+  read in the wrong unit. In degrees the rational values are exact (`sin(30 deg)` is `0.5`, `tan(45 deg)` is `1`), and
+  `tan(90 deg)` is refused. `asin` and `acos` take a plain number from -1 to 1. `atan2` takes `[y, x]` in one unit and
+  gives the angle in (-180, 180] deg; `atan2(0, 0)` is refused.
+- **`convert` between deg and rad** (and between `deg/s` and `rad/s`, and the like) is a rounded value, because pi/180
+  is irrational. `0 deg` converts to exactly `0 rad`. Adding or comparing deg with rad is still refused: convert one
+  first.
+- **`ceil`, `floor`, `round`** are exact. They round to `places` decimal places (default 0; negative rounds to tens,
+  hundreds ...), in the value's own unit. `round`'s `mode` is `half_even` by default; the others are
+  `half_away_from_zero`, `half_toward_zero`, `half_up` (ties toward +infinity) and `half_down` (ties toward -infinity).
+- **Statistics.**
+  - `normal_cdf` and `normal_sf` take `[x]` for the standard normal, or `[x, mean, sd]` in one unit. `sd` must be more
+    than 0. `normal_sf` is the upper tail, computed through `erfc`, so `normal_sf(12)` keeps all its digits
+    (`1.77648211207767...e-33`), where 1 minus the cdf would give 0.
+  - `normal_quantile` takes `[p]` or `[p, mean, sd]`, with `p` strictly between 0 and 1. The result is in the mean's
+    unit.
+  - `chi2_sf` takes `[x, dof]`: the upper tail, a chi-square test's p-value.
+  - `t_quantile` takes `[p, dof]`: the Student-t critical value.
+  - Degrees of freedom are an exact plain number above 0; a rounded one is refused.
+- **`digits`**: any rounded operator may take `"digits"`, from 1 to 1000 significant digits; 30 when left out.
 
 ### Units
 
@@ -195,28 +233,77 @@ Spelled as reflow2 spells them, one spelling each. The vocabulary is in `src/flo
   - units that measure different things (`2 mm + 3 g`);
   - a unit against a plain number (`2 mm + 3`);
   - an unknown spelling. A near miss names the spelling to use: `MM` gives "write mm", and `µm` gives "write um".
-- **Angles** are their own dimension, so `30 deg + 1` is refused. `deg` and `rad` are not converted into each other,
-  because their ratio is pi, which no fraction holds exactly.
+- **Angles** are their own dimension, so `30 deg + 1` is refused. `deg` and `rad` are never mixed in one operation,
+  because their ratio is pi/180, which no fraction holds exactly. `convert` turns one into the other as a correctly
+  rounded value, labelled rounded.
 - **Temperatures** are kelvin only. `°C` has an offset and does not add or multiply like a unit.
 
 ### Exactness
 
-Every value is an exact fraction, and `+ - * /` and whole-number powers are exact. How a value is written:
+An exact value is an exact fraction, and `+ - * /` and whole-number powers are exact. How it is written:
 
 - If its decimal ends within 40 significant digits, it is written exactly: `0.3`, `25.4 mm`, `1.602176634e-19 J`.
 - Otherwise it is written rounded half-even to 30 significant digits, with its exact value beside it as a fraction:
   `"value": "4.44444444444444444444444444444 h", "exact": "40/9 h"`.
 
-Comparisons always use exact values. A value whose numerator or denominator passes the host's digits budget is not
+Comparisons of exact values are exact. A value whose numerator or denominator passes the host's digits budget is not
 carried: the calculation stops there, with its reason (Limits, above).
+
+### Rounded values
+
+A **rounded** value is not exact, and it never comes with an `exact` fraction. It comes with its label instead:
+
+```json
+{"node": "sd", "value": "0.230217288664426764419484158642 mm",
+ "rounded": {"digits": 30, "correctly_rounded": true, "error_at_most": "5e-31 mm", "from": ["sd"]}}
+```
+
+| Field | Says |
+|---|---|
+| `digits` | the significant digits the value is written to |
+| `correctly_rounded` | `true`: the value is the true result, rounded half-even to `digits`. `false`: it was computed from rounded values |
+| `error_at_most` | a rigorous bound on how far the written value is from the true one, in the value's unit |
+| `from` | the nodes whose rounding the value carries |
+
+**How a correctly rounded value is found.**
+
+1. Every function is evaluated with Arb, FLINT's ball arithmetic (through `python-flint`). Arb's contract is that each
+   result is a ball, a midpoint and a radius, that **contains** the true value.
+2. Both ends of that ball are rounded half-even to the digits asked for. If they round to the same decimal, the true
+   value, which lies between them, rounds to it too: that decimal is the correctly rounded result. If they do not, the
+   working precision is doubled and the test repeated (Ziv's method).
+3. The test cannot finish when the true value is exactly a rounding tie, so every case where these functions are
+   rational at rational arguments is answered exactly first: perfect squares and powers, `exp(0)`, `ln(1)`,
+   `log10(10^k)`, trigonometry at the degree angles where it is rational, and the distributions at their centre.
+   Everywhere else the value is proven irrational, so there is no tie and the loop ends.
+4. For the distributions, irrationality is not proven in general, so the working precision is held to the host's
+   digits budget. Past it the call stops with its reason (`exceeds_limits`), never with a guess.
+5. `t_quantile` narrows a bracket around the quantile, each step decided by an Arb enclosure of the t tail, until both
+   ends round to the same decimal. `normal_quantile` uses Arb's enclosure of `erfcinv`.
+
+The tests check every rounded operator against mpmath, a different implementation, worked at 120 digits, on cases
+built to lie within about 1e-15 of a unit in the 30th digit from a rounding tie, on both sides of it.
+
+**Arithmetic on a rounded value** is labelled rounded too (`correctly_rounded: false`). It is the exact result on
+the written decimals, rounded to the most digits among them. Its `error_at_most` grows by what the arguments' bounds
+allow, rounded up to two significant digits. A function of a rounded value is the correctly rounded result at its
+written decimal, with a bound taken from Arb's enclosure over the argument's whole error ball. `neg` and `abs` keep
+the label as it is, and `0` times anything is exactly `0`.
+
+**A comparison, `ceil`, `floor` or `round` of a rounded value** is answered only when the error bound decides it. Then
+the answer is exact, and true of the true value. Otherwise it is refused, with kind `undecidable`: for example,
+`sqrt(2) * sqrt(2) = 2` cannot be told from the rounded values, so neither "equal" nor "greater" is guessed. A
+division by, or a domain edge within, a rounded value's bound is refused the same way.
 
 ### Errors
 
 flo2's helper contract fixes the split.
 
 - **A refused computation** is a normal reply: `{"status": "refused", "refused": {"node", "op", "kind", "reason",
-  "units"}}`, with no result and no record. For example: units that measure different things, a division by zero, or a
-  logic operator given a number.
+  "units"}}`, with no result and no record. For example: units that measure different things (`unit_mismatch`), a
+  division by zero, a logic operator given a number, an argument outside a function's domain (`out_of_domain`, such
+  as `sqrt(-1)` or a probability of 1), a point where a function has no value (`undefined`, such as `tan(90 deg)`),
+  or a question a rounded value's error bound cannot decide (`undecidable`).
 - **A limit passed** is a refused computation of its own kind, `exceeds_limits`, as above (Limits). It is still a
   normal reply. From `record_computation` it carries a not-yet-computed record.
 - **A malformed call** is `isError: true`. Its text starts `Malformed call.` and names the field path, for example
@@ -226,22 +313,26 @@ flo2's helper contract fixes the split.
 ## The computation record
 
 One JSON object, defined by
-[`src/flo2_calc/schemas/calc-record-2.schema.json`](src/flo2_calc/schemas/calc-record-2.schema.json) (JSON Schema
-draft 2020-12). Version 1 ([`calc-record-1.schema.json`](src/flo2_calc/schemas/calc-record-1.schema.json), made by
-flo2-calc 0.1.0) still re-runs: version 2 adds `status`, and a version 1 record is a computed one.
+[`src/flo2_calc/schemas/calc-record-3.schema.json`](src/flo2_calc/schemas/calc-record-3.schema.json) (JSON Schema
+draft 2020-12). Versions 1 and 2 ([`calc-record-1.schema.json`](src/flo2_calc/schemas/calc-record-1.schema.json),
+made by flo2-calc 0.1.0, and [`calc-record-2.schema.json`](src/flo2_calc/schemas/calc-record-2.schema.json), made by
+0.2.0) still re-run. Version 2 added `status`, and a version 1 record is a computed one. Version 3 adds the rounded
+class: the `rounded` label on values and the result, the new operators and their `digits`, `places` and `mode`, and
+`python_flint` in `produced_by`. A version 2 not-yet-computed record completes to the version 3 record a direct
+computation gives.
 
 | Field | Holds |
 |---|---|
-| `record_format`, `schema_version` | `"flo2-calc computation record"`, `2` |
+| `record_format`, `schema_version` | `"flo2-calc computation record"`, `3` |
 | `status` | `"computed"`, or `"not_computed"` (below) |
 | `name` | the record's name; its file is `<name>.calc.json` |
 | `supports` | optional: what it supports, as free text or `{"design_node": "dec:...", "design"?: "..."}` |
 | `arithmetic` | what exactness means in this record |
 | `graph` | the graph exactly as read, every value as text |
 | `inputs` | each input's `id`, `value`, `unit` and `source` (free text or `{"design_node"}`) |
-| `values` | every node's value, in evaluation order |
-| `result` | `{"node", "value"}`, plus `"exact"` when the value is rounded |
-| `produced_by` | `{"flo2_calc", "pint"}` versions |
+| `values` | every node's value, in evaluation order, with `"exact"` beside an exact value whose text is rounded, or the `"rounded"` label on a rounded value: which values were rounded, and at what precision |
+| `result` | `{"node", "value"}`, labelled the same way |
+| `produced_by` | `{"flo2_calc", "pint", "python_flint"}` versions |
 | `content_hash` | `sha256:` over the canonical JSON (keys sorted, no spaces, UTF-8) of every other field |
 
 How a record behaves:
@@ -293,8 +384,8 @@ the limits of the host re-running it is neither confirmed nor contradicted: `"st
 ## Generic math only
 
 A domain's formulas stay with the helper that owns the domain: metal weight, ring sizes and stone sizes belong to
-flo2-cad, and a building's quantities to flo2-ifc. flo2-calc does generic arithmetic, logic and comparison, with
-units. Where a decision needs a domain number, the owning helper produces it, and flo2-calc takes it as an input with
+flo2-cad, and a building's quantities to flo2-ifc. flo2-calc does generic arithmetic, logic and comparison, the
+standard functions, trigonometry and the common distributions, with units. Where a decision needs a domain number, the owning helper produces it, and flo2-calc takes it as an input with
 its source.
 
 ## What is pinned and why
@@ -307,7 +398,8 @@ Every dependency is pinned exactly in `pyproject.toml`. That list is what the im
 | `pint==0.26.1` | Gives what each unit measures and its exact factor to SI base units, loaded with exact fractions. |
 | `flexparser==0.4`, `flexcache==0.3` | pint parses and caches its definitions with these, so they decide what a unit is. A record must re-run to the same result. |
 | `jsonschema==4.26.0` | `rerun_record` checks a record against its schema first. |
-| `pytest==9.1.1` (the `test` extra) | The tests. |
+| `python-flint==0.9.0` | Arb ball arithmetic, the rigorous enclosures every rounded value is decided from. A correctly rounded result is the same whichever version computes it; the bound on a value computed from rounded values can move in its last digit, which is why `produced_by` names the version. |
+| `pytest==9.1.1`, `mpmath==1.4.1` (the `test` extra) | The tests, and their independent oracle for every rounded value. The package never imports mpmath. |
 | `setuptools==84.0.0` (build) | The build backend. |
 
 Transitive dependencies (pydantic, anyio and the rest) come in at whatever versions the pins accept. `pip freeze
@@ -343,6 +435,9 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
 ```
 
 - `tests/test_evaluator.py`, `tests/test_units.py`: exactness, every operator, every unit, and every refusal.
+- `tests/test_rounded.py`, with `tests/oracle.py`: every rounded operator against mpmath at 120 digits, on hard cases
+  next to a rounding tie, both sides; exact results that stay exact; the unit rules and domains of every new operator;
+  the labels in the record; and the limits.
 - `tests/test_record.py`: the record is deterministic and fits its schema; it re-runs; tampering is caught.
 - `tests/test_server.py`: the four tools over a real MCP client session. Every refusal's reason is read on the
   client's side.

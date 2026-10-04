@@ -203,8 +203,9 @@ def test_logic_on_a_number_and_arithmetic_on_true_false_are_refused():
     assert refused(inp("a", "1"), inp("b", True), op("r", "eq", "a", "b"))["kind"] == "type_mismatch"
 
 
-def test_pow_takes_only_a_plain_whole_exponent():
-    assert refused(inp("a", "2"), inp("b", "0.5"), op("r", "pow", "a", "b"))["kind"] == "bad_exponent"
+def test_pow_takes_a_plain_exponent_and_refuses_powers_of_zero_that_have_no_value():
+    """A non-whole exponent is no longer refused (dec:round-1-fixes-one-to-six):
+    2^0.5 is a rounded value now, tested in tests/test_rounded.py."""
     assert refused(inp("a", "2"), inp("b", "2 mm"), op("r", "pow", "a", "b"))["kind"] == "bad_exponent"
     assert refused(inp("a", "0"), inp("b", "-1"), op("r", "pow", "a", "b"))["kind"] == "division_by_zero"
     assert refused(inp("a", "0"), inp("b", "0"), op("r", "pow", "a", "b"))["kind"] == "undefined"
@@ -230,7 +231,7 @@ def test_an_operator_outside_the_first_increment_is_a_malformed_call_naming_the_
 
 def test_the_operator_families_are_the_accepted_ones():
     families = {v[0] for v in OPS.values()}
-    assert families == {"arithmetic", "logic", "comparison"}
+    assert families == {"arithmetic", "logic", "comparison", "functions", "constants", "trigonometry", "rounding", "statistics"}
     assert {k for k, v in OPS.items() if v[0] == "logic"} == {"and", "or", "not", "nor", "nand", "xor"}
 
 

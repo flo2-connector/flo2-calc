@@ -1,0 +1,126 @@
+{
+  "arithmetic": "Exact rational arithmetic: no binary floating point. + - * / and integer powers are exact, and so is every unit conversion. A value whose decimal ends (at most 40 significant digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact value is given beside it as a fraction. Comparisons use exact values.",
+  "content_hash": "sha256:711a57206bae3b11f3f5db06b4abad0b411b8473cd6b544c64ee53772894b440",
+  "graph": {
+    "nodes": [
+      {
+        "id": "ratio",
+        "source": {
+          "design": "83d2b0775fe79af6",
+          "design_node": "con:gain-per-stage"
+        },
+        "value": "1234567/1000000"
+      },
+      {
+        "args": [
+          "ratio",
+          "ratio"
+        ],
+        "id": "r2",
+        "op": "mul"
+      },
+      {
+        "args": [
+          "r2",
+          "r2"
+        ],
+        "id": "r4",
+        "op": "mul"
+      },
+      {
+        "args": [
+          "r4",
+          "r4"
+        ],
+        "id": "r8",
+        "op": "mul"
+      },
+      {
+        "args": [
+          "r8",
+          "r8"
+        ],
+        "id": "r16",
+        "op": "mul"
+      },
+      {
+        "args": [
+          "r16",
+          "r16"
+        ],
+        "id": "r32",
+        "op": "mul"
+      },
+      {
+        "args": [
+          "r32",
+          "r32"
+        ],
+        "id": "r64",
+        "op": "mul"
+      },
+      {
+        "id": "limit",
+        "source": "requirement: the gain stays under a million",
+        "value": "1e6"
+      },
+      {
+        "args": [
+          "r64",
+          "limit"
+        ],
+        "id": "under",
+        "op": "lt"
+      }
+    ],
+    "result": "under"
+  },
+  "inputs": [
+    {
+      "id": "ratio",
+      "source": {
+        "design": "83d2b0775fe79af6",
+        "design_node": "con:gain-per-stage"
+      },
+      "unit": "",
+      "value": "1.234567"
+    },
+    {
+      "id": "limit",
+      "source": "requirement: the gain stays under a million",
+      "unit": "",
+      "value": "1000000"
+    }
+  ],
+  "limits_in_force": {
+    "deadline": "45 s",
+    "max_digits": 100,
+    "max_reply_bytes": 8388608
+  },
+  "name": "stage-gain",
+  "produced_by": {
+    "flo2_calc": "0.2.0",
+    "pint": "0.26.1"
+  },
+  "record_format": "flo2-calc computation record",
+  "schema_version": 2,
+  "status": "not_computed",
+  "stopped": {
+    "limit": {
+      "name": "max_digits",
+      "needed_at_least": 195,
+      "value": 100
+    },
+    "node": "r32",
+    "op": "mul",
+    "reached": {
+      "largest_digits": 195,
+      "nodes": 9,
+      "nodes_done": 5
+    },
+    "reason": "mul at node \"r32\": the product has a numerator of 195 digits, past this host's budget of 100 digits for any exact number. The calculation was stopped cleanly; nothing was cut short or guessed."
+  },
+  "supports": {
+    "design_node": "dec:stage-count"
+  }
+}

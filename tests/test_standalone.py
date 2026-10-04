@@ -233,8 +233,8 @@ def test_the_package_imports_nothing_of_flo2_reflow2_or_another_helper():
     """Nothing in it may import, call or assume flo2, reflow2 or flo2-cad/ifc."""
     allowed = {
         "__future__", "argparse", "ast", "dataclasses", "decimal", "fractions", "functools", "hashlib", "importlib",
-        "json", "os", "pathlib", "re", "sys", "tempfile", "time", "typing",
-        "flo2_calc", "mcp", "pydantic", "pint", "jsonschema",
+        "json", "math", "os", "pathlib", "re", "sys", "tempfile", "threading", "time", "typing",
+        "flo2_calc", "mcp", "pydantic", "pint", "jsonschema", "flint",
     }
     package = Path(flo2_calc.__file__).parent
     for source in sorted(package.rglob("*.py")):

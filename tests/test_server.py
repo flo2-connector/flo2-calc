@@ -160,3 +160,52 @@ def test_a_refused_computation_gives_no_record():
 def test_a_record_missing_a_source_reaches_the_agent_with_its_reason():
     reason = reason_of(one("record_computation", {"graph": graph(inp("a", "1 mm", None)), "name": "n"}))
     assert "source" in reason and "'a'" in reason
+
+
+# ---------------------------------------------------------------- the rounded class, over the client (and in the image)
+
+
+ROUNDED = graph(
+    inp("var", "0.053 mm^2", "sample variance"),
+    op("sd", "sqrt", "var"),
+    inp("p", "0.975", "two-sided 95 %"),
+    inp("dof", "4", "n - 1"),
+    op("t", "t_quantile", "p", "dof"),
+    op("half", "mul", "t", "sd"),
+    inp("limit", "0.7 mm", "requirement"),
+    op("within", "lt", "half", "limit"),
+    inp("angle", "37.5 deg", "drawing"),
+    op("rad", "convert", "angle", unit="rad"),
+    op("s", "sin", "angle"),
+    {"id": "pi", "op": "pi"},
+    result="within",
+)
+
+
+def test_rounded_values_reach_the_agent_labelled_and_a_decided_comparison_is_answered():
+    answer = json.loads(text_of(one("evaluate_graph", {"graph": ROUNDED})))
+    assert answer["status"] == "ok" and answer["result"] == {"node": "within", "value": "true"}
+    by = {v["node"]: v for v in answer["values"]}
+    assert by["sd"]["value"] == "0.230217288664426764419484158642 mm"
+    assert by["sd"]["rounded"] == {"digits": 30, "correctly_rounded": True, "error_at_most": "5e-31 mm", "from": ["sd"]}
+    assert by["t"]["value"] == "2.77644510519779435780310484675"
+    assert by["rad"]["value"] == "0.654498469497873591346384038183 rad"
+    assert by["pi"]["value"] == "3.14159265358979323846264338328"
+    assert by["half"]["rounded"]["correctly_rounded"] is False and by["half"]["rounded"]["from"] == ["t", "sd"]
+    assert not any("exact" in v for v in answer["values"] if "rounded" in v)
+
+
+def test_a_record_with_rounded_values_is_made_and_re_runs_over_the_client():
+    made, = anyio.run(calls, [("record_computation", {"graph": ROUNDED, "name": "ci-half-width"})])
+    rec = json.loads(made.content[1].resource.text)
+    assert rec["schema_version"] == 3 and rec["produced_by"]["python_flint"]
+    assert {v["node"] for v in rec["values"] if "rounded" in v} == {"sd", "t", "half", "rad", "s", "pi"}
+    again, = anyio.run(calls, [("rerun_record", {"record": made.content[1].resource.text})])
+    assert json.loads(text_of(again))["reproduces"] is True
+
+
+def test_an_undecidable_comparison_reaches_the_agent_as_a_refusal():
+    g = graph(inp("x", "2"), op("s", "sqrt", "x"), op("sq", "mul", "s", "s"), op("r", "eq", "sq", "x"))
+    answer = json.loads(text_of(one("evaluate_graph", {"graph": g})))
+    assert answer["status"] == "refused" and answer["refused"]["kind"] == "undecidable"
+    assert "does not guess" in answer["refused"]["reason"]
