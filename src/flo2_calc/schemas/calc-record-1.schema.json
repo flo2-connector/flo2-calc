@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/flo2-connector/flo2-calc/blob/main/src/flo2_calc/schemas/calc-record-1.schema.json",
+  "title": "flo2-calc computation record, schema version 1",
+  "description": "What flo2-calc computed, from what, with what, and how to check it: the file a design decision cites. Made by record_computation, re-run by rerun_record. Deterministic: the same graph gives a byte-identical file. A later schema version is a new file beside this one, never an edit of it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_format",
+    "schema_version",
+    "name",
+    "arithmetic",
+    "graph",
+    "inputs",
+    "values",
+    "result",
+    "produced_by",
+    "content_hash"
+  ],
+  "properties": {
+    "record_format": { "const": "flo2-calc computation record" },
+    "schema_version": { "const": 1 },
+    "name": {
+      "description": "The record's name. Its file is <name>.calc.json.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+    },
+    "supports": {
+      "description": "What this computation supports, as the agent said: free text, or a node in a reflow2 design. Recorded, never resolved by flo2-calc.",
+      "$ref": "#/$defs/reference"
+    },
+    "arithmetic": {
+      "description": "What exactness means in this record, in words.",
+      "type": "string",
+      "minLength": 1
+    },
+    "graph": { "$ref": "#/$defs/graph" },
+    "inputs": {
+      "description": "Every input node, in the graph's order, with its value, its unit and where it came from.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "value", "source"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "value": { "$ref": "#/$defs/valueText" },
+          "exact": { "$ref": "#/$defs/exactText" },
+          "unit": {
+            "description": "The input's unit as reflow2 spells it; \"\" for a plain number. Absent for true/false.",
+            "type": "string"
+          },
+          "source": { "$ref": "#/$defs/reference" }
+        }
+      }
+    },
+    "values": {
+      "description": "Every node's value, in the order flo2-calc evaluated them.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["node", "value"],
+        "properties": {
+          "node": { "$ref": "#/$defs/id" },
+          "value": { "$ref": "#/$defs/valueText" },
+          "exact": { "$ref": "#/$defs/exactText" }
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "value"],
+      "properties": {
+        "node": { "$ref": "#/$defs/id" },
+        "value": { "$ref": "#/$defs/valueText" },
+        "exact": { "$ref": "#/$defs/exactText" }
+      }
+    },
+    "produced_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["flo2_calc", "pint"],
+      "properties": {
+        "flo2_calc": { "description": "flo2-calc's version.", "type": "string", "minLength": 1 },
+        "pint": { "description": "The version of pint that gave the unit conversion factors.", "type": "string", "minLength": 1 }
+      }
+    },
+    "content_hash": {
+      "description": "sha256 over the canonical JSON (keys sorted, no spaces, UTF-8) of every other field of this record.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$"
+    },
+    "valueText": {
+      "description": "A value as text: a number and its unit (\"1.4 mm\"), a plain number (\"0.3\"), or \"true\"/\"false\". A number whose decimal does not end is rounded to 30 significant digits here, and given exactly in \"exact\".",
+      "type": "string",
+      "minLength": 1
+    },
+    "exactText": {
+      "description": "The exact value as a fraction of integers, with its unit (\"1/3 mm\"), when \"value\" is rounded.",
+      "type": "string",
+      "pattern": "^-?[0-9]+/[0-9]+( .+)?$"
+    },
+    "reference": {
+      "oneOf": [
+        { "type": "string", "minLength": 1, "maxLength": 2000 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["design_node"],
+          "properties": {
+            "design_node": {
+              "description": "The id of a node in a reflow2 design, e.g. \"con:cavity-depth\".",
+              "type": "string",
+              "pattern": "^\\S{1,200}$"
+            },
+            "design": {
+              "description": "The design's id, when the node is in another design than the one the record is linked from.",
+              "type": "string",
+              "pattern": "^\\S{1,200}$"
+            }
+          }
+        }
+      ]
+    },
+    "graph": {
+      "description": "The graph as flo2-calc read it, every input value as text. Re-running a record re-reads this.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "oneOf": [
+              {
+                "title": "input",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "value", "source"],
+                "properties": {
+                  "id": { "$ref": "#/$defs/id" },
+                  "value": { "type": "string", "minLength": 1 },
+                  "source": { "$ref": "#/$defs/reference" },
+                  "note": { "type": "string", "maxLength": 2000 }
+                }
+              },
+              {
+                "title": "operation",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "op", "args"],
+                "properties": {
+                  "id": { "$ref": "#/$defs/id" },
+                  "op": {
+                    "enum": ["add", "sub", "mul", "div", "neg", "abs", "pow", "min", "max", "convert",
+                             "and", "or", "not", "nand", "nor", "xor",
+                             "eq", "ne", "lt", "le", "gt", "ge"]
+                  },
+                  "args": { "type": "array", "items": { "$ref": "#/$defs/id" }, "minItems": 1, "maxItems": 100 },
+                  "unit": { "type": "string" },
+                  "note": { "type": "string", "maxLength": 2000 }
+                }
+              }
+            ]
+          }
+        },
+        "result": { "$ref": "#/$defs/id" }
+      }
+    }
+  }
+}
