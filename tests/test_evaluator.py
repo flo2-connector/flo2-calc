@@ -103,6 +103,31 @@ def test_json_integers_and_whole_floats_are_exact_and_accepted():
     assert value(inp("a", 2), inp("b", 3.0), op("s", "add", "a", "b")) == "5"
 
 
+@pytest.mark.parametrize("text", ["3 + * 4", "3 + 4", "3*4", "2^10", "1/2/3", "2 1/2", "3 - 4", "2 mm - 1 mm", "(3+4)", "pi*2"])
+def test_an_expression_typed_as_a_value_is_refused_as_one_with_how_to_build_it(text):
+    """q092: "3 + * 4" was read as the number 3 and the unit "+ * 4"."""
+    e = malformed(graph(inp("a", text)))
+    assert e.path == "graph.nodes[0].value"
+    assert "looks like an expression" in e.problem
+    assert "graph of nodes" in e.problem and '"op": "add"' in e.problem
+    assert "is not a unit" not in e.problem
+
+
+@pytest.mark.parametrize("text", ["5 1/s", "2 m^-2", "3 kg/(m*s^2)", "4 W/(m^2*K)", "10 %", "0.92 EUR/USD"])
+def test_a_unit_with_powers_and_a_one_over_is_not_taken_for_an_expression(text):
+    assert read_graph(graph(inp("a", text)))
+
+
+def test_exact_means_exact_for_these_inputs_and_every_answer_says_so():
+    """A value built from a typed decimal of pi is exact for that decimal, not
+    for pi (round 1: q025, q029, q037, q067)."""
+    answer = run(inp("pi_typed", "3.14159265358979323846264338328"), inp("d", "2 mm"), op("c", "mul", "pi_typed", "d"))
+    assert answer["status"] == "ok"
+    assert answer["exactness"].startswith("Exact for these inputs")
+    assert "no more accurate than they are" in answer["exactness"]
+    assert "pi" in answer["exactness"]
+
+
 def test_an_absurd_exponent_is_refused_rather_than_carried():
     e = malformed(graph(inp("a", "1e100000")))
     assert "1e1000" in e.problem

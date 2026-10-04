@@ -580,3 +580,73 @@ def test_a_rounded_calculation_stopped_on_a_small_machine_completes_to_the_direc
     completed = R.build(evaluate(read_graph(pending["graph"])), "root", None)
     direct = R.build(evaluate(read_graph(g)), "root", None)
     assert R.file_bytes(completed) == R.file_bytes(direct)
+
+
+# ---------------------------------------------------------------- with the units of 0.3.0: arcmin, arcsec, degC, exactness
+
+
+def test_arcmin_and_arcsec_convert_to_rad_through_deg_with_the_built_in_pi():
+    """Round 1's q037: 12 arcsec in rad, with no typed pi and no typed 1/3600."""
+    r = ok(inp("a", "12 arcsec"), op("r", "convert", "a", unit="rad"))
+    assert_correctly_rounded(r, O.exact(lambda: 12 * O.mp.pi / 648000), unit="rad")
+    r = ok(inp("a", "90 arcmin"), op("r", "convert", "a", unit="rad"))
+    assert_correctly_rounded(r, O.exact(lambda: O.mp.pi / 120), unit="rad")
+    r = ok(inp("a", "1 rad"), op("r", "convert", "a", unit="arcsec"))
+    assert_correctly_rounded(r, O.exact(lambda: 648000 / O.mp.pi), unit="arcsec")
+    # arcmin and arcsec to deg stay exact: no pi in them.
+    assert ok(inp("a", "90 arcmin"), op("r", "convert", "a", unit="deg")) == {"node": "r", "value": "1.5 deg"}
+
+
+def test_trigonometry_takes_arcmin_and_arcsec_as_they_are_defined():
+    assert ok(inp("a", "1800 arcmin"), op("s", "sin", "a"))["value"] == "0.5", "30 deg, exactly"
+    assert ok(inp("a", "162000 arcsec"), op("t", "tan", "a"))["value"] == "1", "45 deg, exactly"
+    r = ok(inp("a", "1 arcsec"), op("s", "sin", "a"))
+    assert_correctly_rounded(r, O.exact(lambda: O.mp.sin(O.mp.pi / 648000)))
+    assert ok(inp("x", "1/2"), op("a", "asin", "x", unit="arcmin")) == {"node": "a", "value": "1800 arcmin"}
+    r = ok(inp("x", "0.3"), op("a", "atan", "x", unit="arcsec"))
+    assert_correctly_rounded(r, O.exact(lambda: O.mp.atan(O.mpq(Fraction(3, 10))) * 648000 / O.mp.pi), unit="arcsec")
+
+
+def test_an_answer_with_a_rounded_value_says_in_its_exactness_that_those_values_are_not_exact():
+    from flo2_calc.numbers import EXACT_BUT_ROUNDED, EXACT_FOR_THESE_INPUTS
+
+    with_rounded = run(*SQRT2, inp("one", "1"), op("r", "add", "s", "one"))
+    assert with_rounded["exactness"] == EXACT_BUT_ROUNDED
+    assert 'EXCEPT the values labelled "rounded"' in with_rounded["exactness"]
+    assert with_rounded["result"]["rounded"]["correctly_rounded"] is False and "exact" not in with_rounded["result"]
+    exact_only = run(inp("a", "1/3"), inp("b", "3"), op("r", "mul", "a", "b"))
+    assert exact_only["exactness"] == EXACT_FOR_THESE_INPUTS
+    # A rounded value that is decided away (0 times it, or a comparison) leaves the answer's exactness honest still.
+    assert run(*SQRT2, inp("c", "1.5"), op("r", "lt", "s", "c"))["exactness"] == EXACT_BUT_ROUNDED
+
+
+def test_a_rounded_temperature_stays_a_temperature_and_stays_labelled():
+    """A percentile in K, turned into a reading in degC, shifted and compared:
+    each step through temperature.py, the rounding carried at every one."""
+    nodes = [inp("p", "0.9"), inp("m", "298.15 K"), inp("sd", "2 K"), op("q", "normal_quantile", "p", "m", "sd"),
+             op("c", "convert", "q", unit="degC"), inp("rise", "1 delta_degC"), op("hot", "add", "c", "rise"),
+             inp("limit", "30 degC"), op("ok", "lt", "hot", "limit")]
+    answer = run(*nodes)
+    assert answer["status"] == "ok" and answer["result"]["value"] == "true"
+    by = {v["node"]: v for v in answer["values"]}
+    with O.mp.workdps(O.DPS):
+        z = O.mp.sqrt(2) * O.mp.erfinv(O.mpq(Fraction(4, 5)))
+        for node, unit, true in (("q", "K", O.mpq(Fraction(29815, 100)) + 2 * z), ("c", "degC", 25 + 2 * z), ("hot", "degC", 26 + 2 * z)):
+            v = by[node]
+            assert v["value"].endswith(" " + unit) and "exact" not in v, v
+            assert abs(O.mpq(number(v, unit)) - true) <= O.mpq(parse_number(v["rounded"]["error_at_most"].split()[0]))
+    assert by["q"]["rounded"]["correctly_rounded"] is True and by["hot"]["rounded"]["from"] == ["q"]
+    assert refused(*nodes[:5], inp("two", "2"), op("x", "mul", "c", "two"))["kind"] == "offset_temperature"
+    close = run(*nodes[:5], inp("near", by["c"]["value"]), op("r", "eq", "c", "near"))
+    assert close["status"] == "refused" and close["refused"]["kind"] == "undecidable"
+
+
+def test_a_distribution_of_a_temperature_reading_is_refused_until_it_is_in_k():
+    """A degC mean with a degF x would be wrong by a factor alone; flo2-calc asks for K."""
+    r = refused(inp("p", "0.9"), inp("m", "25 degC"), inp("sd", "2 delta_degC"), op("q", "normal_quantile", "p", "m", "sd"))
+    assert r["kind"] == "offset_temperature" and "Convert it to K first" in r["reason"]
+
+
+def test_ceil_floor_and_round_keep_a_temperature_on_its_scale():
+    assert ok(inp("t", "25.37 degC"), op("r", "round", "t", places=1)) == {"node": "r", "value": "25.4 degC"}
+    assert ok(inp("t", "-0.5 degF"), op("r", "floor", "t")) == {"node": "r", "value": "-1 degF"}

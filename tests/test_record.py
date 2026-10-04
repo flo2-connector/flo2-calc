@@ -76,6 +76,26 @@ def test_a_record_holds_what_a_decision_needs():
     assert rec["content_hash"].startswith("sha256:") and len(rec["content_hash"]) == 71
 
 
+def test_a_record_says_its_values_are_exact_for_these_inputs():
+    note = make()["arithmetic"]
+    assert "exact FOR THESE INPUTS" in note and "no more accurate than they are" in note
+    assert "truncated pi or e" in note
+
+
+def test_records_with_money_and_temperatures_validate_and_re_run():
+    g = graph(
+        inp("price", "987.50 USD", "quote"), inp("rate", "0.92 EUR/USD", "ECB reference rate, 2026-10-02"),
+        op("in_eur", "mul", "price", "rate"), inp("budget", "1000 EUR", "assumed"), op("fits", "le", "in_eur", "budget"),
+        inp("ta", "40 degC", "datasheet"), inp("rise", "27.9 delta_degC", "computed"), op("tj", "add", "ta", "rise"),
+        inp("limit", "158 degF", "datasheet"), op("cool", "lt", "tj", "limit"), op("both", "and", "fits", "cool"),
+    )
+    rec = make(g, "money-and-heat")
+    validator().validate(rec)
+    values = {v["node"]: v["value"] for v in rec["values"]}
+    assert values["in_eur"] == "908.5 EUR" and values["tj"] == "67.9 degC" and rec["result"]["value"] == "true"
+    assert R.rerun(json.loads(R.file_bytes(rec)))["reproduces"] is True
+
+
 def test_the_same_graph_gives_a_byte_identical_record():
     assert R.file_bytes(make()) == R.file_bytes(make())
     assert R.file_bytes(make(BATTERY, "battery")) == R.file_bytes(make(copy.deepcopy(BATTERY), "battery"))

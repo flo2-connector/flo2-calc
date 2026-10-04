@@ -15,7 +15,11 @@ An INPUT node has a `value`: a number with its unit as text ("1.4 mm"), a
 plain number ("0.1", or a JSON integer), or true/false. Its `source` says
 where the value came from: free text, or {"design_node": "<id>"} naming a node
 in a reflow2 design (with "design": "<design id>" when it is another design).
-flo2-calc records a source and never resolves it.
+flo2-calc records a source and never resolves it. An exchange rate (a value
+whose unit holds two currencies, "0.92 EUR/USD") must have one: flo2-calc
+holds no rates, so the rate is the caller's, and must say where it came from.
+A value is one number: text that holds arithmetic ("3 + 4") is refused as an
+expression, to be built as nodes.
 
 An OPERATION node has an `op` and `args`, the ids of the nodes it takes, in
 order. `convert` also takes the `unit` to convert to, and so do asin, acos,
@@ -42,7 +46,8 @@ a whole number is never a guess.
 READING. A graph that cannot be read is a CallError naming the field: no
 nodes, a repeated id, an unknown operator or field, the wrong number of
 arguments, a reference to a node that is not there, a cycle, a value that is
-not a number, an unknown unit.
+not a number, an unknown unit, an expression typed as a value, an exchange
+rate with no source.
 
 EVALUATING. Nodes are evaluated in one fixed order: each as soon as every node
 it takes is done, ties broken by the order they are listed in. The first node
@@ -71,9 +76,19 @@ from typing import Any
 from flo2_calc import limits as L
 from flo2_calc import numbers as N
 from flo2_calc import realmath as RM
+from flo2_calc import temperature as T
 from flo2_calc import units as U
 from flo2_calc.errors import CallError, LimitExceeded, Refusal, at
-from flo2_calc.numbers import MAX_NUMBER_TEXT, NUMBER_THEN_REST, format_number, parse_number
+from flo2_calc.numbers import (
+    EXACT_BUT_ROUNDED,
+    EXACT_FOR_THESE_INPUTS,
+    MAX_NUMBER_TEXT,
+    NUMBER_THEN_REST,
+    expression_problem,
+    format_number,
+    looks_like_expression,
+    parse_number,
+)
 
 MAX_NODES = 500
 MAX_ARGS = 100
@@ -132,10 +147,10 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "log10": (FUNCTIONS, 1, 1, "the base-10 logarithm of a plain number > 0; exact for a power of ten, else rounded"),
     "pi": (CONSTANTS, 0, 0, "the constant pi, rounded (no args)"),
     "e": (CONSTANTS, 0, 0, "the constant e, rounded (no args)"),
-    "sin": (TRIG, 1, 1, "the sine of an angle in deg or rad (a plain number is refused); rounded, exact where rational "
+    "sin": (TRIG, 1, 1, "the sine of an angle in deg, arcmin, arcsec or rad (a plain number is refused); rounded, exact where rational "
             "(sin(30 deg) is 1/2)"),
-    "cos": (TRIG, 1, 1, "the cosine of an angle in deg or rad; rounded, exact where rational (cos(60 deg) is 1/2)"),
-    "tan": (TRIG, 1, 1, "the tangent of an angle in deg or rad; rounded, exact where rational; tan(90 deg) is refused"),
+    "cos": (TRIG, 1, 1, "the cosine of an angle (deg, arcmin, arcsec or rad); rounded, exact where rational (cos(60 deg) is 1/2)"),
+    "tan": (TRIG, 1, 1, "the tangent of an angle (deg, arcmin, arcsec or rad); rounded, exact where rational; tan(90 deg) is refused"),
     "asin": (TRIG, 1, 1, 'the arcsine of a plain number in [-1, 1], as an angle in the node\'s "unit" ("deg" or "rad")'),
     "acos": (TRIG, 1, 1, 'the arccosine of a plain number in [-1, 1], as an angle in the node\'s "unit" ("deg" or "rad")'),
     "atan": (TRIG, 1, 1, 'the arctangent of a plain number, as an angle in the node\'s "unit" ("deg" or "rad")'),
@@ -268,9 +283,11 @@ class Evaluation:
 
 def value_json(v: Value) -> dict[str, Any]:
     """A value as replies and records write it: {"value": "0.3 mm"}, plus
-    "exact" when the text of an exact value is rounded, or "rounded" (its
-    digits, its error bound and where its rounding came from) when the value
-    itself is a rounded one. A rounded value is never given an "exact"."""
+    "exact" when the text of an exact value is rounded (the exact value FOR
+    THESE INPUTS: the inputs as written, no more accurate than they are), or
+    "rounded" (its digits, its error bound and where its rounding came from)
+    when the value itself is a rounded one. A rounded value is never given an
+    "exact", and is never exact."""
     if isinstance(v, bool):
         return {"value": "true" if v else "false"}
     unit = U.format_unit(v.unit)
@@ -329,10 +346,14 @@ def parse_value(raw: Any, path: str) -> tuple[str, Value]:
         )
     m = NUMBER_THEN_REST.match(text)
     if not m:
+        if looks_like_expression(text, whole=True):  # "(3+4)", "pi*2"
+            raise CallError(path, expression_problem(raw))
         raise CallError(
             path,
             f'"{raw}" is not a value: write a number with its unit ("1.4 mm"), a plain number ("0.1" or "1/3"), or true/false.',
         )
+    if looks_like_expression(m.group(2)):  # "3 + * 4", "3*4", "2^10", "1/2/3", "2 1/2"
+        raise CallError(path, expression_problem(raw))
     try:
         number = parse_number(m.group(1))
         unit = U.parse_unit(m.group(2))
@@ -411,7 +432,14 @@ def _node(obj: Any, path: str) -> Node:
         if unknown:
             raise CallError(at(path, unknown[0]), f"an input node has only {', '.join(INPUT_KEYS)}.")
         raw, value = parse_value(obj["value"], at(path, "value"))
-        return InputNode(nid, raw, value, _source(obj, path), _note(obj, path))
+        source = _source(obj, path)
+        if source is None and isinstance(value, Quantity) and len(U.currencies_in(value.unit)) > 1:
+            raise CallError(
+                at(path, "source"),
+                f'"{raw}" is an exchange rate, and an exchange rate must say where it came from and when: give it a '
+                '"source", for example "ECB reference rate, 2026-10-02". flo2-calc holds no rates of its own.',
+            )
+        return InputNode(nid, raw, value, source, _note(obj, path))
     if "op" not in obj:
         raise CallError(path, f'node "{nid}" has neither "value" (an input) nor "op" (an operation).')
     unknown = [k for k in obj if k not in OP_KEYS]
@@ -441,14 +469,14 @@ def _node(obj: Any, path: str) -> Node:
         if "unit" not in obj or not isinstance(obj["unit"], str):
             if op == "convert":
                 raise CallError(at(path, "unit"), 'convert needs "unit": the unit to convert to, e.g. "mm" ("" for a plain number).')
-            raise CallError(at(path, "unit"), f'{op} needs "unit": the angle unit of its result, "deg" or "rad".')
+            raise CallError(at(path, "unit"), f'{op} needs "unit": the angle unit of its result, "deg" or "rad" (or "arcmin", "arcsec").')
         unit_text = obj["unit"]
         try:
             unit = U.parse_unit(unit_text)
         except ValueError as e:
             raise CallError(at(path, "unit"), str(e)) from None
         if op != "convert" and U.angle_kind(unit) is None:
-            raise CallError(at(path, "unit"), f'{op} gives an angle: its "unit" is "deg" or "rad", not "{unit_text}".')
+            raise CallError(at(path, "unit"), f'{op} gives an angle: its "unit" is "deg" or "rad" (or "arcmin", "arcsec"), not "{unit_text}".')
     elif "unit" in obj:
         raise CallError(
             at(path, "unit"),
@@ -872,8 +900,8 @@ def _angle(op: str, q: Quantity, name: str) -> tuple[str, Fraction]:
     if kind is None:
         what = "a plain number" if q.unit == U.PLAIN else f"in {U.format_unit(q.unit)} ({U.describe_dimension(q.unit)})"
         raise Refusal(
-            f'{op} takes an angle in deg or rad, and "{name}" is {what}. Give the angle its unit, so it is never '
-            "taken in the wrong one.",
+            f'{op} takes an angle in deg or rad (or arcmin, arcsec), and "{name}" is {what}. Give the angle its unit, '
+            "so it is never taken in the wrong one.",
             kind="unit_mismatch",
             units=(U.format_unit(q.unit), "deg"),
         )
@@ -1062,6 +1090,46 @@ def _compare(op: str, a: Quantity, b: Quantity, names: tuple[str, ...]) -> bool:
     )
 
 
+# ---------------------------------------------------------------- temperature readings (temperature.py)
+
+
+def _corners(qs: list[Quantity], op: str) -> list[list[Fraction]]:
+    """The arguments' values at the corners of their error balls that hold the
+    extremes of a temperature operation. Each such operation (an exact shift,
+    a difference, a comparison, min, max) moves monotonically with each of
+    its arguments, so its extremes are at corners; add, min and max increase
+    with all of them, so their two extremes are all-low and all-high."""
+    lows, highs = [q.magnitude - q.error for q in qs], [q.magnitude + q.error for q in qs]
+    if op in ("add", "min", "max"):
+        return [lows, highs]
+    out: list[list[Fraction]] = [[]]
+    for lo, hi in zip(lows, highs, strict=True):
+        out = [c + [v] for c in out for v in ((lo, hi) if lo != hi else (lo,))]
+    return out
+
+
+def _temperature(node: OpNode, qs: list[Quantity]) -> Value:
+    """An operation on a temperature reading, by temperature.py. With a rounded
+    argument, the answer at the written values carries the bound the corners
+    of the arguments' error balls give, and a comparison is answered only
+    when every corner gives the same answer."""
+    op, names = node.op, node.args
+
+    def at(ms: list[Fraction]) -> Any:
+        return T.apply(op, [(m, q.unit) for m, q in zip(ms, qs, strict=True)], names, node.unit)
+
+    out = at([q.magnitude for q in qs])
+    if not _rounded(qs):  # type: ignore[arg-type]
+        return out if isinstance(out, bool) else Quantity(*out)
+    answers = [at(c) for c in _corners(qs, op)]
+    if isinstance(out, bool):
+        if all(a == out for a in answers):
+            return out
+        raise _undecidable(f'{op} cannot decide "{names[0]}" against "{names[1]}" within their error bounds', *qs)
+    value, unit = out
+    return _settle(value, unit, max(abs(a[0] - value) for a in answers), qs)  # type: ignore[arg-type]
+
+
 # ---------------------------------------------------------------- one node
 
 
@@ -1086,6 +1154,8 @@ def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value:
     if op in ("eq", "ne") and (isinstance(args[0], bool) != isinstance(args[1], bool)):
         raise Refusal(f"{op} compares like with like, and one of {names[0]!r}, {names[1]!r} is true/false and the other a number.", kind="type_mismatch")
     qs = _numbers(op, args, names)
+    if family != ROUNDING and T.involved(op, [q.unit for q in qs], node.unit):
+        return _temperature(node, qs)  # a temperature on degC or degF: temperature.py
     if family == "comparison":
         return _compare(op, qs[0], qs[1], names)
     if family == ARITHMETIC:
@@ -1160,6 +1230,14 @@ def values_json(ev: Evaluation) -> list[dict[str, Any]]:
     return out
 
 
+def exactness(ev: Evaluation) -> str:
+    """What "exact" means in an answer: exact for these inputs, and, when any
+    value is a rounded one, that those values are not exact."""
+    if any(isinstance(v, Quantity) and v.rounding is not None for v in ev.values.values()):
+        return EXACT_BUT_ROUNDED
+    return EXACT_FOR_THESE_INPUTS
+
+
 def evaluation_json(ev: Evaluation) -> dict[str, Any]:
     """What a reply says about an evaluation. An answer too large for the
     host's reply budget, or one whose writing passes the deadline, is itself
@@ -1169,7 +1247,12 @@ def evaluation_json(ev: Evaluation) -> dict[str, Any]:
             values = values_json(ev)
         except LimitExceeded as e:
             return {"status": "refused", "refused": e.refusal, "result": None, "values": None, "next": STOPPED_NEXT}
-        return {"status": "ok", "result": {"node": ev.graph.result, **value_json(ev.values[ev.graph.result])}, "values": values}
+        return {
+            "status": "ok",
+            "result": {"node": ev.graph.result, **value_json(ev.values[ev.graph.result])},
+            "values": values,
+            "exactness": exactness(ev),
+        }
     try:
         values = values_json(ev)
     except LimitExceeded:

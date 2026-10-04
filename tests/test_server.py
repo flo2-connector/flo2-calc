@@ -59,8 +59,47 @@ def test_an_unknown_unit_reaches_the_agent_as_a_malformed_call_with_its_reason()
 
 
 def test_a_near_miss_spelling_reaches_the_agent_with_the_spelling_to_use():
-    reason = reason_of(one("evaluate_graph", {"graph": graph(inp("a", "2 MM"))}))
-    assert 'Write "mm"' in reason
+    reason = reason_of(one("evaluate_graph", {"graph": graph(inp("a", "2 khz"))}))
+    assert 'Write "kHz"' in reason
+
+
+@pytest.mark.parametrize("text, never", [("2 MV", 'Write "mV"'), ("2 PF", 'Write "pF"'), ("2 MM", 'Write "mm"'), ("2 Nm", 'Write "nm"')])
+def test_a_case_that_could_change_a_size_reaches_the_agent_with_no_hint(text, never):
+    """Round 1, q022: 0.1.0 answered "mJ" with 'Write "MJ"', 10^9 too large."""
+    reason = reason_of(one("evaluate_graph", {"graph": graph(inp("a", text))}))
+    assert never not in reason and "Write" not in reason
+    assert "case-sensitive" in reason
+
+
+def test_a_millijoule_is_a_unit_now():
+    answer = answer_of(one("evaluate_graph", {"graph": graph(inp("e", "5.875 mJ"), op("j", "convert", "e", unit="J"))}))
+    assert answer["result"]["value"] == "0.005875 J"
+
+
+def test_two_currencies_reach_the_agent_as_a_refusal_naming_both():
+    answer = answer_of(one("evaluate_graph", {"graph": graph(inp("a", "987.50 USD"), inp("b", "120 EUR"), op("s", "add", "a", "b"))}))
+    assert answer["status"] == "refused" and answer["refused"]["units"] == ["USD", "EUR"]
+    assert "no exchange rates" in answer["refused"]["reason"]
+
+
+def test_a_bare_c_reaches_the_agent_pointing_at_degc():
+    reason = reason_of(one("evaluate_graph", {"graph": graph(inp("t", "25 C"))}))
+    assert reason.startswith("Malformed call. graph.nodes[0].value:")
+    assert '"degC"' in reason and '"coulomb"' in reason
+
+
+def test_an_expression_typed_as_a_value_reaches_the_agent_as_one():
+    reason = reason_of(one("evaluate_graph", {"graph": graph(inp("a", "3 + * 4"))}))
+    assert "looks like an expression" in reason and "graph of nodes" in reason
+
+
+def test_every_answer_says_its_values_are_exact_for_these_inputs():
+    answer = answer_of(one("evaluate_graph", {"graph": graph(inp("a", "0.1"), inp("b", "0.2"), op("s", "add", "a", "b"))}))
+    assert answer["exactness"].startswith("Exact for these inputs")
+    added = answer_of(one("add_node", {"node": inp("a", "1/3")}))
+    assert added["exactness"] == answer["exactness"]
+    recorded = answer_of(one("record_computation", {"graph": graph(inp("a", "1/3", "t")), "name": "third"}))
+    assert recorded["exactness"] == answer["exactness"]
 
 
 def test_division_by_zero_reaches_the_agent_naming_the_node():

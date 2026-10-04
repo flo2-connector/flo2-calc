@@ -10,6 +10,10 @@ A decision that rests on a number should carry the computation that produced it,
 open it and check it. flo2-calc does that computation exactly, with units, and hands back a record of it. Do the
 arithmetic there, not in your head: a model's arithmetic is a guess that looks like an answer.
 
+"Exactly" means **exact for these inputs**: every value follows exactly from the inputs as you wrote them, and is no
+more accurate than they are. If you type 3.14159265 for pi, flo2-calc takes that decimal as the number, so the
+result is exact for your decimal, not for pi. Say so when you quote it.
+
 ## When to use it
 
 Use flo2-calc when a decision, a trade or a limit turns on something computed:
@@ -38,6 +42,14 @@ with that helper as its source.
 2. **Write every number as text with its unit**, spelled as the design spells units: `"1.4 mm"`, `"3.3 V"`,
    `"20 mA"`, `"12 g"`. Write a plain number as text too (`"0.1"`, `"1/3"`), because a JSON `0.1` is refused: it
    arrives as a binary float.
+   - A value is **one** number. Never type arithmetic inside it (`"3 + 4"`, `"2^10"`): make each operation a node.
+   - **Temperatures:** `"25 degC"`, `"77 degF"` or `"298.15 K"`. A change of temperature is `"5 delta_degC"`, or a
+     degree inside a compound unit (`"2.5 degC/W"`). Never write a bare `C` or `F`: flo2-calc refuses them, because
+     they could be coulombs or farads. Write `coulomb` or `farad` when you mean those.
+   - **Money:** the ISO 4217 code, `"987.50 USD"`. flo2-calc holds no exchange rates, so it refuses to add USD to
+     EUR. To convert, give the rate as an input with its date and source,
+     `{"id": "rate", "value": "0.92 EUR/USD", "source": "ECB reference rate, 2026-10-02"}`, and multiply by it.
+   - **Gallons:** `gal_us` or `gal_imp`. A bare `gal` is refused, because it is two different units.
 3. **Evaluate it.**
    - `evaluate_graph` takes the whole graph in one call. It returns the result and every node's value.
    - `add_node` builds the graph one node at a time, when you want to see each value as you go. Pass back the
@@ -57,7 +69,9 @@ with that helper as its source.
    - A `"status": "refused"` reply names the node, the operation and why. For example, `add cannot combine mm and g`
      means the computation is wrong, not the calculator. Tell the person what did not add up.
    - A "Malformed call" error names the field to fix: an unknown unit, a missing node, a cycle.
-   - A near-miss unit says what to write instead (`MM` gives "write mm").
+   - A near-miss unit may say what to write instead (`khz` gives `Write "kHz"`). Units are case-sensitive, and a
+     prefix's case is its size: `mJ` is a millijoule and `MJ` a megajoule. When flo2-calc gives no hint, write the
+     unit you mean yourself. Never change its prefix to get past the refusal.
    - `"kind": "undecidable"` means a rounded value's error bound straddles the answer: `sqrt(2) * sqrt(2) = 2` cannot be
      told. Ask for more `digits`, or compute it another way (compare the exact squares instead). Never decide it
      yourself.
@@ -109,7 +123,10 @@ When flo2-calc is reached through flo2's `use_helper_tool`, the steps are the sa
 Say what was computed in the person's terms: "the fiber needs 1.4 mm to bend, the cavity gives 2 mm, so there is
 0.6 mm to spare against the 0.5 mm you wanted". Do not say "graph" or "node" to them.
 
-- An exact value whose decimal does not end is written rounded with its exact fraction beside it (`"exact": "40/9 h"`).
-  Quote the rounded text to the person; the record keeps the exact one.
-- A value labelled `"rounded"` is not exact. Say so, with its precision: "the standard deviation is 0.2302 mm (rounded;
-  correct to 30 digits)". Quote no more digits than the person needs, and never call it exact.
+- An exact value whose decimal does not end is written rounded with its exact fraction beside it (`"exact": "40/9 h"`):
+  the exact value for these inputs. Quote the rounded text to the person; the record keeps the exact one. Never call a
+  result exact beyond its inputs: a result from a measured value is exact for that value, and no more accurate than it
+  is. Use the `pi` and `e` operators rather than typing their digits.
+- A value labelled `"rounded"` is not exact, and the reply's `exactness` says so. Say so too, with its precision: "the
+  standard deviation is 0.2302 mm (rounded; correct to 30 digits)". Quote no more digits than the person needs, and
+  never call it exact.

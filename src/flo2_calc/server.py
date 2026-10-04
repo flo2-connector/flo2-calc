@@ -14,7 +14,11 @@ nothing anywhere.
 
 REPLIES. One text block of JSON, then, for record_computation, the record as
 an embedded resource `calcfile:///<name>.calc.json` (application/json). flo2
-reads each text block as JSON and keeps each resource as a file.
+reads each text block as JSON and keeps each resource as a file. A reply with
+a result carries "exactness": the result is exact for these inputs, as
+written, and no more accurate than they are (numbers.EXACT_FOR_THESE_INPUTS),
+except any value labelled "rounded", which is not exact
+(numbers.EXACT_BUT_ROUNDED).
 
 LIMITS (limits.py). Every call runs under the host's limits, set at start-up:
 a deadline, a digits budget for exact numbers, and a reply budget. Passing one
@@ -53,18 +57,19 @@ from flo2_calc import __version__
 from flo2_calc import limits as L
 from flo2_calc import record as R
 from flo2_calc.errors import CallError, LimitExceeded
-from flo2_calc.evaluator import OPS, STOPPED_NEXT, evaluate, evaluation_json, read_graph, read_nodes
+from flo2_calc.evaluator import OPS, STOPPED_NEXT, evaluate, evaluation_json, exactness, read_graph, read_nodes
 
 INSTRUCTIONS = (
     "flo2-calc does exact math and logic for the decisions in a design, so a decision can carry the computation "
     "that supports it instead of a number the model worked out in its head. Compose a graph of named nodes: inputs "
     '("value": "1.4 mm", with a "source") and operations ("op": "sub", "args": ["a", "b"]). Arithmetic is exact '
-    "(no binary floats), units are carried and checked, and units that measure different things are refused, "
-    "never stripped. pi, e, roots, exp, ln, log10, non-whole powers, trigonometry (sin to atan2, in deg or rad), "
-    "deg-rad conversion and the normal, chi-square and Student-t distributions give ROUNDED values: correctly "
-    'rounded to 30 significant digits (or a node\'s "digits"), labelled "rounded" with "error_at_most", never '
-    "called exact, and exact wherever the result is rational. A comparison, ceil, floor or round of a rounded value "
-    "is answered only when its error bound decides it. evaluate_graph takes a whole graph; add_node builds one node at a time; record_computation "
+    "for the inputs as written (no binary floats; a typed 3.14159 is taken as that decimal, not as pi), units are "
+    "carried and checked, and units that measure different things are refused, never stripped. pi, e, roots, exp, "
+    "ln, log10, non-whole powers, trigonometry (sin to atan2, in deg or rad), deg-rad conversion and the normal, "
+    "chi-square and Student-t distributions give ROUNDED values: correctly rounded to 30 significant digits (or a "
+    'node\'s "digits"), labelled "rounded" with "error_at_most", never called exact, and exact wherever the result '
+    "is rational. A comparison, ceil, floor or round of a rounded value is answered only when its error bound "
+    "decides it. evaluate_graph takes a whole graph; add_node builds one node at a time; record_computation "
     "returns a computation record, a .calc.json file to link to the decision it supports; rerun_record checks that "
     "a record still reproduces. flo2-calc stands alone: it never calls reflow2 or anything else. Linking a record "
     "to a design is the agent's job, with the design tool's own tools."
@@ -73,8 +78,12 @@ INSTRUCTIONS = (
 GRAPH_HELP = (
     'The computation graph: {"nodes": [...], "result": "<id>"} ("result" defaults to the last node). An input '
     'node is {"id": "bend", "value": "1.4 mm", "source": "fiber datasheet"}: the value is text, a number with its '
-    'unit as reflow2 spells it (mm, g, V, mA, ...), a plain number ("0.1", "1/3", or a JSON integer), or true/false; '
-    'the source is free text or {"design_node": "con:..."} naming a node in a reflow2 design (recorded, never '
+    'unit as reflow2 spells it (mm, g, V, mA, ...), a plain number ("0.1", "1/3", or a JSON integer), or true/false. '
+    'A value is one number: build arithmetic as operation nodes, never inside a value. Temperatures are K, degC or '
+    'degF ("25 degC"), and a change of temperature is delta_degC or delta_degF; a bare C or F is refused (write '
+    'coulomb or farad for those). Money is an ISO 4217 code ("12.50 USD"); currencies are never converted except by '
+    'a rate you give as an input with its source ("0.92 EUR/USD"). '
+    'The source is free text or {"design_node": "con:..."} naming a node in a reflow2 design (recorded, never '
     'resolved). An operation node is {"id": "margin", "op": "sub", "args": ["cavity", "bend"]}; "convert" also '
     'takes "unit", as do asin, acos, atan and atan2 ("deg" or "rad", the unit of the angle they give). A rounded '
     'operator may take "digits" (1 to 1000 significant digits; 30 when left out). ceil, floor and round may take '
@@ -159,11 +168,12 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
         title="Evaluate a computation graph",
         annotations=reading,
         description=(
-            "Evaluate a whole computation graph in one call, exactly, with units. Returns the result and every "
-            "node's value in the order evaluated; a value from pi, e, a root, exp, a logarithm, trigonometry or a "
-            'distribution is labelled "rounded", with its digits and error bound. A computation that cannot be done '
-            "(units that measure different things, division by zero, a number where true/false is needed, a "
-            'comparison a rounded value\'s error bound cannot decide) comes back as status "refused", naming '
+            "Evaluate a whole computation graph in one call, exactly for the inputs as written, with units. Returns "
+            "the result and every node's value in the order evaluated, and says what exact means (\"exactness\"). A "
+            "value from pi, e, a root, exp, a logarithm, trigonometry or a distribution is labelled \"rounded\", with "
+            "its digits and error bound, and is not exact. A computation that cannot be done (units that measure "
+            "different things, division by zero, a number where true/false is needed, a comparison a rounded value's "
+            'error bound cannot decide) comes back as status "refused", naming '
             "the node, the operation and why, with no result. A graph that cannot be read is an error naming the field."
         ),
     )
@@ -209,6 +219,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                 "added": {"node": grown.result, **{k: v for k, v in answer["result"].items() if k != "node"}},
                 "values": answer["values"],
                 "graph": grown.to_json(),
+                "exactness": answer["exactness"],
             }
         else:
             answer["graph"] = {"nodes": [n for n in before]}
@@ -320,6 +331,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                     "result": rec["result"],
                     "record": _record_facts(rec, data, file_name),
                     "values": rec["values"],
+                    "exactness": exactness(ev),
                     "next": "Link this record to the decision it supports in the design (an Artifact that documents "
                     "the decision), and quote its result there. rerun_record checks it any time later.",
                 }
