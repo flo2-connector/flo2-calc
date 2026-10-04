@@ -1,0 +1,19 @@
+{
+  "name": "flo2-calc",
+  "version": "0.1.0",
+  "description": "Exact math and logic for the decisions in a design: compose a computation graph of arithmetic, logic and comparisons with units checked, get every value exactly, and keep a re-runnable computation record a decision can cite. Stands alone; no other server needed.",
+  "author": {
+    "name": "Anthony Sligar"
+  },
+  "homepage": "https://github.com/flo2-connector/flo2-calc",
+  "repository": "https://github.com/flo2-connector/flo2-calc",
+  "license": "Apache-2.0",
+  "keywords": [
+    "calculator",
+    "units",
+    "exact-arithmetic",
+    "design-decisions",
+    "mcp",
+    "reflow2"
+  ]
+}

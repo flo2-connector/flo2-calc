@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "flo2-calc": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/flo2-connector/flo2-calc",
+        "flo2-calc",
+        "--root",
+        "."
+      ]
+    }
+  }
+}

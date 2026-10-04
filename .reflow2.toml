@@ -1,0 +1,7 @@
+# .reflow2.toml — which design this repository implements, and where it lives.
+# Committed, and it holds no secret. reflow2 0.73.0 and later read it: a session
+# started in this folder attaches to this design and never opens a local store.
+# flo2-calc's design, "reflow2 calculator", is hosted on flo2.io.
+[design]
+id      = "0bee0c00b35845f6"
+address = "https://api.flo2.io/g/0bee0c00b35845f6/mcp"
