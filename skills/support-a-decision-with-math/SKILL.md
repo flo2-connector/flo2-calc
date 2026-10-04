@@ -58,6 +58,20 @@ with that helper as its source.
 7. **Check it later** with `rerun_record`. Pass the record itself, or its `path` when it was saved.
    - `reproduces: true` means the record is intact and its graph still gives every value it holds.
    - Anything else names each difference. Say so before relying on the number.
+8. **When a calculation passes the host's limits**, the reply is `"status": "refused"` with
+   `"kind": "exceeds_limits"`.
+   - The refusal names the limit (a deadline, `max_digits` or `max_reply_bytes`), its value, the node reached and how
+     large the numbers grew. It is the machine's limit, not a fault in the math. Never shrink the inputs, round them
+     or split the computation to slip under it.
+   - From `record_computation` the record still comes back, marked `"status": "not_computed"`. It holds the graph,
+     the inputs with their sources and the limit it passed, but no result. Keep it and link it to the decision as you
+     would any record. Tell the person the number is not computed yet, and what it needs (the reply's `next` says).
+   - To complete it, pass it as `record` to `record_computation` on a flo2-calc with more room, such as one started
+     with a higher `--max-digits` or `--deadline`. The completed record has the same name, graph and inputs, now
+     with the result. It is exactly the record a direct computation would give. Link it in place of the
+     not-yet-computed one.
+   - `rerun_record` on a not-yet-computed record says it has no result yet, and whether this flo2-calc has the room to
+     complete it.
 
 ## On flo2.io (a helper beside the person's design)
 
@@ -67,6 +81,10 @@ When flo2-calc is reached through flo2's `use_helper_tool`, the steps are the sa
   as a file in the person's design, every version, and hands you its name and a link. Give the person the link.
 - Link that kept file to the decision with the design tools (`use_design_tool`), as in step 6.
 - To re-check a record, pass its content to `rerun_record`.
+- flo2.io's limits are lower than a laptop's: 20 s a call, 2,000 digits, 2 MiB a reply. A calculation past them
+  comes back as a not-yet-computed record, kept in the design like any other. The person, or an agent on their
+  machine, completes it there with the standalone flo2-calc (step 8). Then link the completed record to the decision
+  in its place.
 
 ## Talking about it
 

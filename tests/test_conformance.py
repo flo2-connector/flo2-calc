@@ -106,12 +106,23 @@ def test_initialize_answers_flo2s_revision_offers_tools_and_names_itself(plug):
     assert result["serverInfo"]["name"] == "flo2-calc"
     assert result["serverInfo"]["version"] == __version__
     assert "flo2-calc" in result.get("instructions", "")
+    assert "limits" in result["instructions"] and "not-yet-computed record" in result["instructions"]
+
+
+def test_the_four_tools_and_their_classes_are_the_ones_flo2s_door_holds():
+    """flo2's calc door is written against exactly these names and read/write
+    classes (a fail-closed allow-list): the host-set limits and the
+    not-yet-computed record changed neither."""
+    assert TOOLS == ("evaluate_graph", "add_node", "record_computation", "rerun_record")
+    assert READ_ONLY == {"evaluate_graph": True, "add_node": True, "record_computation": False, "rerun_record": True}
 
 
 def test_tools_list_is_exactly_the_four_tools_each_classed(plug):
     tools = plug.send("tools/list", {})["result"]["tools"]
     names = [t["name"] for t in tools]
     assert sorted(names) == sorted(TOOLS)
+    record_args = next(t for t in tools if t["name"] == "record_computation")["inputSchema"]["properties"]
+    assert {"graph", "name", "supports", "output_path", "record"} <= set(record_args), "a call that worked before still works"
     for t in tools:
         assert re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*", t["name"]), f"{t['name']} is lower_snake_case"
         assert isinstance(t.get("inputSchema"), dict) and t["inputSchema"].get("type") == "object", t["name"]

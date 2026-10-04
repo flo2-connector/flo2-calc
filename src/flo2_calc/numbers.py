@@ -22,17 +22,17 @@ already lost. Write it as text ("0.1").
 from __future__ import annotations
 
 import re
-from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
+from decimal import MAX_EMAX, MIN_EMIN, ROUND_HALF_EVEN, Context, Decimal
 from fractions import Fraction
+
+from flo2_calc.limits import digits, ten_to
 
 SIGNIFICANT_DIGITS = 30
 EXACT_DIGITS_MAX = 40
 MAX_EXPONENT = 1000
 MAX_NUMBER_TEXT = 80
-# A value whose numerator or denominator outgrows this many bits is refused
-# rather than carried: no decision rests on a 6,000-digit number, and an
-# unbounded one could exhaust the memory of the process it runs in.
-MAX_BITS = 20_000
+# How large a value may grow is the HOST's to set, not this file's: the digits
+# budget in limits.py (--max-digits), checked by the guard on every value.
 
 ARITHMETIC_NOTE = (
     "Exact rational arithmetic: no binary floating point. + - * / and integer powers are exact, and so is "
@@ -64,18 +64,9 @@ def parse_number(text: str) -> Fraction:
     raise ValueError(f'"{t}" is not a number; write a decimal like "0.1" or "-2.5e3", or a fraction like "1/3"')
 
 
-def check_size(q: Fraction) -> None:
-    """Raise OverflowError when a value is too large to carry exactly."""
-    if q.numerator.bit_length() > MAX_BITS or q.denominator.bit_length() > MAX_BITS:
-        raise OverflowError(
-            f"the value has grown past {MAX_BITS} bits in its numerator or denominator, "
-            "too large to carry exactly"
-        )
-
-
 def _plain(d: Decimal) -> str:
     """A finite Decimal as text: plain notation near 1, scientific far from it."""
-    d = d.normalize(Context(prec=10_000))
+    d = d.normalize(Context(prec=10_000, Emax=MAX_EMAX, Emin=MIN_EMIN))
     if d.is_zero():
         return "0"
     sign, digits, _exp = d.as_tuple()
@@ -89,26 +80,71 @@ def _plain(d: Decimal) -> str:
     return text
 
 
+def _power_of_five(n: int) -> int | None:
+    """j when n == 5 ** j, else None. Sized from n's bit length, never by
+    dividing by 5 once per factor (a 20,000-digit denominator would take tens of
+    thousands of divisions)."""
+    if n == 1:
+        return 0
+    if n % 5:
+        return None
+    # 5^j has floor(j * log2(5)) + 1 bits; 2321929/1000000 is just over log2(5).
+    j = ((n.bit_length() - 1) * 1_000_000) // 2_321_929
+    for candidate in (j, j + 1, j + 2):
+        if 5**candidate == n:
+            return candidate
+    return None
+
+
 def _short_terminating(q: Fraction) -> Decimal | None:
     """q as an exact Decimal when its decimal expansion ends within
-    EXACT_DIGITS_MAX significant digits; None otherwise."""
-    den = q.denominator
-    twos = fives = 0
-    while den % 2 == 0:
-        den //= 2
-        twos += 1
-    while den % 5 == 0:
-        den //= 5
-        fives += 1
-    if den != 1:
+    EXACT_DIGITS_MAX significant digits; None otherwise. It never writes a large
+    integer out as text: a 20,000-digit value is judged from its size."""
+    num, den = q.numerator, q.denominator
+    twos = (den & -den).bit_length() - 1  # the factors of 2 in den
+    fives = _power_of_five(den >> twos)
+    if fives is None:  # den has a prime factor other than 2 and 5: the decimal never ends
         return None
+    exact = Context(prec=EXACT_DIGITS_MAX + 2, Emax=MAX_EMAX, Emin=MIN_EMIN)
+    if den == 1:
+        n = abs(num)
+        d = digits(n)
+        if d <= EXACT_DIGITS_MAX:
+            return Decimal(num)
+        drop = d - EXACT_DIGITS_MAX  # the trailing zeros it needs to be short
+        if (n & -n).bit_length() - 1 < drop:  # fewer factors of 2 than that: fewer zeros
+            return None
+        kept, rest = divmod(n, ten_to(drop))
+        if rest:
+            return None
+        return Decimal(kept if num > 0 else -kept).scaleb(drop, exact)
+    # q = m / 10^k with m = num * 10^k / den. num shares no factor with den, so
+    # m ends in no zero, and its digits are exactly q's significant digits.
     k = max(twos, fives)
-    scaled = q.numerator * (10**k // q.denominator)
-    significant = str(abs(scaled)).rstrip("0") or "0"
-    if len(significant) > EXACT_DIGITS_MAX:
+    at_least_bits = abs(num).bit_length() + (k - twos) + ((k - fives) * 2_321_928) // 1_000_000 - 1
+    if at_least_bits > 1 and ((at_least_bits - 1) * 30_102) // 100_000 + 1 > EXACT_DIGITS_MAX:
         return None
-    # Built from its digits, so no context precision can round it.
-    return Decimal(scaled).scaleb(-k, Context(prec=EXACT_DIGITS_MAX + len(str(abs(scaled)))))
+    m = num * (1 << (k - twos)) * 5 ** (k - fives)
+    if digits(m) > EXACT_DIGITS_MAX:
+        return None
+    return Decimal(m).scaleb(-k, exact)
+
+
+def _rounded(q: Fraction) -> Decimal:
+    """q rounded half-even to SIGNIFICANT_DIGITS digits. Divides only as far as
+    those digits need (a short quotient of two long numbers is quick), and keeps
+    a sticky digit for whatever remains, so the rounding is exact."""
+    num, den = abs(q.numerator), q.denominator
+    # Scale so the quotient has SIGNIFICANT_DIGITS + 2 or + 3 digits.
+    shift = SIGNIFICANT_DIGITS + 2 - (digits(num) - digits(den))
+    if shift >= 0:
+        quotient, rest = divmod(num * ten_to(shift), den)
+    else:
+        quotient, rest = divmod(num, den * ten_to(-shift))
+    sticky = 1 if rest else 0
+    raw = Decimal((0 if q >= 0 else 1, tuple(int(c) for c in str(quotient * 10 + sticky)), -(shift + 1)))
+    ctx = Context(prec=SIGNIFICANT_DIGITS, rounding=ROUND_HALF_EVEN, Emax=MAX_EMAX, Emin=MIN_EMIN)
+    return ctx.plus(raw)
 
 
 def format_number(q: Fraction) -> tuple[str, str | None]:
@@ -117,8 +153,4 @@ def format_number(q: Fraction) -> tuple[str, str | None]:
     exact = _short_terminating(q)
     if exact is not None:
         return _plain(exact), None
-    with localcontext() as ctx:
-        ctx.prec = SIGNIFICANT_DIGITS
-        ctx.rounding = ROUND_HALF_EVEN
-        rounded = Decimal(q.numerator) / Decimal(q.denominator)
-    return _plain(rounded), f"{q.numerator}/{q.denominator}"
+    return _plain(_rounded(q)), f"{q.numerator}/{q.denominator}"

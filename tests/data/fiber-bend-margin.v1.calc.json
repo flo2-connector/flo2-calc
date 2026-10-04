@@ -1,0 +1,102 @@
+{
+  "arithmetic": "Exact rational arithmetic: no binary floating point. + - * / and integer powers are exact, and so is every unit conversion. A value whose decimal ends (at most 40 significant digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact value is given beside it as a fraction. Comparisons use exact values.",
+  "content_hash": "sha256:cdfc74f494c0d675e3f33c008c8857a5b73316e6c8a5c60191bdaedf6c97ddda",
+  "graph": {
+    "nodes": [
+      {
+        "id": "cavity",
+        "source": {
+          "design": "83d2b0775fe79af6",
+          "design_node": "con:cavity-depth"
+        },
+        "value": "2 mm"
+      },
+      {
+        "id": "bend",
+        "source": "fiber datasheet: minimum bend radius",
+        "value": "1.4 mm"
+      },
+      {
+        "args": [
+          "cavity",
+          "bend"
+        ],
+        "id": "margin",
+        "op": "sub"
+      },
+      {
+        "id": "needed",
+        "source": "assumed",
+        "value": "0.5 mm"
+      },
+      {
+        "args": [
+          "margin",
+          "needed"
+        ],
+        "id": "fits",
+        "op": "ge"
+      }
+    ],
+    "result": "fits"
+  },
+  "inputs": [
+    {
+      "id": "cavity",
+      "source": {
+        "design": "83d2b0775fe79af6",
+        "design_node": "con:cavity-depth"
+      },
+      "unit": "mm",
+      "value": "2 mm"
+    },
+    {
+      "id": "bend",
+      "source": "fiber datasheet: minimum bend radius",
+      "unit": "mm",
+      "value": "1.4 mm"
+    },
+    {
+      "id": "needed",
+      "source": "assumed",
+      "unit": "mm",
+      "value": "0.5 mm"
+    }
+  ],
+  "name": "fiber-bend-margin",
+  "produced_by": {
+    "flo2_calc": "0.1.0",
+    "pint": "0.26.1"
+  },
+  "record_format": "flo2-calc computation record",
+  "result": {
+    "node": "fits",
+    "value": "true"
+  },
+  "schema_version": 1,
+  "supports": {
+    "design_node": "dec:fiber-route"
+  },
+  "values": [
+    {
+      "node": "cavity",
+      "value": "2 mm"
+    },
+    {
+      "node": "bend",
+      "value": "1.4 mm"
+    },
+    {
+      "node": "margin",
+      "value": "0.6 mm"
+    },
+    {
+      "node": "needed",
+      "value": "0.5 mm"
+    },
+    {
+      "node": "fits",
+      "value": "true"
+    }
+  ]
+}

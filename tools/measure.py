@@ -7,9 +7,13 @@ Starts ONE container of the image under flo2-tool-sandbox's flags (no network,
 a read-only root, a 64 MB /tmp, user 65534, no capabilities, one CPU, 64
 processes, the memory cap with no swap), drives a session over stdio that is
 heavier than a decision needs (a 500-node graph, records, re-runs, refusals),
-then reads the container's cgroup memory.peak before closing it. Prints one
-JSON line. Needs docker, the image, the mcp client (pip install '.[test]'),
-and a cgroup v2 host that exposes memory.peak.
+then RUNAWAY calculations that only the image's limits stop (a huge power, a
+chain of squarings, the heaviest graph its digits budget allows, sent whole and
+recorded), then reads the container's cgroup memory.peak before closing it.
+Prints one JSON line: every runaway call must come back as a normal reply that
+names its limit, and the container must still answer afterwards. Needs docker,
+the image, the mcp client (pip install '.[test]'), and a cgroup v2 host that
+exposes memory.peak.
 """
 
 from __future__ import annotations
@@ -43,6 +47,22 @@ def heavy_graph(n: int = 500) -> dict:
     return {"nodes": nodes}
 
 
+def runaway_graphs() -> dict[str, dict]:
+    """Calculations past any sensible limit: each must be STOPPED, with its reason."""
+    nines = "9" * 80
+    squarings = [{"id": "x0", "value": "123456789012345678901234567890", "source": "measure.py"}]
+    squarings += [{"id": f"x{i}", "op": "mul", "args": [f"x{i - 1}", f"x{i - 1}"]} for i in range(1, 31)]
+    heaviest = [{"id": "x0", "value": nines, "source": "measure.py"}, {"id": "e", "value": "23", "source": "measure.py"},
+                {"id": "y0", "op": "pow", "args": ["x0", "e"]}, {"id": "one", "value": "1/7", "source": "measure.py"}]
+    heaviest += [{"id": f"y{i}", "op": "add", "args": [f"y{i - 1}", "one"]} for i in range(1, 497)]
+    return {
+        "huge_power": {"nodes": [{"id": "x", "value": nines}, {"id": "e1", "value": "250"}, {"id": "y", "op": "pow", "args": ["x", "e1"]},
+                                 {"id": "e2", "value": "1000"}, {"id": "z", "op": "pow", "args": ["y", "e2"]}]},
+        "squarings": {"nodes": squarings},
+        "heaviest_allowed": {"nodes": heaviest},
+    }
+
+
 async def drive(command: list[str], name: str) -> dict:
     params = StdioServerParameters(command=command[0], args=command[1:])
     started = time.perf_counter()
@@ -63,10 +83,27 @@ async def drive(command: list[str], name: str) -> dict:
             await s.call_tool("evaluate_graph", {"graph": {"nodes": [{"id": "a", "value": "2 mm"}, {"id": "b", "value": "3 g"}, {"id": "s", "op": "add", "args": ["a", "b"]}]}})
             calls += 1
         seconds = time.perf_counter() - started
+        runaway: dict[str, str] = {}
+        for label, g in runaway_graphs().items():
+            for tool, args in (("evaluate_graph", {"graph": g}), ("record_computation", {"graph": g, "name": label})):
+                if tool == "record_computation" and label != "heaviest_allowed":
+                    continue
+                r = await s.call_tool(tool, args)
+                calls += 1
+                assert not r.is_error, r.content[0].text[:300]
+                answer = json.loads(r.content[0].text)
+                said = answer["status"]
+                if said == "refused":
+                    said = f"stopped at {answer['refused']['limit']['name']}" if answer["refused"]["kind"] == "exceeds_limits" else said
+                    if answer.get("record"):
+                        said += f", record {answer['record']['status']}"
+                runaway[f"{tool}:{label}"] = said
+        alive = json.loads((await s.call_tool("evaluate_graph", {"graph": {"nodes": [{"id": "a", "value": "0.1"}, {"id": "b", "value": "0.2"}, {"id": "s", "op": "add", "args": ["a", "b"]}]}})).content[0].text)
+        assert alive["result"]["value"] == "0.3", "the container answered after the runaway calls"
         cid = subprocess.run(["docker", "ps", "-q", "--no-trunc", "--filter", f"name={name}"], capture_output=True, text=True).stdout.strip()
         peak_file = Path(f"/sys/fs/cgroup/system.slice/docker-{cid}.scope/memory.peak")
         peak = int(peak_file.read_text()) if cid and peak_file.exists() else None
-        return {"calls": calls, "seconds": round(seconds, 2), "status": "ok" if not r.is_error else "error", "container": cid[:12], "peak_bytes": peak}
+        return {"calls": calls, "seconds": round(seconds, 2), "runaway": runaway, "alive_after": True, "container": cid[:12], "peak_bytes": peak}
 
 
 def main() -> None:

@@ -32,6 +32,12 @@ that cannot be computed stops the evaluation with a Refusal naming that node,
 its operation and why. Every value computed before it is still reported.
 The whole-graph path and the node-by-node path (add_node) both end here, in
 `evaluate`, which is why they give the same result.
+
+LIMITS. `evaluate` runs under a limits.Guard, the host's limits for one call:
+the deadline is checked before every node and after every step of an
+operation with many arguments; every input, partial result and value is held
+to the digits budget; a power is sized before it is computed. Passing one
+stops the evaluation like a refusal, of kind "exceeds_limits" (limits.py).
 """
 
 from __future__ import annotations
@@ -42,8 +48,9 @@ from fractions import Fraction
 from typing import Any
 
 from flo2_calc import units as U
-from flo2_calc.errors import CallError, Refusal, at
-from flo2_calc.numbers import NUMBER_THEN_REST, check_size, format_number, parse_number
+from flo2_calc import limits as L
+from flo2_calc.errors import CallError, LimitExceeded, Refusal, at
+from flo2_calc.numbers import MAX_NUMBER_TEXT, NUMBER_THEN_REST, format_number, parse_number
 
 MAX_NODES = 500
 MAX_ARGS = 100
@@ -149,6 +156,7 @@ class Graph:
 @dataclass
 class Evaluation:
     graph: Graph
+    guard: L.Guard
     order: list[str] = field(default_factory=list)
     values: dict[str, Value] = field(default_factory=dict)
     refusal: dict[str, Any] | None = None
@@ -156,6 +164,11 @@ class Evaluation:
     @property
     def ok(self) -> bool:
         return self.refusal is None
+
+    @property
+    def stopped(self) -> bool:
+        """Stopped at one of the host's limits, rather than refused for a reason in the graph."""
+        return self.refusal is not None and self.refusal.get("kind") == "exceeds_limits"
 
     def result_value(self) -> Value | None:
         return self.values.get(self.graph.result) if self.ok else None
@@ -186,6 +199,8 @@ def parse_value(raw: Any, path: str) -> tuple[str, Value]:
     if isinstance(raw, bool):
         return ("true" if raw else "false"), raw
     if isinstance(raw, int):
+        if abs(raw) >= L.ten_to(MAX_NUMBER_TEXT):
+            raise CallError(path, f"a number is at most {MAX_NUMBER_TEXT} digits; this JSON integer is longer.")
         return str(raw), Quantity(Fraction(raw))
     if isinstance(raw, float):
         if raw.is_integer() and abs(raw) < 2**53:
@@ -408,7 +423,7 @@ def _in_unit_of(first: Quantity, other: Quantity, op: str) -> Fraction:
     return other.magnitude * U.conversion(other.unit, first.unit, op)
 
 
-def _apply(node: OpNode, args: list[Value]) -> Value:
+def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value:
     op, names = node.op, node.args
     family = OPS[op][0]
     if family == "logic":
@@ -434,7 +449,11 @@ def _apply(node: OpNode, args: list[Value]) -> Value:
         a, b = first.magnitude, _in_unit_of(first, qs[1], op)
         return {"eq": a == b, "ne": a != b, "lt": a < b, "le": a <= b, "gt": a > b, "ge": a >= b}[op]
     if op == "add":
-        return Quantity(sum((_in_unit_of(first, q, op) for q in qs[1:]), first.magnitude), first.unit)
+        total = first.magnitude
+        for i, q in enumerate(qs[1:], 2):  # step by step, each partial sum held to the budget
+            total = total + _in_unit_of(first, q, op)
+            guard.check_number(total, "sum" if i == len(qs) else f"partial sum (of the first {i} arguments)")
+        return Quantity(total, first.unit)
     if op == "sub":
         return Quantity(first.magnitude - _in_unit_of(first, qs[1], op), first.unit)
     if op in ("min", "max"):
@@ -446,9 +465,10 @@ def _apply(node: OpNode, args: list[Value]) -> Value:
         return Quantity(abs(first.magnitude), first.unit)
     if op == "mul":
         mag, unit = first.magnitude, first.unit
-        for q in qs[1:]:
+        for i, q in enumerate(qs[1:], 2):  # step by step, each partial product held to the budget
             unit, scale = U.multiply(unit, q.unit)
             mag = mag * q.magnitude * scale
+            guard.check_number(mag, "product" if i == len(qs) else f"partial product (of the first {i} arguments)")
         return Quantity(mag, unit)
     if op == "div":
         divisor = qs[1]
@@ -472,26 +492,44 @@ def _apply(node: OpNode, args: list[Value]) -> Value:
         if first.magnitude == 0 and n == 0:
             raise Refusal("pow: zero to the power zero has no single agreed value, so flo2-calc does not pick one.", kind="undefined")
         unit, scale = U.power(first.unit, n)
-        return Quantity(first.magnitude**n * scale, unit)
+        base = first.magnitude
+        if scale != 1:
+            # A folded "%" (U.fold_percent): m^n * (1/100)^(k*n) is (m / 100^k)^n. Folding
+            # it into the base first keeps the base in lowest terms, so the size check
+            # below is of the power actually computed.
+            k = dict(first.unit)[U.PERCENT]
+            assert scale == Fraction(1, 100) ** (k * n)
+            base = base * Fraction(1, 100) ** k
+        guard.check_power(base, n)  # BEFORE computing: a huge power stalls inside one operation
+        return Quantity(base**n, unit)
     if op == "convert":
         assert node.unit is not None
         return Quantity(first.magnitude * U.conversion(first.unit, node.unit, op), node.unit)
     raise AssertionError(f"operator {op} has no evaluation")  # pragma: no cover
 
 
-def evaluate(graph: Graph) -> Evaluation:
-    ev = Evaluation(graph)
+def evaluate(graph: Graph, guard: L.Guard | None = None) -> Evaluation:
+    """Evaluate under `guard` (by default, a fresh one with the laptop limits)."""
+    guard = guard if guard is not None else L.Guard()
+    ev = Evaluation(graph, guard)
     nodes = graph.by_id()
-    for nid in evaluation_order(graph):
+    order = evaluation_order(graph)
+    for i, nid in enumerate(order):
         node = nodes[nid]
-        ev.order.append(nid)
-        if isinstance(node, InputNode):
-            ev.values[nid] = node.value
-            continue
         try:
-            value = _apply(node, [ev.values[a] for a in node.args])
+            guard.at(nid, node.op if isinstance(node, OpNode) else None, i, len(order))
+            ev.order.append(nid)
+            if isinstance(node, InputNode):
+                if isinstance(node.value, Quantity):
+                    guard.check_number(node.value.magnitude, "value")
+                ev.values[nid] = node.value
+                continue
+            value = _apply(node, [ev.values[a] for a in node.args], guard)
             if isinstance(value, Quantity):
-                check_size(value.magnitude)
+                guard.check_number(value.magnitude)
+        except LimitExceeded as e:
+            ev.refusal = e.refusal
+            return ev
         except Refusal as r:
             ev.refusal = {"node": nid, "op": node.op, "kind": r.kind, "reason": r.reason}
             if r.units:
@@ -501,12 +539,45 @@ def evaluate(graph: Graph) -> Evaluation:
             ev.refusal = {"node": nid, "op": node.op, "kind": "too_large", "reason": f"{node.op}: {e}."}
             return ev
         ev.values[nid] = value
+    guard.past_nodes()
     return ev
 
 
+STOPPED_NEXT = (
+    "This passed a limit of this host, not a rule of the math: nothing is wrong with the computation. "
+    "record_computation returns it as a not-yet-computed record, which flo2-calc on a machine with more room "
+    "(a higher limit) completes."
+)
+
+
+def values_json(ev: Evaluation) -> list[dict[str, str]]:
+    """Every value computed, in evaluation order, as replies write them. Writing
+    out a large value takes time and room, so each is counted against the
+    deadline and the reply budget as it is written (LimitExceeded)."""
+    out = []
+    for nid in ev.order:
+        if nid in ev.values:
+            entry = {"node": nid, **value_json(ev.values[nid])}
+            ev.guard.spend_reply(sum(len(v) for v in entry.values()) + 32)
+            out.append(entry)
+    return out
+
+
 def evaluation_json(ev: Evaluation) -> dict[str, Any]:
-    """What a reply says about an evaluation."""
-    values = [{"node": nid, **value_json(ev.values[nid])} for nid in ev.order if nid in ev.values]
+    """What a reply says about an evaluation. An answer too large for the
+    host's reply budget, or one whose writing passes the deadline, is itself
+    stopped there: a refusal of kind exceeds_limits, with no values."""
     if ev.ok:
+        try:
+            values = values_json(ev)
+        except LimitExceeded as e:
+            return {"status": "refused", "refused": e.refusal, "result": None, "values": None, "next": STOPPED_NEXT}
         return {"status": "ok", "result": {"node": ev.graph.result, **value_json(ev.values[ev.graph.result])}, "values": values}
-    return {"status": "refused", "refused": ev.refusal, "result": None, "values": values}
+    try:
+        values = values_json(ev)
+    except LimitExceeded:
+        values = None  # the values before the stop are too large to send: the refusal says why
+    answer = {"status": "refused", "refused": ev.refusal, "result": None, "values": values}
+    if ev.stopped:
+        answer["next"] = STOPPED_NEXT
+    return answer

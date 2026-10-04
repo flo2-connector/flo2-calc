@@ -24,9 +24,18 @@ RUN python -m venv /opt/flo2-calc \
 # need the network or a writable root at run time: HOME is /tmp (a tmpfs or
 # nothing), no bytecode is written, and no --root is given, so flo2-calc
 # writes no file: every record comes back inside its reply.
+#
+# THE LIMITS ARE flo2.io's PROFILE (README.md, "Limits"): a deadline of 20 s per
+# call (a third of the 60 s at which flo2's gateway stops a helper call), at
+# most 2,000 digits in any exact numerator or denominator, and a reply of at
+# most 2 MiB (the most flo2's door keeps of a calcfile in one reply). Inside a
+# 128m cap a runaway calculation is then stopped by flo2-calc, with its reason,
+# long before the sandbox would kill it. Anyone running the image elsewhere sets
+# their own: docker run -e FLO2_CALC_MAX_DIGITS=20000 ... (or the flags).
 FROM python:3.12-slim
 COPY --from=build /opt/flo2-calc /opt/flo2-calc
-ENV PATH=/opt/flo2-calc/bin:$PATH HOME=/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ENV PATH=/opt/flo2-calc/bin:$PATH HOME=/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+    FLO2_CALC_DEADLINE=20 FLO2_CALC_MAX_DIGITS=2000 FLO2_CALC_MAX_REPLY_BYTES=2097152
 RUN flo2-calc --version
 USER 65534:65534
 WORKDIR /tmp

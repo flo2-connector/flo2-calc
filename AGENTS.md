@@ -29,6 +29,18 @@
   - A mismatch is refused, naming the operation and both units.
   - An unknown spelling is refused, never guessed.
   - pint gives dimensions and exact factors; our code does the arithmetic.
+- **Host-set limits; a calculation never runs away**
+  (`req:a-calculation-past-the-hosts-limits-is-stopped-and-handed-on`, options (b), (c) and (d) of
+  `dec:idea-estimate-compute-before-calculating`; an up-front cost estimate, (a), is NOT built):
+  - The host sets a deadline, a digits budget and a reply budget at start-up (`limits.py`, README "Limits"). The
+    laptop defaults are in `limits.LAPTOP`, and flo2.io's profile is in `limits.FLO2_IO` and the `Dockerfile`'s
+    `ENV`.
+  - The evaluator checks them as it goes. A power is sized BEFORE it is computed, and every partial result is held
+    to the budget. Passing one is a normal refusal, `kind: "exceeds_limits"`, never `isError` and never a crash.
+  - A recorded calculation stopped there comes back as a NOT-YET-COMPUTED record (`status: "not_computed"`, no
+    result). `record_computation` takes it in place of a graph and completes it to the direct computation's record,
+    byte for byte. `rerun_record` says it has no result yet.
+  - None of this changes the four tool names or their read/write classes. flo2's door holds exactly those.
 - **Results reach reflow2 through the agent** (`dec:agent-carries-results`): flo2-calc never writes to reflow2. The
   record comes back as a file (`calcfile:///<name>.calc.json`), which flo2 keeps when hosted.
 - **Generic math only:** no jewelry, building or other domain formula belongs here.
@@ -61,7 +73,9 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
   everything. Docker, if present, builds the image, and `tools/measure.py` measures its peak memory under flo2's flags.
 - Every dependency is pinned exactly. Bump one per pull request, and say what it changes.
 - The record format is `ifc:computation-record-format` in the design. A change to it is a new `schema_version`, in a
-  new schema file beside the old one. Never edit `calc-record-1.schema.json` in place.
+  new schema file beside the old one. Never edit `calc-record-1.schema.json` or `calc-record-2.schema.json` in
+  place. Version 2 (flo2-calc 0.2.0) added `status`. Every older version must still re-run:
+  `tests/data/*.v1.calc.json` are records made by 0.1.0.
 - Nothing goes to stdout except MCP messages.
 - The licence is Apache-2.0. No secrets.
 - Record what you build on the design:
@@ -77,9 +91,10 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | Path | Part | In the design |
 |---|---|---|
 | `src/flo2_calc/evaluator.py` | reading and evaluating a graph, the operators | `cmp:evaluator` |
+| `src/flo2_calc/limits.py` | the host-set limits, and the guard that checks them while evaluating | `cmp:evaluator`, `cap:a-calculation-is-stopped-at-the-hosts-limits` |
 | `src/flo2_calc/numbers.py` | exact numbers: read, check, write | `cmp:evaluator` |
 | `src/flo2_calc/units.py` | the unit vocabulary, dimensions, exact conversion | `cmp:units` |
-| `src/flo2_calc/record.py`, `src/flo2_calc/schemas/` | the computation record, its schema, the root folder | `cmp:computation-record` |
+| `src/flo2_calc/record.py`, `src/flo2_calc/schemas/` | the computation record (computed or not yet computed), its schemas, the root folder | `cmp:computation-record`, `cap:a-not-yet-computed-record-is-completed-on-a-larger-machine` |
 | `src/flo2_calc/server.py`, `cli.py`, `errors.py` | the four MCP tools, the command line, the two kinds of no | `cmp:mcp-server` |
 | `plugin.json`, `mcp.json`, `.claude-plugin/`, `.mcp.json`, `skills/` | the plugin package | `cap:serve-over-mcp` |
 | `Dockerfile`, `.dockerignore`, `tools/measure.py` | the image, and its measurement | `cap:serve-over-mcp` |
