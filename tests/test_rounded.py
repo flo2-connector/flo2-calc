@@ -650,3 +650,34 @@ def test_a_distribution_of_a_temperature_reading_is_refused_until_it_is_in_k():
 def test_ceil_floor_and_round_keep_a_temperature_on_its_scale():
     assert ok(inp("t", "25.37 degC"), op("r", "round", "t", places=1)) == {"node": "r", "value": "25.4 degC"}
     assert ok(inp("t", "-0.5 degF"), op("r", "floor", "t")) == {"node": "r", "value": "-1 degF"}
+
+
+# ---------------------------------------------------------------- published tables
+
+
+@pytest.mark.parametrize("nodes, places, table", [
+    # NIST/SEMATECH e-Handbook of Statistical Methods, section 1.3.6.7.1 (cumulative standard normal)
+    ([inp("x", "1.25"), op("r", "normal_cdf", "x")], 5, "0.89435"),
+    ([inp("x", "4"), op("r", "normal_cdf", "x")], 5, "0.99997"),
+    ([inp("p", "0.975"), op("r", "normal_quantile", "p")], 3, "1.96"),
+    # 1.3.6.7.2 (upper critical values of the t distribution)
+    ([inp("p", "0.975"), inp("k", "4"), op("r", "t_quantile", "p", "k")], 3, "2.776"),
+    ([inp("p", "0.975"), inp("k", "29"), op("r", "t_quantile", "p", "k")], 3, "2.045"),
+    ([inp("p", "0.95"), inp("k", "10"), op("r", "t_quantile", "p", "k")], 3, "1.812"),
+    ([inp("p", "0.995"), inp("k", "1"), op("r", "t_quantile", "p", "k")], 3, "63.657"),
+])
+def test_values_round_to_the_published_tables(nodes, places, table):
+    """Rounded to the table's places by flo2-calc's own round, which is decided here."""
+    assert ok(*nodes, op("t", "round", "r", places=places)) == {"node": "t", "value": table}
+
+
+@pytest.mark.parametrize("dof, alpha, critical", [("3", "0.05", "7.815"), ("10", "0.01", "23.209"), ("1", "0.05", "3.841")])
+def test_the_chi_square_tail_brackets_the_published_critical_values(dof, alpha, critical):
+    """1.3.6.7.4 (upper critical values of the chi-square distribution), given to
+    3 decimals: the tail half a unit below the table's value is above alpha,
+    and half a unit above it is below."""
+    c = parse_number(critical)
+    half = Fraction(1, 2000)
+    for x, name in ((c - half, "gt"), (c + half, "lt")):
+        r = ok(inp("x", text(x)), inp("k", dof), op("q", "chi2_sf", "x", "k"), inp("a", alpha), op("r", name, "q", "a"))
+        assert r["value"] == "true", (dof, x, name)
