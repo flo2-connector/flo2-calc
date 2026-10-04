@@ -35,7 +35,7 @@ GRID = graph(
     op("x2", "mul", "x", "x"), op("y2", "mul", "y", "y"), op("r2", "add", "x2", "y2"),
     inp("w", "2 mm^2", "beam width squared"), op("q", "div", "r2", "w"), op("mq", "neg", "q"), op("field", "exp", "mq"),
     op("total", "sum", "field"),
-    op("spectrum", "fft2", "field"), op("power", "magnitude", "spectrum"), op("peak", "max", "power"),
+    op("spectrum", "fft2", "field"), op("power", "abs", "spectrum"), op("peak", "max", "power"),
     result="peak",
 )
 

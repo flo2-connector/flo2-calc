@@ -79,9 +79,9 @@ or a column (m x 1) against a row (n). Every array has one unit, and the
 unit rules are a single value's: units that measure different things are
 refused, never stripped.
 
-COMPLEX values come only from the FFT (and its inverse): magnitude, phase,
-real, imag and conj take them apart; add, sub, mul, neg and div by a real
-value work on them.
+COMPLEX values come only from the FFT (and its inverse): abs (the modulus),
+phase, real, imag and conj take them apart; add, sub, mul, neg and div by a
+real value work on them.
 
 WRITTEN BACK, an array is {"value": a description, "array": {"shape", "kind",
 "unit", "sha256", "values"}}: every element as text (an exact element
@@ -786,7 +786,7 @@ REDUCTIONS = ("sum", "product", "mean", "min", "max", "count_true", "any", "all"
 DATA_STATS = ("variance_sample", "variance_population", "sd_sample", "sd_population")
 FITS = ("fit_slope", "fit_intercept", "fit_slope_se", "fit_intercept_se", "fit_residual_se")
 TRANSFORMS = ("fft", "ifft", "fft2", "ifft2")
-COMPLEX_PARTS = ("magnitude", "phase", "real", "imag", "conj")
+COMPLEX_PARTS = ("phase", "real", "imag", "conj")
 SHAPING = ("linspace", "column", "transpose", "element")
 ARRAY_ONLY = frozenset(REDUCTIONS + DATA_STATS + FITS + TRANSFORMS + COMPLEX_PARTS + SHAPING) - {"min", "max"}
 
@@ -1587,8 +1587,8 @@ def _complex_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], gu
     if op not in ("add", "sub", "mul", "div", "neg"):
         cx = next(a for a in args if a.kind == COMPLEX)
         raise Refusal(
-            f'{op} does not take complex values, and "{cx.name}" is complex (an FFT\'s result). Take its magnitude, '
-            "phase, real or imag part first.",
+            f'{op} does not take complex values, and "{cx.name}" is complex (an FFT\'s result). Take its abs (the '
+            "modulus), phase, real or imag part first.",
             kind="type_mismatch",
         )
     make_room(guard, shape, COMPLEX)
@@ -1678,10 +1678,6 @@ def _complex_part(node: Any, values: list[Any], guard: L.Guard) -> Any:
         raise Refusal(f'{op} takes numbers, and "{names[0]}" is true/false.', kind="type_mismatch")
     if not isinstance(values[0], Array):
         raise Refusal(f'{op} takes a complex value or an array (an FFT\'s result), and "{names[0]}" is a single real value.', kind="type_mismatch")
-    if op == "magnitude":
-        if a.kind == EXACT:
-            return _result([abs(q) for q in a.exact.ravel()], a.shape, a.unit, node, guard)  # type: ignore[union-attr]
-        return _magnitude(node, a, guard)
     if op == "phase" and a.kind != COMPLEX:
         return _real_phase(node, a, guard)
     if a.kind != COMPLEX:
@@ -1789,7 +1785,7 @@ def _reduce(node: Any, values: list[Any], guard: L.Guard) -> Any:
     elif a.kind == BOOL:
         raise Refusal(f'{op} takes numbers, and "{names[0]}" is a true/false array' + ("; count_true counts its trues." if op == "sum" else "."), kind="type_mismatch")
     if a.kind == COMPLEX and op not in ("sum", "mean"):
-        raise Refusal(f'{op} does not take complex values, and "{names[0]}" is complex; take its magnitude or real part first.', kind="type_mismatch")
+        raise Refusal(f'{op} does not take complex values, and "{names[0]}" is complex; take its abs (the modulus) or real part first.', kind="type_mismatch")
     if U.scale_of(a.unit) and op not in ("min", "max", "mean", "argmin", "argmax"):
         raise Refusal(
             f'{op}: "{names[0]}" holds temperature readings in {U.format_unit(a.unit)}, whose zero is not zero '

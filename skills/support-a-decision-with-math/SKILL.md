@@ -95,14 +95,14 @@ with that helper as its source.
      The slope comes back exact (`316/21875 deg/s`, 0.014446 deg/s) and its standard error correctly rounded
      (0.0000374983 deg/s).
    - The FFT is `fft` and `ifft` (1-D), `fft2` and `ifft2` (a grid), numpy's convention. Take a spectrum apart with
-     `magnitude`, `phase` (with `"unit": "deg"` or `"rad"`), `real`, `imag`. A small 2-D example:
+     `abs` (the modulus), `phase` (with `"unit": "deg"` or `"rad"`), `real`, `imag`. A small 2-D example:
 
      ```json
      {"nodes": [
        {"id": "g", "value": {"array": [["1", "2", "1", "0"], ["2", "4", "2", "0"], ["1", "2", "1", "0"],
          ["0", "0", "0", "0"]], "unit": "V"}, "source": "a 4 x 4 aperture"},
        {"id": "spectrum", "op": "fft2", "args": ["g"]},
-       {"id": "power", "op": "magnitude", "args": ["spectrum"]},
+       {"id": "power", "op": "abs", "args": ["spectrum"]},
        {"id": "dc", "op": "max", "args": ["power"]}]}
      ```
 

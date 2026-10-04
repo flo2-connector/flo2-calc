@@ -50,7 +50,7 @@ element on arrays, with numpy's broadcasting; reductions (sum, product, mean,
 min, max, count_true, any, all, argmin, argmax, with "axis" for a grid),
 statistics over data (variance_sample, variance_population, sd_sample,
 sd_population, and the fit_* least-squares results), the FFT (fft, ifft,
-fft2, ifft2), complex parts (magnitude, phase, real, imag, conj) and making
+fft2, ifft2), complex parts (abs for the modulus, phase, real, imag, conj) and making
 and shaping arrays (linspace, column, transpose, element) are operators of
 their own. An exact array stays exact through rational operations; an FFT, a
 function over an array or a large array is FLOAT64, labelled with a rigorous
@@ -150,7 +150,7 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "mul": (ARITHMETIC, 2, None, "the product; units multiply (mm * mm is mm^2)"),
     "div": (ARITHMETIC, 2, 2, "the first divided by the second; units divide; division by zero is refused"),
     "neg": (ARITHMETIC, 1, 1, "minus the value"),
-    "abs": (ARITHMETIC, 1, 1, "the absolute value"),
+    "abs": (ARITHMETIC, 1, 1, "the absolute value; of a complex value (an FFT's), its modulus |z|"),
     "pow": (ARITHMETIC, 2, 2, "the first raised to the second, a plain number: exact for a whole exponent; a non-whole one "
             "(\"1/3\", \"0.44\") gives a rounded value unless the result is rational, needs a base >= 0, and keeps a unit "
             "only when its root is exact (m^2 to the 1/2 is m)"),
@@ -222,7 +222,6 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "ifft": (TRANSFORM, 1, 1, "the inverse transform of a 1-D array (scaled by 1/n); complex, float64, labelled"),
     "fft2": (TRANSFORM, 1, 1, "the 2-D discrete Fourier transform of a grid; complex, float64, labelled"),
     "ifft2": (TRANSFORM, 1, 1, "the inverse 2-D transform of a grid (scaled by 1/(m n)); complex, float64, labelled"),
-    "magnitude": (COMPLEX, 1, 1, "the modulus |z| of each element (of a real array: its absolute value); float64"),
     "phase": (COMPLEX, 1, 1, 'the angle of each element, in (-180, 180] deg, in the node\'s "unit" ("deg" or "rad"); float64; '
               "an element at (or, within its bound, possibly at) zero is refused"),
     "real": (COMPLEX, 1, 1, "the real part of each element"),

@@ -80,7 +80,7 @@ def grid_graph(n: int = 256) -> dict:
         {"id": "y2", "op": "mul", "args": ["y", "y"]}, {"id": "r2", "op": "add", "args": ["x2", "y2"]},
         {"id": "q", "op": "div", "args": ["r2", "w"]}, {"id": "mq", "op": "neg", "args": ["q"]},
         {"id": "field", "op": "exp", "args": ["mq"]}, {"id": "total", "op": "sum", "args": ["field"]},
-        {"id": "spectrum", "op": "fft2", "args": ["field"]}, {"id": "power", "op": "magnitude", "args": ["spectrum"]},
+        {"id": "spectrum", "op": "fft2", "args": ["field"]}, {"id": "power", "op": "abs", "args": ["spectrum"]},
         {"id": "peak", "op": "max", "args": ["power"]}], "result": "peak"}
 
 

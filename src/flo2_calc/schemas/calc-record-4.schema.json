@@ -593,7 +593,6 @@
                       "ifft",
                       "fft2",
                       "ifft2",
-                      "magnitude",
                       "phase",
                       "real",
                       "imag",

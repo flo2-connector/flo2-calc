@@ -443,7 +443,7 @@ data:
 | reductions | `sum`, `product` (plain arrays), `mean`, `min` and `max` (with one array), `count_true`, `any`, `all`: each with `"axis"` 0 (down each column) or 1 (along each row) for a grid; `argmin`, `argmax` (1-D) |
 | statistics over data | `variance_sample`, `variance_population`, `sd_sample`, `sd_population` (1-D; sample divides by n - 1, population by n: named, never a default); `fit_slope`, `fit_intercept`, `fit_slope_se`, `fit_intercept_se`, `fit_residual_se` (args `[x, y]`: least squares y = intercept + slope x, and s = sqrt(SSR / (n - 2))) |
 | transforms | `fft`, `ifft` (1-D), `fft2`, `ifft2` (2-D), numpy's convention: no scaling forward, 1/n back |
-| complex values | `magnitude`, `phase` (with `"unit"`: `"deg"` or `"rad"`), `real`, `imag`, `conj` |
+| complex values | `abs` (the modulus), `phase` (with `"unit"`: `"deg"` or `"rad"`), `real`, `imag`, `conj` |
 | making and shaping arrays | `linspace` (`[start, stop, count]`, both ends included), `column` (1-D to n x 1), `transpose`, `element` (`[array, i]` or `[array, row, col]`, from 0) |
 
 A function over an array (`sqrt`, `exp`, `ln`, `sin`, the distributions ...) works element by element, and a
@@ -524,7 +524,7 @@ The slope is exact, `316/21875 deg/s` (0.0144457142857... deg/s), and its standa
   {"id": "g", "value": {"array": [["1", "2", "1", "0"], ["2", "4", "2", "0"], ["1", "2", "1", "0"], ["0", "0", "0", "0"]],
    "unit": "V"}, "source": "a 4 x 4 aperture"},
   {"id": "spectrum", "op": "fft2", "args": ["g"]},
-  {"id": "power", "op": "magnitude", "args": ["spectrum"]},
+  {"id": "power", "op": "abs", "args": ["spectrum"]},
   {"id": "dc", "op": "max", "args": ["power"]}]}
 ```
 
@@ -660,7 +660,7 @@ flo2-tool-sandbox's flags:
 |---|---|
 | Peak memory of one session (the cgroup's `memory.peak`) | 94.1 MiB under a 128 MiB cap, 90.2 MiB under 256 MiB |
 | The session | 34 calls: three each of a 500-node graph, its record, the record's re-run, and a refused mixed-unit sum; three each of a 484-node graph of rounded operators at 1,000 digits each (sqrt, exp, ln, sin, atan, deg-rad, normal_quantile, chi2_sf, t_quantile), its record and the record's re-run; arrays (below); then the runaway calls below, and one more call that answers |
-| Arrays, one call each, under 128m | a 256 x 256 grid built from two axes, its Gaussian field (`exp` over 65,536 elements), discretised integral, 2-D FFT, magnitude and peak: 1.9 s; the same recorded and re-run: 3.8 s; a 250 x 250 grid (its FFT checked against Arb's rigorous DFT): 3.3 s; a fit with standard errors over 4,000 exact points: 0.4 s, and over 20,000 points (float64): 1.1 s |
+| Arrays, one call each, under 128m | a 256 x 256 grid built from two axes, its Gaussian field (`exp` over 65,536 elements), discretised integral, 2-D FFT, modulus (`abs`) and peak: 1.9 s; the same recorded and re-run: 3.8 s; a 250 x 250 grid (its FFT checked against Arb's rigorous DFT): 3.3 s; a fit with standard errors over 4,000 exact points: 0.4 s, and over 20,000 points (float64): 1.1 s |
 | Runaway calls, under the image's own limits (flo2.io's profile) | a 20,000-digit power to the 1000th, 30 squarings, `exp(1e5)` and `normal_sf(1e6)`: each stopped at `max_digits`. A 100,000 x 100,000 grid: stopped at `max_array_bytes` before it was made. The heaviest graph the profile allows (500 nodes of about 1,900 digits each), sent whole and recorded: both answered, the record within 2 MiB |
 | Time for the whole session, one CPU, cold start included | 93 s under 128m, 75 s under 256m (the 1,000-digit rounded graphs take about 8 s a call; t_quantile is most of it) |
 | Image size | 278 MB (`python:3.12-slim` and the venv; python-flint adds about 26 MB, numpy about 69 MB) |

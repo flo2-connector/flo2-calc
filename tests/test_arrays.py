@@ -588,10 +588,10 @@ def test_the_stated_fft_bound_is_highams_doubled():
     assert 3e-14 < A.higham_bound(16) < 6e-14  # a 256 x 256 grid: t = 16
 
 
-def test_magnitude_phase_real_imag_and_conj_take_a_spectrum_apart():
+def test_abs_phase_real_imag_and_conj_take_a_spectrum_apart():
     xs = ["1", "0", "-1", "0"]
     f = value(inp("x", arr(xs)), op("f", "fft", "x"))
-    mag = value(inp("x", arr(xs)), op("f", "fft", "x"), op("m", "magnitude", "f"))
+    mag = value(inp("x", arr(xs)), op("f", "fft", "x"), op("m", "abs", "f"))
     assert np.allclose(mag.data, np.abs(f.data)) and mag.kind == A.FLOAT64
     holds(mag, [mp.mpf(0), mp.mpf(2), mp.mpf(0), mp.mpf(2)])
     ph = value(inp("x", arr(["1", "-2", "3"])), op("p", "phase", "x", unit="deg"))
@@ -603,7 +603,7 @@ def test_magnitude_phase_real_imag_and_conj_take_a_spectrum_apart():
     conj = value(inp("x", arr(["1", "2", "3"])), op("f", "fft", "x"), op("c", "conj", "f"), op("i", "imag", "c"))
     assert np.allclose(conj.data, -np.fft.fft([1.0, 2, 3]).imag)
     r = refusal(inp("x", arr(xs)), op("f", "fft", "x"), op("s", "sqrt", "f"))
-    assert r["kind"] == "type_mismatch" and "magnitude" in r["reason"]
+    assert r["kind"] == "type_mismatch" and "abs" in r["reason"]
 
 
 def test_a_circular_convolution_through_the_fft_is_within_its_bound():
@@ -671,7 +671,7 @@ REGRESSION = graph(
     inp("t", arr(q063_style()[0], "s"), "frame times"),
     inp("y", arr(q063_style()[1], "deg"), "along-track angles, frames 1 to 6"),
     op("slope", "fit_slope", "t", "y"), op("slope_se", "fit_slope_se", "t", "y"),
-    inp("x", arr(["1", "2", "3", "4", "5", "6", "7"]), "test"), op("f", "fft", "x"), op("m", "magnitude", "f"),
+    inp("x", arr(["1", "2", "3", "4", "5", "6", "7"]), "test"), op("f", "fft", "x"), op("m", "abs", "f"),
     op("peak", "max", "m"),
     result="slope_se",
 )
