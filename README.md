@@ -115,7 +115,8 @@ Why each value:
   that size one step takes most of a second.
 - **Digits, 2,000 on flo2.io.** Still far past a decision's numbers. Every value in a 500-node graph can then be
   written out exactly within the reply budget, so 128m holds the heaviest call the profile allows. Its measured
-  peak is 78 MiB (Measurements, below).
+  peak is 91 MiB (Measurements, below). The record of the very heaviest such graph, which since 0.5.0 also carries
+  its formula and every working step, passes the 2 MiB reply budget and comes back as a not-yet-computed record.
 - **Reply, 8 MiB on a laptop.** That is room for a 500-node graph of large exact values. A record larger than the
   budget is also refused as input, so a host never takes in a record it could not have made.
 - **Reply, 2 MiB on flo2.io.** This is the most flo2's door keeps of a `calcfile` in one reply, well under its
@@ -525,7 +526,7 @@ One JSON object, defined by
 [`src/flo2_calc/schemas/calc-record-4.schema.json`](src/flo2_calc/schemas/calc-record-4.schema.json) (JSON Schema
 draft 2020-12). Versions 1 to 3 ([`calc-record-1.schema.json`](src/flo2_calc/schemas/calc-record-1.schema.json),
 made by flo2-calc 0.1.0, [`calc-record-2.schema.json`](src/flo2_calc/schemas/calc-record-2.schema.json), made by
-0.2.0, and [`calc-record-3.schema.json`](src/flo2_calc/schemas/calc-record-3.schema.json), made by 0.3.0 and 0.4.0)
+0.2.0 and 0.3.0, and [`calc-record-3.schema.json`](src/flo2_calc/schemas/calc-record-3.schema.json), made by 0.4.0)
 still re-run. Version 2 added `status`, and a version 1 record is a computed one. Version 3 added the rounded class:
 the `rounded` label on values and the result, the new operators and their `digits`, `places` and `mode`, and
 `python_flint` in `produced_by`. Version 4 (0.5.0) adds `formula` and `working`, `results` for a graph that names
@@ -636,14 +637,15 @@ flo2-tool-sandbox's flags:
 
 | What | Measured |
 |---|---|
-| Peak memory of one session (the cgroup's `memory.peak`) | 78.2 MiB under a 128 MiB cap, 77.7 MiB under 256 MiB |
+| Peak memory of one session (the cgroup's `memory.peak`) | 91.3 MiB under a 128 MiB cap, 91.1 MiB under 256 MiB |
 | The session | 27 calls: three each of a 500-node graph, its record, the record's re-run, and a refused mixed-unit sum; three each of a 484-node graph of rounded operators at 1,000 digits each (sqrt, exp, ln, sin, atan, deg-rad, normal_quantile, chi2_sf, t_quantile), its record and the record's re-run; then the runaway calls below, and one more call that answers |
-| Runaway calls, under the image's own limits (flo2.io's profile) | a 20,000-digit power to the 1000th, 30 squarings, `exp(1e5)` and `normal_sf(1e6)`: each stopped at `max_digits`. The heaviest graph the profile allows (500 nodes of about 1,900 digits each), sent whole and recorded: both answered, the record within 2 MiB |
-| Time for the whole session, one CPU, cold start included | 87 s (the 1,000-digit rounded graphs take about 8 s a call; t_quantile is most of it) |
+| Runaway calls, under the image's own limits (flo2.io's profile) | a 20,000-digit power to the 1000th, 30 squarings, `exp(1e5)` and `normal_sf(1e6)`: each stopped at `max_digits`. The heaviest graph the profile allows (500 nodes of about 1,900 digits each), sent whole: answered; recorded: stopped at `max_reply_bytes` with a not-yet-computed record, since its record, with the formula and all 500 working steps beside two copies of every value, passes 2 MiB (0.4.0's fitted) |
+| Time for the whole session, one CPU, cold start included | 85 s (the 1,000-digit rounded graphs take about 8 s a call; t_quantile is most of it) |
 | Image size | 209 MB (`python:3.12-slim` and the venv; python-flint adds about 26 MB) |
 
-Measured on 2026-10-04 with flo2-calc 0.4.0. 0.2.0 peaked at 71.3 MiB in its 16-call session, and 0.1.0 at 62.4 MiB in
-the first 12 calls: python-flint, loaded and working at 1,000 digits, costs about 7 MiB. A cap of **128m** is still
+Measured on 2026-10-04 with flo2-calc 0.5.0. 0.4.0 peaked at 78.2 MiB in the same session: rendering the formula and
+the working of 500-node graphs costs about 13 MiB. 0.2.0 peaked at 71.3 MiB in its 16-call session, and 0.1.0 at
+62.4 MiB in the first 12 calls: python-flint, loaded and working at 1,000 digits, costs about 7 MiB. A cap of **128m** is still
 well above the peak, the same rule flo2 used for flo2-cad's cap. CI runs the image under 128m, and asks it
 every limit's questions there (`tests/test_limits.py`, `tests/test_pending_record.py`).
 
@@ -715,7 +717,8 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    a list) or inside a reply (`formula`, `working`, `results`). The record is schema version 4, still one `calcfile`
    per record. **0.5.0 also offers an MCP prompt and a resource** (the skill, `initialize` now lists `prompts` and
    `resources` beside `tools`). They are not tools, so the door's allow-list of four is untouched; the door may ignore
-   them, since hosted on flo2.io the skill is served by flo2 itself.
+   them, since hosted on flo2.io the skill is served by flo2 itself. The image's size is unchanged (209 MB), and its
+   measured peak, 91 MiB, still fits the 128m cap.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.
