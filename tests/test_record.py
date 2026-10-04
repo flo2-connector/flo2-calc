@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+from pathlib import Path
 
 import jsonschema
 import pytest
@@ -57,7 +58,7 @@ def validator():
 def test_a_record_holds_what_a_decision_needs():
     rec = make(supports={"design_node": "dec:fiber-route"})
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 3
+    assert rec["schema_version"] == 4
     assert rec["status"] == "computed"
     assert "stopped" not in rec and "limits_in_force" not in rec, "a computed record carries no host limits"
     assert rec["graph"] == FIBER
@@ -181,7 +182,7 @@ def test_a_record_whose_input_was_edited_and_hash_recomputed_is_still_caught():
 
 def test_a_record_from_a_newer_schema_is_refused_by_name():
     rec = make()
-    rec["schema_version"] = 4
+    rec["schema_version"] = 5
     with pytest.raises(CallError) as caught:
         R.load(rec)
     assert caught.value.path == "record.schema_version"
@@ -196,8 +197,91 @@ def test_text_that_is_not_json_is_not_a_record():
 
 def test_a_record_whose_graph_can_no_longer_be_read_does_not_reproduce_rather_than_failing():
     rec = make()
-    rec["graph"]["nodes"][0]["value"] = "2 furlong"
+    rec["graph"]["nodes"][0]["value"] = "2 notaunit"
     rec["content_hash"] = R.content_hash(rec)
     answer = R.rerun(R.load(rec))
     assert answer["reproduces"] is False
     assert "cannot be read now" in answer["differences"][0]["rerun"]
+
+
+# ---------------------------------------------------------------- schema version 4 (flo2-calc 0.5.0, dec:round-2-fixes)
+
+DATA = Path(__file__).resolve().parent / "data"
+
+
+def test_a_record_with_several_results_holds_each_by_name_fits_its_schema_and_re_runs():
+    g = graph(inp("mid", "12 mm", "measured"), inp("half", "0.3 mm", "computed"), op("lo", "sub", "mid", "half"),
+              op("hi", "add", "mid", "half"), result=["lo", "hi"])
+    rec = make(g, "interval")
+    assert "result" not in rec and rec["results"] == [{"node": "lo", "value": "11.7 mm"}, {"node": "hi", "value": "12.3 mm"}]
+    assert rec["graph"]["result"] == ["lo", "hi"]
+    validator().validate(rec)
+    assert R.rerun(rec)["reproduces"] is True
+    assert R.rerun(rec)["results"] == rec["results"]
+
+
+def test_a_computed_record_holds_one_of_result_and_results_never_both():
+    rec = make()
+    both = copy.deepcopy(rec)
+    both["results"] = [rec["result"]]
+    assert not validator().is_valid(both)
+    neither = copy.deepcopy(rec)
+    del neither["result"]
+    assert not validator().is_valid(neither)
+
+
+def test_a_record_carries_its_formula_and_working_and_the_new_writing():
+    g = graph(inp("C", "450 mAh", "datasheet"), inp("I", "13 mA", "measured"), op("t", "div", "C", "I"),
+              inp("two", "2", "whole"), inp("n", "200", "whole"), op("big", "pow", "two", "n"), op("root", "sqrt", "two", digits=40),
+              result=["t", "big", "root"])
+    rec = make(g, "writing")
+    values = {v["node"]: v for v in rec["values"]}
+    assert values["t"] == {"node": "t", "value": "34.6153846153846153846153846154 h", "exact": "450/13 h", "simplified_from": "mAh/mA"}
+    assert values["big"] == {"node": "big", "value": str(2**200)}
+    assert values["root"]["value"] == "1.414213562373095048801688724209698078570"
+    assert [f["node"] for f in rec["formula"]] == ["t", "big", "root"]
+    assert rec["working"][-1]["step"] == len(rec["values"])
+    validator().validate(rec)
+
+
+def test_the_operators_of_round_2_are_in_the_record_with_their_fields():
+    g = graph(inp("y", "42.39", "computed"), op("a", "with_unit", "y", unit="mil^2", source="IPC-2221: A in mil^2"),
+              inp("g", "6 dB", "datasheet"), op("r", "db_to_ratio", "g", kind="amplitude"), inp("b", True, "test"),
+              op("n", "count_true", "b"), inp("k", "1", "rule"), op("v", "k_of_n", "k", "b"), op("m", "magnitude", "a", unit="mil^2"))
+    rec = make(g, "round-2-operators")
+    validator().validate(rec)
+    assert R.rerun(rec)["reproduces"] is True
+
+
+@pytest.mark.parametrize("name", ["display.v3.calc.json", "battery.v1.calc.json", "fiber-bend-margin.v1.calc.json", "stage-gain.v2.calc.json"])
+def test_records_made_by_earlier_versions_still_reproduce_under_their_own_writing(name):
+    """display.v3.calc.json was made by flo2-calc 0.4.0 with every value whose
+    writing 0.5.0 changes: a compound unit 0.5.0 shows simpler (mAh/mA, V/mA,
+    V*mA, um^2/m, mm/m), 2^1000 as 30 digits and ".../1", and sqrt(2) at 40
+    digits written with 39. Re-run under its own version's writing, it
+    reproduces byte for byte."""
+    rec = json.loads((DATA / name).read_text())
+    answer = R.rerun(R.load(rec))
+    assert answer["reproduces"] is True, answer["differences"]
+    assert answer["formula"] and answer["working"], "the re-run is shown back too"
+
+
+def test_the_version_3_record_holds_the_writing_0_5_0_changes():
+    rec = json.loads((DATA / "display.v3.calc.json").read_text())
+    assert rec["schema_version"] == 3 and rec["produced_by"]["flo2_calc"] == "0.4.0"
+    values = {v["node"]: v for v in rec["values"]}
+    assert values["hours"]["value"].endswith(" mAh/mA")
+    assert values["big"]["exact"].endswith("/1")
+    assert values["root"]["value"] == "1.41421356237309504880168872420969807857"
+    assert values["pct"]["value"] == "900 mm/m"
+
+
+def test_the_same_graph_made_now_is_written_the_new_way():
+    rec = json.loads((DATA / "display.v3.calc.json").read_text())
+    now = make(rec["graph"], rec["name"], rec["supports"])
+    values = {v["node"]: v for v in now["values"]}
+    assert values["hours"]["value"].endswith(" h") and values["ohms"]["value"].endswith(" kohm")
+    assert values["big"] == {"node": "big", "value": str(2**1000)}
+    assert values["root"]["value"].endswith("078570")
+    assert values["pct"] == {"node": "pct", "value": "0.9", "simplified_from": "mm/m"}
+    assert values["growth"] == {"node": "growth", "value": "0.001105 um", "simplified_from": "um^2/m"}

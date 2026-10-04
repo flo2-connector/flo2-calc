@@ -1,0 +1,300 @@
+{
+  "arithmetic": "Exact rational arithmetic on the inputs as written: no binary floating point. + - * / and integer powers are exact, and so is every unit conversion but deg-rad, so every value not marked \"rounded\" is exact FOR THESE INPUTS and no more accurate than they are: a decimal typed for an irrational number (a truncated pi or e) is taken as exactly that decimal, not as the number it stands for (the pi and e operators are the constants themselves). A value whose decimal ends (at most 40 significant digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact value for these inputs is given beside it as a fraction. Comparisons use exact values. A value marked \"rounded\" is NOT exact: it comes from pi, e, a root, exp, ln, log10, a non-whole power, trigonometry, a deg-rad conversion or a distribution, or from arithmetic on such a value. It is a decimal of the stated number of significant digits, given no \"exact\" fraction, and \"error_at_most\" bounds its distance from the true value. Where it says \"correctly_rounded\", it is the true value rounded half-even, decided from a rigorous enclosure (Arb ball arithmetic, python-flint). A comparison, ceil, floor or round of a rounded value is answered only when its error bound decides it, and refused otherwise.",
+  "content_hash": "sha256:d4e5513be592956e8e0cb0124b69e6147875ee72477e984c0a0f94bf27404d03",
+  "graph": {
+    "nodes": [
+      {
+        "id": "capacity",
+        "source": "cell datasheet",
+        "value": "450 mAh"
+      },
+      {
+        "id": "draw",
+        "source": "measured",
+        "value": "13 mA"
+      },
+      {
+        "args": [
+          "capacity",
+          "draw"
+        ],
+        "id": "hours",
+        "op": "div"
+      },
+      {
+        "id": "supply",
+        "source": "rail",
+        "value": "3.3 V"
+      },
+      {
+        "args": [
+          "supply",
+          "draw"
+        ],
+        "id": "ohms",
+        "op": "div"
+      },
+      {
+        "args": [
+          "supply",
+          "draw"
+        ],
+        "id": "power",
+        "op": "mul"
+      },
+      {
+        "id": "alpha",
+        "source": "assumed coefficient",
+        "value": "17 um^2/(m*K)"
+      },
+      {
+        "id": "rise",
+        "source": "assumed",
+        "value": "65 delta_degC"
+      },
+      {
+        "args": [
+          "alpha",
+          "rise"
+        ],
+        "id": "growth",
+        "op": "mul"
+      },
+      {
+        "id": "two",
+        "source": "whole",
+        "value": "2"
+      },
+      {
+        "id": "thousand",
+        "source": "whole",
+        "value": "1000"
+      },
+      {
+        "args": [
+          "two",
+          "thousand"
+        ],
+        "id": "big",
+        "op": "pow"
+      },
+      {
+        "args": [
+          "two"
+        ],
+        "digits": 40,
+        "id": "root",
+        "op": "sqrt"
+      },
+      {
+        "id": "ratio",
+        "source": "assumed",
+        "value": "66 mW"
+      },
+      {
+        "id": "tiny",
+        "source": "assumed",
+        "value": "3 uW"
+      },
+      {
+        "args": [
+          "ratio",
+          "tiny"
+        ],
+        "id": "gain",
+        "op": "div"
+      },
+      {
+        "id": "slope",
+        "source": "assumed",
+        "value": "9 mm/m"
+      },
+      {
+        "id": "hundred",
+        "source": "whole",
+        "value": "100"
+      },
+      {
+        "args": [
+          "slope",
+          "hundred"
+        ],
+        "id": "pct",
+        "op": "mul"
+      }
+    ],
+    "result": "hours"
+  },
+  "inputs": [
+    {
+      "id": "capacity",
+      "source": "cell datasheet",
+      "unit": "mAh",
+      "value": "450 mAh"
+    },
+    {
+      "id": "draw",
+      "source": "measured",
+      "unit": "mA",
+      "value": "13 mA"
+    },
+    {
+      "id": "supply",
+      "source": "rail",
+      "unit": "V",
+      "value": "3.3 V"
+    },
+    {
+      "id": "alpha",
+      "source": "assumed coefficient",
+      "unit": "um^2/(m*K)",
+      "value": "17 um^2/(m*K)"
+    },
+    {
+      "id": "rise",
+      "source": "assumed",
+      "unit": "delta_degC",
+      "value": "65 delta_degC"
+    },
+    {
+      "id": "two",
+      "source": "whole",
+      "unit": "",
+      "value": "2"
+    },
+    {
+      "id": "thousand",
+      "source": "whole",
+      "unit": "",
+      "value": "1000"
+    },
+    {
+      "id": "ratio",
+      "source": "assumed",
+      "unit": "mW",
+      "value": "66 mW"
+    },
+    {
+      "id": "tiny",
+      "source": "assumed",
+      "unit": "uW",
+      "value": "3 uW"
+    },
+    {
+      "id": "slope",
+      "source": "assumed",
+      "unit": "mm/m",
+      "value": "9 mm/m"
+    },
+    {
+      "id": "hundred",
+      "source": "whole",
+      "unit": "",
+      "value": "100"
+    }
+  ],
+  "name": "display",
+  "produced_by": {
+    "flo2_calc": "0.4.0",
+    "pint": "0.26.1",
+    "python_flint": "0.9.0"
+  },
+  "record_format": "flo2-calc computation record",
+  "result": {
+    "exact": "450/13 mAh/mA",
+    "node": "hours",
+    "value": "34.6153846153846153846153846154 mAh/mA"
+  },
+  "schema_version": 3,
+  "status": "computed",
+  "supports": "the display rules flo2-calc 0.5.0 changes, as 0.4.0 wrote them",
+  "values": [
+    {
+      "node": "capacity",
+      "value": "450 mAh"
+    },
+    {
+      "node": "draw",
+      "value": "13 mA"
+    },
+    {
+      "exact": "450/13 mAh/mA",
+      "node": "hours",
+      "value": "34.6153846153846153846153846154 mAh/mA"
+    },
+    {
+      "node": "supply",
+      "value": "3.3 V"
+    },
+    {
+      "exact": "33/130 V/mA",
+      "node": "ohms",
+      "value": "0.253846153846153846153846153846 V/mA"
+    },
+    {
+      "node": "power",
+      "value": "42.9 V*mA"
+    },
+    {
+      "node": "alpha",
+      "value": "17 um^2/(m*K)"
+    },
+    {
+      "node": "rise",
+      "value": "65 delta_degC"
+    },
+    {
+      "node": "growth",
+      "value": "1105 um^2/m"
+    },
+    {
+      "node": "two",
+      "value": "2"
+    },
+    {
+      "node": "thousand",
+      "value": "1000"
+    },
+    {
+      "exact": "10715086071862673209484250490600018105614048117055336074437503883703510511249361224931983788156958581275946729175531468251871452856923140435984577574698574803934567774824230985421074605062371141877954182153046474983581941267398767559165543946077062914571196477686542167660429831652624386837205668069376/1",
+      "node": "big",
+      "value": "1.07150860718626732094842504906e+301"
+    },
+    {
+      "node": "root",
+      "rounded": {
+        "correctly_rounded": true,
+        "digits": 40,
+        "error_at_most": "5e-40",
+        "from": [
+          "root"
+        ]
+      },
+      "value": "1.41421356237309504880168872420969807857"
+    },
+    {
+      "node": "ratio",
+      "value": "66 mW"
+    },
+    {
+      "node": "tiny",
+      "value": "3 uW"
+    },
+    {
+      "node": "gain",
+      "value": "22000"
+    },
+    {
+      "node": "slope",
+      "value": "9 mm/m"
+    },
+    {
+      "node": "hundred",
+      "value": "100"
+    },
+    {
+      "node": "pct",
+      "value": "900 mm/m"
+    }
+  ]
+}

@@ -213,6 +213,9 @@ BY_HAND = {
     "€": "the euro sign, one currency's",
     "mm2": "a square written without ^", "mm3": "a cube written without ^", "m2": "", "m3": "", "cm2": "",
     "cm3": "", "mm²": "", "mm³": "", "m²": "", "m³": "",
+    "decibel": "pint's decibel is a logarithmic unit; flo2-calc's dB is its own dimension (decibels.py)",
+    "decibels": "the same",
+    "furlongs": "pint's furlong is the US survey furlong; flo2-calc's is the international 660 ft (tests/test_units.py)",
 }
 PINT_NAME = {"degC": "degree_Celsius", "degF": "degree_Fahrenheit"}  # a reading, not a change
 

@@ -14,6 +14,7 @@ FROM python:3.12-slim AS build
 WORKDIR /src
 COPY pyproject.toml README.md LICENSE ./
 COPY src/ ./src/
+COPY skills/ ./skills/
 RUN python -m venv /opt/flo2-calc \
  && /opt/flo2-calc/bin/pip install --no-cache-dir --disable-pip-version-check . \
  && /opt/flo2-calc/bin/pip freeze --all

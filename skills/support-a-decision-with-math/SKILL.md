@@ -1,7 +1,7 @@
 ---
 name: support-a-decision-with-math
-description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison against a limit, a root, a logarithm or dB, an angle, a p-value or a critical value - especially one with units. It covers composing the computation, units, rounded results, refusals, making the computation record, saving it, linking it to the decision, and checking it later.
-compatibility: Needs the flo2-calc MCP server (evaluate_graph, add_node, record_computation, rerun_record). Nothing else has to be running. Linking a record to a design uses the design tool's own tools (reflow2), when there is one.
+description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison against a limit, a root, a logarithm, a gain in dB or a power in dBm, an angle, a p-value or a critical value, a count of true conditions or a k-of-n vote, an empirical formula with stated units - especially one with units. It covers composing the computation, units, rounded results, refusals, checking the formula and working it shows back, making the computation record, saving it, linking it to the decision, and checking it later.
+compatibility: Needs the flo2-calc MCP server (evaluate_graph, add_node, record_computation, rerun_record), which also serves this skill as the MCP prompt support-a-decision-with-math and the resource skill://flo2-calc/support-a-decision-with-math/SKILL.md. Nothing else has to be running. Linking a record to a design uses the design tool's own tools (reflow2), when there is one.
 ---
 
 # Support a decision with math
@@ -24,7 +24,11 @@ Use flo2-calc when a decision, a trade or a limit turns on something computed:
 - **a conversion** a reader will rely on: 0.25 in in mm;
 - **a yes/no built from several conditions:** it fits AND it lasts the night AND it is under budget;
 - **a root, a logarithm, an angle or a statistic:** a standard deviation, a loss in dB, a great-circle angle, a normal
-  tail probability, a chi-square p-value, a Student-t critical value.
+  tail probability, a chi-square p-value, a Student-t critical value;
+- **a count or a vote:** how many of eight conditions hold, whether two of three sensors agree.
+
+You reason; flo2-calc calculates. Choosing which equation applies, whether an approximation holds, or which events
+to combine is yours (and the person's). flo2-calc does the calculation it is given and never decides that for you.
 
 Do not use it for a domain's own formulas, such as metal weight from volume, ring sizes, or a building's areas. The
 helper that owns the domain computes those (flo2-cad, flo2-ifc), and you bring its number into flo2-calc as an input,
@@ -50,10 +54,18 @@ with that helper as its source.
      EUR. To convert, give the rate as an input with its date and source,
      `{"id": "rate", "value": "0.92 EUR/USD", "source": "ECB reference rate, 2026-10-02"}`, and multiply by it.
    - **Gallons:** `gal_us` or `gal_imp`. A bare `gal` is refused, because it is two different units.
+   - **Decibels:** a gain or loss is `"6 dB"` (`"0.2 dB/m"` per length); a power level is `"-30 dBm"` or `"10 dBW"`.
+     Never type a dB value as a plain number, and never type the 10 or 20 of a decibel formula yourself (step 4).
 3. **Evaluate it.**
    - `evaluate_graph` takes the whole graph in one call. It returns the result and every node's value.
    - `add_node` builds the graph one node at a time, when you want to see each value as you go. Pass back the
      `graph` it returns. The result is the same either way.
+   - When the answer has several parts (a verdict and its margin, an interval's two ends, a count and its rows),
+     name them all: `"result": ["margin", "fits"]`. They come back by name, as `results`.
+   - **Read the `formula` and the `working` it shows back, and check they are the computation you meant.** The formula
+     is the equation (`t = C / I = 450/13 h`); the working is every step, numbered, with its value and label. Your
+     translation of the problem into a graph is the weak point, and this is where you catch a wrong one. Both come in
+     plain text and in LaTeX.
 4. **Use the built-in operators for anything that is not exact; never type a constant or a result in.**
    - `{"id": "pi", "op": "pi"}` and `{"id": "e", "op": "e"}` are the constants. Do not type pi to 30 digits as an input.
    - `sqrt`, `exp`, `ln`, `log10`, and `pow` with a non-whole exponent (`"1/3"`, `"0.44"`).
@@ -62,6 +74,16 @@ with that helper as its source.
    - `normal_cdf`, `normal_sf` (the upper tail), `normal_quantile`, `chi2_sf` (a p-value), `t_quantile` (a critical
      value). The normal ones take `[x]`, or `[x, mean, sd]` in one unit.
    - `ceil`, `floor`, `round` (with `"places"`; `round`'s `"mode"` is `half_even` unless you say otherwise).
+   - **dB to a ratio and back:** `db_to_ratio` and `ratio_to_db`, each with `"kind": "power"` (10 log10) or
+     `"amplitude"` (20 log10). You must say which; flo2-calc never picks one. A power level converts with `convert`:
+     `"10 dBm"` to `"mW"`, or a power in `mW` to `"dBm"`. A level plus a gain in dB is a level; two levels never add.
+   - **Counting:** `count_true` counts the true values; `k_of_n` with args `[k, b1, b2, ...]` is true when at least k
+     are. Never add true/false values, and never tally them yourself.
+   - **An empirical formula with stated units** (IPC-2221, a datasheet's fit): take each input's number in the unit
+     the formula states with `magnitude` (`{"op": "magnitude", "args": ["I"], "unit": "A"}`), compute on the plain
+     numbers, then put the stated unit on the result with `with_unit` and say where it comes from:
+     `{"op": "with_unit", "args": ["A"], "unit": "mil^2", "source": "IPC-2221: A in mil^2"}`. Never multiply by a typed
+     `"1 mil^2"` to get a unit back.
    - Their results come back labelled `"rounded"`: correctly rounded to 30 significant digits (ask for more with
      `"digits"`, up to 1000), with `error_at_most`, and never with an `exact` fraction. Anything computed from a rounded
      value is labelled rounded too, with its bound. Where the result is rational it stays exact (`sqrt(9/4)` is `1.5`).
@@ -69,6 +91,8 @@ with that helper as its source.
    - A `"status": "refused"` reply names the node, the operation and why. For example, `add cannot combine mm and g`
      means the computation is wrong, not the calculator. Tell the person what did not add up.
    - A "Malformed call" error names the field to fix: an unknown unit, a missing node, a cycle.
+   - An expression typed as a value is refused. If it is called **malformed** (`"3 + * 4"`), do not repair it or guess
+     what it meant: ask the person what was intended, then build that as nodes.
    - A near-miss unit may say what to write instead (`khz` gives `Write "kHz"`). Units are case-sensitive, and a
      prefix's case is its size: `mJ` is a millijoule and `MJ` a megajoule. When flo2-calc gives no hint, write the
      unit you mean yourself. Never change its prefix to get past the refusal.
@@ -129,4 +153,8 @@ Say what was computed in the person's terms: "the fiber needs 1.4 mm to bend, th
   is. Use the `pi` and `e` operators rather than typing their digits.
 - A value labelled `"rounded"` is not exact, and the reply's `exactness` says so. Say so too, with its precision: "the
   standard deviation is 0.2302 mm (rounded; correct to 30 digits)". Quote no more digits than the person needs, and
-  never call it exact.
+  never call it exact. Every digit it was asked for is written, trailing zeros included.
+- A computed value may come back in a simpler unit than it was computed in (`mAh/mA` shown as `h`); `simplified_from`
+  says so. The value is the same. A whole number is written in full.
+- Show the person the formula when it helps them check the reasoning: "run time t = C / I = 450 mAh / 13 mA, about
+  34.6 h". The LaTeX form renders where their client renders math.
