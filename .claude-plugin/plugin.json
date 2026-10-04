@@ -1,7 +1,7 @@
 {
   "name": "flo2-calc",
-  "version": "0.3.0",
-  "description": "Exact math and logic for the decisions in a design: compose a computation graph of arithmetic, logic and comparisons with units checked, get every value exactly, and keep a re-runnable computation record a decision can cite. Stands alone; no other server needed.",
+  "version": "0.4.0",
+  "description": "Exact math and logic for the decisions in a design: compose a computation graph of arithmetic, logic, comparisons, roots and logarithms, trigonometry and statistics with units checked, get every value exactly or correctly rounded and labelled so, and keep a re-runnable computation record a decision can cite. Stands alone; no other server needed.",
   "author": {
     "name": "Anthony Sligar"
   },

@@ -1,0 +1,562 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/flo2-connector/flo2-calc/blob/main/src/flo2_calc/schemas/calc-record-3.schema.json",
+  "title": "flo2-calc computation record, schema version 3",
+  "description": "What flo2-calc computed, from what, with what, and how to check it: the file a design decision cites. Version 3 (flo2-calc 0.4.0) adds the ROUNDED class: operators whose results are irrational in general (pi, e, sqrt, exp, ln, log10, non-whole powers, trigonometry, deg-rad conversion, the normal, chi-square and Student-t distributions) give a value that is a decimal of a stated number of significant digits, labelled `rounded` with its digits, whether it is the true value correctly rounded, a rigorous bound on its distance from the true value (`error_at_most`), and the nodes its rounding came from. A rounded value never has `exact`. A node may carry `digits` (rounded operators), `places` and `mode` (ceil, floor, round). `produced_by` names python-flint, which gave the enclosures. A COMPUTED record (status \"computed\") holds its values and its result; a NOT-YET-COMPUTED record (status \"not_computed\") holds the graph, the inputs, the limit it passed and the limits in force, and no values and no result, until flo2-calc on a larger machine completes it. A computed record is deterministic: the same graph gives a byte-identical file, and it carries no host limits. Version 1 and 2 records still re-run; this file sits beside calc-record-1.schema.json and calc-record-2.schema.json, which are never edited.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record_format",
+    "schema_version",
+    "status",
+    "name",
+    "arithmetic",
+    "graph",
+    "inputs",
+    "produced_by",
+    "content_hash"
+  ],
+  "properties": {
+    "record_format": {
+      "const": "flo2-calc computation record"
+    },
+    "schema_version": {
+      "const": 3
+    },
+    "status": {
+      "description": "\"computed\": the record holds its values and result. \"not_computed\": it was stopped at a limit of the host that made it, and holds no values and no result until flo2-calc on a larger machine completes it.",
+      "enum": [
+        "computed",
+        "not_computed"
+      ]
+    },
+    "name": {
+      "description": "The record's name. Its file is <name>.calc.json.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+    },
+    "supports": {
+      "description": "What this computation supports, as the agent said: free text, or a node in a reflow2 design. Recorded, never resolved by flo2-calc.",
+      "$ref": "#/$defs/reference"
+    },
+    "arithmetic": {
+      "description": "What exactness means in this record, in words.",
+      "type": "string",
+      "minLength": 1
+    },
+    "graph": {
+      "$ref": "#/$defs/graph"
+    },
+    "inputs": {
+      "description": "Every input node, in the graph's order, with its value, its unit and where it came from.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "value",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "value": {
+            "$ref": "#/$defs/valueText"
+          },
+          "exact": {
+            "$ref": "#/$defs/exactText"
+          },
+          "unit": {
+            "description": "The input's unit as reflow2 spells it; \"\" for a plain number. Absent for true/false.",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/reference"
+          }
+        }
+      }
+    },
+    "values": {
+      "description": "Every node's value, in the order flo2-calc evaluated them.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "node",
+          "value"
+        ],
+        "properties": {
+          "node": {
+            "$ref": "#/$defs/id"
+          },
+          "value": {
+            "$ref": "#/$defs/valueText"
+          },
+          "exact": {
+            "$ref": "#/$defs/exactText"
+          },
+          "rounded": {
+            "$ref": "#/$defs/rounded"
+          }
+        },
+        "not": {
+          "required": [
+            "exact",
+            "rounded"
+          ]
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "value"
+      ],
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/id"
+        },
+        "value": {
+          "$ref": "#/$defs/valueText"
+        },
+        "exact": {
+          "$ref": "#/$defs/exactText"
+        },
+        "rounded": {
+          "$ref": "#/$defs/rounded"
+        }
+      },
+      "not": {
+        "required": [
+          "exact",
+          "rounded"
+        ]
+      }
+    },
+    "stopped": {
+      "description": "A not-yet-computed record only: the limit the calculation passed, where, why, and how far it got.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "limit",
+        "node",
+        "op",
+        "reason",
+        "reached"
+      ],
+      "properties": {
+        "limit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "value"
+          ],
+          "properties": {
+            "name": {
+              "enum": [
+                "deadline",
+                "max_digits",
+                "max_reply_bytes"
+              ]
+            },
+            "value": {
+              "description": "The limit's value on the host that stopped it: the deadline as seconds with their unit (\"20 s\"), a budget as a whole number.",
+              "type": [
+                "string",
+                "integer"
+              ]
+            },
+            "needed_at_least": {
+              "description": "When it is known: the least the limit would have had to be (digits or bytes).",
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "node": {
+          "description": "The node it was computing when it stopped; null when every node was done and the reply was what passed the limit.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "op": {
+          "description": "That node's operator; null for an input or when no node was being computed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reached": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "nodes_done",
+            "nodes",
+            "largest_digits"
+          ],
+          "properties": {
+            "nodes_done": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "nodes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "largest_digits": {
+              "description": "The most digits any numerator or denominator had reached.",
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "limits_in_force": {
+      "description": "A not-yet-computed record only: the limits of the host that stopped it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deadline",
+        "max_digits",
+        "max_reply_bytes"
+      ],
+      "properties": {
+        "deadline": {
+          "description": "Seconds per call, with the unit spelled as reflow2 spells it, e.g. \"20 s\".",
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)? s$"
+        },
+        "max_digits": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_reply_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "produced_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "flo2_calc",
+        "pint",
+        "python_flint"
+      ],
+      "properties": {
+        "flo2_calc": {
+          "description": "flo2-calc's version.",
+          "type": "string",
+          "minLength": 1
+        },
+        "pint": {
+          "description": "The version of pint that gave the unit conversion factors.",
+          "type": "string",
+          "minLength": 1
+        },
+        "python_flint": {
+          "description": "The version of python-flint (FLINT's Arb ball arithmetic) that gave the enclosures rounded values are decided from.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "content_hash": {
+      "description": "sha256 over the canonical JSON (keys sorted, no spaces, UTF-8) of every other field of this record.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "if": {
+    "properties": {
+      "status": {
+        "const": "computed"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "values",
+      "result"
+    ],
+    "not": {
+      "anyOf": [
+        {
+          "required": [
+            "stopped"
+          ]
+        },
+        {
+          "required": [
+            "limits_in_force"
+          ]
+        }
+      ]
+    }
+  },
+  "else": {
+    "required": [
+      "stopped",
+      "limits_in_force"
+    ],
+    "not": {
+      "anyOf": [
+        {
+          "required": [
+            "values"
+          ]
+        },
+        {
+          "required": [
+            "result"
+          ]
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$"
+    },
+    "valueText": {
+      "description": "A value as text: a number and its unit (\"1.4 mm\"), a plain number (\"0.3\"), or \"true\"/\"false\". An exact number whose decimal does not end is rounded to 30 significant digits here, and given exactly in \"exact\". A rounded value is written as its decimal, in full, and labelled in \"rounded\".",
+      "type": "string",
+      "minLength": 1
+    },
+    "exactText": {
+      "description": "The exact value as a fraction of integers, with its unit (\"1/3 mm\"), when \"value\" is rounded.",
+      "type": "string",
+      "pattern": "^-?[0-9]+/[0-9]+( .+)?$"
+    },
+    "reference": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "design_node"
+          ],
+          "properties": {
+            "design_node": {
+              "description": "The id of a node in a reflow2 design, e.g. \"con:cavity-depth\".",
+              "type": "string",
+              "pattern": "^\\S{1,200}$"
+            },
+            "design": {
+              "description": "The design's id, when the node is in another design than the one the record is linked from.",
+              "type": "string",
+              "pattern": "^\\S{1,200}$"
+            }
+          }
+        }
+      ]
+    },
+    "graph": {
+      "description": "The graph as flo2-calc read it, every input value as text. Re-running a record re-reads this.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodes"
+      ],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "oneOf": [
+              {
+                "title": "input",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "value",
+                  "source"
+                ],
+                "properties": {
+                  "id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "value": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "source": {
+                    "$ref": "#/$defs/reference"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              },
+              {
+                "title": "operation",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "op",
+                  "args"
+                ],
+                "properties": {
+                  "id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "op": {
+                    "enum": [
+                      "add",
+                      "sub",
+                      "mul",
+                      "div",
+                      "neg",
+                      "abs",
+                      "pow",
+                      "min",
+                      "max",
+                      "convert",
+                      "sqrt",
+                      "exp",
+                      "ln",
+                      "log10",
+                      "pi",
+                      "e",
+                      "sin",
+                      "cos",
+                      "tan",
+                      "asin",
+                      "acos",
+                      "atan",
+                      "atan2",
+                      "ceil",
+                      "floor",
+                      "round",
+                      "normal_cdf",
+                      "normal_sf",
+                      "normal_quantile",
+                      "chi2_sf",
+                      "t_quantile",
+                      "and",
+                      "or",
+                      "not",
+                      "nand",
+                      "nor",
+                      "xor",
+                      "eq",
+                      "ne",
+                      "lt",
+                      "le",
+                      "gt",
+                      "ge"
+                    ]
+                  },
+                  "args": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/id"
+                    },
+                    "minItems": 0,
+                    "maxItems": 100
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "digits": {
+                    "description": "A rounded operator's significant digits.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "places": {
+                    "description": "ceil, floor and round: the decimal places kept.",
+                    "type": "integer",
+                    "minimum": -1000,
+                    "maximum": 1000
+                  },
+                  "mode": {
+                    "description": "round: how a tie is broken.",
+                    "enum": [
+                      "half_even",
+                      "half_away_from_zero",
+                      "half_toward_zero",
+                      "half_up",
+                      "half_down"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "result": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "rounded": {
+      "description": "Present when the value is a ROUNDED one: not exact, and never given an exact fraction.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digits",
+        "correctly_rounded",
+        "error_at_most",
+        "from"
+      ],
+      "properties": {
+        "digits": {
+          "description": "The significant digits the value is written to.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "correctly_rounded": {
+          "description": "true: the value is the true result rounded half-even to `digits` significant digits (its arguments were exact). false: it is computed from rounded values, and is within error_at_most of the true result.",
+          "type": "boolean"
+        },
+        "error_at_most": {
+          "description": "A rigorous bound on the distance between the written value and the true one, with the value's unit.",
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "description": "The nodes whose rounding this value carries: rounded-class operators, in the order met.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      }
+    }
+  }
+}

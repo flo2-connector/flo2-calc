@@ -63,7 +63,7 @@ def direct_of(g=GROWING, name="stage-gain", supports=SUPPORTS):
 def test_a_pending_record_holds_the_graph_the_inputs_and_the_limit_and_no_result():
     rec = pending_of()
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 2 and rec["status"] == "not_computed"
+    assert rec["schema_version"] == 3 and rec["status"] == "not_computed"
     assert rec["graph"] == GROWING
     assert rec["supports"] == SUPPORTS
     assert "values" not in rec and "result" not in rec, "no values and no result"
@@ -79,7 +79,7 @@ def test_a_pending_record_holds_the_graph_the_inputs_and_the_limit_and_no_result
     assert rec["limits_in_force"] == {"deadline": "45 s", "max_digits": 100, "max_reply_bytes": 8388608}
     assert rec["produced_by"]["flo2_calc"] == __version__
     assert rec["content_hash"] == R.content_hash(rec)
-    jsonschema.Draft202012Validator(R.schema(2)).validate(rec)
+    jsonschema.Draft202012Validator(R.schema()).validate(rec)
 
 
 def test_the_same_stop_gives_a_byte_identical_pending_record():
@@ -87,7 +87,7 @@ def test_the_same_stop_gives_a_byte_identical_pending_record():
 
 
 def test_a_computed_record_validates_and_a_pending_one_cannot_carry_a_result():
-    v = jsonschema.Draft202012Validator(R.schema(2))
+    v = jsonschema.Draft202012Validator(R.schema())
     assert v.is_valid(direct_of())
     with_result = pending_of()
     with_result["result"] = {"node": "under", "value": "true"}
@@ -272,6 +272,30 @@ def test_a_version_1_record_made_by_flo2_calc_0_1_0_still_re_runs(fixture):
     assert answer["note"] == f"recorded with flo2-calc 0.1.0, re-run with {__version__}."
     over_the_client = answer_of(one("rerun_record", {"record": text}))
     assert over_the_client["reproduces"] is True
+
+
+def test_a_version_2_record_made_by_flo2_calc_0_2_0_still_re_runs():
+    text = (DATA / "stage-gain.v2.calc.json").read_text(encoding="utf-8")
+    rec = json.loads(text)
+    assert rec["schema_version"] == 2 and rec["produced_by"] == {"flo2_calc": "0.2.0", "pint": "0.26.1"}
+    jsonschema.Draft202012Validator(R.schema(2)).validate(rec)
+    answer = R.rerun(R.load(text))
+    assert answer["reproduces"] is True, answer
+    assert answer["note"] == f"recorded with flo2-calc 0.2.0, re-run with {__version__}."
+    assert answer_of(one("rerun_record", {"record": text}))["reproduces"] is True
+
+
+def test_a_version_2_not_yet_computed_record_completes_to_this_versions_direct_record():
+    """Made by 0.2.0 on a small machine, completed by this version: the record a
+    direct computation gives here, byte for byte (schema version 3 now)."""
+    text = (DATA / "stage-gain.not-computed.v2.calc.json").read_text(encoding="utf-8")
+    pending = R.load(text)
+    assert pending["schema_version"] == 2 and pending["status"] == "not_computed"
+    completed = one("record_computation", {"record": text})
+    assert answer_of(completed)["status"] == "ok"
+    direct = one("record_computation", {"graph": GROWING, "name": "stage-gain", "supports": SUPPORTS})
+    assert completed.content[1].resource.text == direct.content[1].resource.text
+    assert json.loads(completed.content[1].resource.text)["schema_version"] == 3
 
 
 def test_a_tampered_version_1_record_is_still_caught():

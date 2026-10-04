@@ -6,7 +6,9 @@
 Starts ONE container of the image under flo2-tool-sandbox's flags (no network,
 a read-only root, a 64 MB /tmp, user 65534, no capabilities, one CPU, 64
 processes, the memory cap with no swap), drives a session over stdio that is
-heavier than a decision needs (a 500-node graph, records, re-runs, refusals),
+heavier than a decision needs (a 500-node graph, records, re-runs, refusals,
+and a 484-node graph of rounded operators at 1,000 digits each, recorded and
+re-run),
 then RUNAWAY calculations that only the image's limits stop (a huge power, a
 chain of squarings, the heaviest graph its digits budget allows, sent whole and
 recorded), then reads the container's cgroup memory.peak before closing it.
@@ -47,6 +49,24 @@ def heavy_graph(n: int = 500) -> dict:
     return {"nodes": nodes}
 
 
+def rounded_graph(n: int = 480, digits: int = 1000) -> dict:
+    """n nodes of the rounded class, every one at `digits` significant digits
+    (the most a node may ask for): roots, exponentials, logarithms,
+    trigonometry, deg-rad conversion and every distribution. Python-flint is
+    loaded and works at about 3,400 bits for each."""
+    nodes: list[dict] = [
+        {"id": "x", "value": "0.7", "source": "measure.py"}, {"id": "p", "value": "0.975", "source": "measure.py"},
+        {"id": "k", "value": "4", "source": "measure.py"}, {"id": "a", "value": "37.5 deg", "source": "measure.py"},
+    ]
+    kinds = [("sqrt", ["x"], {}), ("exp", ["x"], {}), ("ln", ["x"], {}), ("sin", ["a"], {}), ("atan", ["x"], {"unit": "rad"}),
+             ("convert", ["a"], {"unit": "rad"}), ("normal_quantile", ["p"], {}), ("chi2_sf", ["x", "k"], {}),
+             ("t_quantile", ["p", "k"], {})]
+    for i in range(n):
+        op, args, extra = kinds[i % len(kinds)]
+        nodes.append({"id": f"n{i}", "op": op, "args": args, "digits": digits, **extra})
+    return {"nodes": nodes}
+
+
 def runaway_graphs() -> dict[str, dict]:
     """Calculations past any sensible limit: each must be STOPPED, with its reason."""
     nines = "9" * 80
@@ -59,6 +79,8 @@ def runaway_graphs() -> dict[str, dict]:
         "huge_power": {"nodes": [{"id": "x", "value": nines}, {"id": "e1", "value": "250"}, {"id": "y", "op": "pow", "args": ["x", "e1"]},
                                  {"id": "e2", "value": "1000"}, {"id": "z", "op": "pow", "args": ["y", "e2"]}]},
         "squarings": {"nodes": squarings},
+        "huge_exp": {"nodes": [{"id": "x", "value": "1e5"}, {"id": "y", "op": "exp", "args": ["x"]}]},
+        "far_tail": {"nodes": [{"id": "x", "value": "1e6"}, {"id": "q", "op": "normal_sf", "args": ["x"]}]},
         "heaviest_allowed": {"nodes": heaviest},
     }
 
@@ -82,6 +104,18 @@ async def drive(command: list[str], name: str) -> dict:
                 calls += 1
             await s.call_tool("evaluate_graph", {"graph": {"nodes": [{"id": "a", "value": "2 mm"}, {"id": "b", "value": "3 g"}, {"id": "s", "op": "add", "args": ["a", "b"]}]}})
             calls += 1
+        for _ in range(3):
+            r = await s.call_tool("evaluate_graph", {"graph": rounded_graph()})
+            calls += 1
+            answer = json.loads(r.content[0].text)
+            assert answer["status"] == "ok", answer.get("refused")
+            rec = await s.call_tool("record_computation", {"graph": rounded_graph(), "name": "rounded"})
+            calls += 1
+            record = json.loads(rec.content[1].resource.text) if len(rec.content) > 1 else None
+            if record:
+                again = json.loads((await s.call_tool("rerun_record", {"record": record})).content[0].text)
+                assert again["reproduces"] is True, again.get("differences")
+                calls += 1
         seconds = time.perf_counter() - started
         runaway: dict[str, str] = {}
         for label, g in runaway_graphs().items():

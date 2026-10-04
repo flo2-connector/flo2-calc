@@ -21,9 +21,11 @@ arithmetic on those fractions. pint's float arithmetic is never used.
 DELIBERATE DEPARTURES FROM pint:
   - Angles are their own dimension. pint calls deg and rad dimensionless, so
     it would let "30 deg + 1" through; flo2-calc refuses it. arcmin and arcsec
-    are exact fractions of a deg (1/60 and 1/3600). deg and rad are not
-    converted into each other, because their ratio is pi, which no fraction
-    holds exactly: flo2-calc refuses rather than round.
+    are exact fractions of a deg (1/60 and 1/3600). deg and rad are never
+    mixed in one operation, because their ratio is pi/180, which no fraction
+    holds exactly. Only `convert` turns one into the other (`pi_conversion`),
+    arcmin and arcsec through deg, and its result is a correctly rounded value
+    labelled rounded (realmath.py), never an exact one.
   - Money. Each currency (an ISO 4217 code) is its own dimension, and
     flo2-calc holds no exchange rates, so USD + EUR is refused, naming both.
     Only a rate the caller gives, as an input with its source ("0.92 EUR/USD"),
@@ -626,8 +628,9 @@ def conversion(from_unit: Unit, to_unit: Unit, operation: str) -> Fraction:
         named = (format_unit(first), format_unit(second))
         if (_angle_kinds(first) | _angle_kinds(second)) == {"[angle, in deg]", "[angle, in rad]"}:
             raise Refusal(
-                f"{said}: converting between deg and rad needs pi, which no exact number holds, and flo2-calc "
-                "refuses rather than round. Give both angles in the same unit.",
+                f"{said}: deg and rad differ by the factor pi/180, which no exact number holds, so they are never "
+                "mixed silently. Convert one first: a convert node turns deg into rad, or rad into deg, as a "
+                "correctly rounded value labelled rounded.",
                 kind="unit_mismatch",
                 units=named,
             )
@@ -687,3 +690,40 @@ def power(unit: Unit, n: int) -> tuple[Unit, Fraction]:
     magnitude takes (only a folded "%" gives one)."""
     out, fold = fold_percent(tuple((s, e * n) for s, e in unit if e * n != 0))
     return as_change(out), fold
+
+
+# ---------------------------------------------------------------- angles, for trigonometry and deg-rad conversion
+
+DEG_DIMENSION, RAD_DIMENSION = ANGLES["deg"][0], ANGLES["rad"][0]
+ANGLE_DIMENSIONS = {DEG_DIMENSION: "deg", RAD_DIMENSION: "rad"}
+
+
+def angle_kind(unit: Unit) -> tuple[str, Fraction] | None:
+    """("deg" or "rad", the exact factor turning a magnitude in `unit` into
+    that) when the unit measures one plain angle: deg, arcmin and arcsec are
+    of the deg kind (factors 1, 1/60, 1/3600), rad of the rad kind. None
+    otherwise."""
+    dims = dimension(unit)
+    if len(dims) == 1 and dims[0][1] == 1 and dims[0][0] in ANGLE_DIMENSIONS:
+        return ANGLE_DIMENSIONS[dims[0][0]], factor(unit)
+    return None
+
+
+def pi_conversion(from_unit: Unit, to_unit: Unit) -> tuple[Fraction, int] | None:
+    """For two units that measure the same thing except that one counts
+    angles in deg (or arcmin, arcsec) and the other in rad (deg into rad,
+    arcsec into rad, rad/s into deg/s ...):
+    (f, k) such that a value v in from_unit is v * f * (pi/180)^k in to_unit,
+    f exact. None when they differ in anything else."""
+
+    def split(unit: Unit) -> tuple[int, int, dict[str, int]]:
+        dims = dict(dimension(unit))
+        deg = dims.pop(DEG_DIMENSION, 0)
+        rad = dims.pop(RAD_DIMENSION, 0)
+        return deg, rad, dims
+
+    deg_f, rad_f, rest_f = split(from_unit)
+    deg_t, rad_t, rest_t = split(to_unit)
+    if rest_f != rest_t or deg_f + rad_f != deg_t + rad_t or deg_f == deg_t:
+        return None
+    return factor(from_unit) / factor(to_unit), deg_f - deg_t

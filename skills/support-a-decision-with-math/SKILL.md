@@ -1,6 +1,6 @@
 ---
 name: support-a-decision-with-math
-description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison against a limit - especially one with units. It covers composing the computation, units, refusals, making the computation record, saving it, linking it to the decision, and checking it later.
+description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison against a limit, a root, a logarithm or dB, an angle, a p-value or a critical value - especially one with units. It covers composing the computation, units, rounded results, refusals, making the computation record, saving it, linking it to the decision, and checking it later.
 compatibility: Needs the flo2-calc MCP server (evaluate_graph, add_node, record_computation, rerun_record). Nothing else has to be running. Linking a record to a design uses the design tool's own tools (reflow2), when there is one.
 ---
 
@@ -22,7 +22,9 @@ Use flo2-calc when a decision, a trade or a limit turns on something computed:
 - **a budget or a run time:** how many hours does a 2400 mAh cell give at 180 mA?
 - **a comparison against a limit:** is the part's mass under the 12 g budget?
 - **a conversion** a reader will rely on: 0.25 in in mm;
-- **a yes/no built from several conditions:** it fits AND it lasts the night AND it is under budget.
+- **a yes/no built from several conditions:** it fits AND it lasts the night AND it is under budget;
+- **a root, a logarithm, an angle or a statistic:** a standard deviation, a loss in dB, a great-circle angle, a normal
+  tail probability, a chi-square p-value, a Student-t critical value.
 
 Do not use it for a domain's own formulas, such as metal weight from volume, ring sizes, or a building's areas. The
 helper that owns the domain computes those (flo2-cad, flo2-ifc), and you bring its number into flo2-calc as an input,
@@ -52,27 +54,43 @@ with that helper as its source.
    - `evaluate_graph` takes the whole graph in one call. It returns the result and every node's value.
    - `add_node` builds the graph one node at a time, when you want to see each value as you go. Pass back the
      `graph` it returns. The result is the same either way.
-4. **Read a refusal and fix the cause; never work around it.**
+4. **Use the built-in operators for anything that is not exact; never type a constant or a result in.**
+   - `{"id": "pi", "op": "pi"}` and `{"id": "e", "op": "e"}` are the constants. Do not type pi to 30 digits as an input.
+   - `sqrt`, `exp`, `ln`, `log10`, and `pow` with a non-whole exponent (`"1/3"`, `"0.44"`).
+   - `sin`, `cos`, `tan` take an angle WITH its unit (`"37.5 deg"`). `asin`, `acos`, `atan`, `atan2` need
+     `"unit": "deg"` or `"rad"` for the angle they give. `convert` turns deg into rad.
+   - `normal_cdf`, `normal_sf` (the upper tail), `normal_quantile`, `chi2_sf` (a p-value), `t_quantile` (a critical
+     value). The normal ones take `[x]`, or `[x, mean, sd]` in one unit.
+   - `ceil`, `floor`, `round` (with `"places"`; `round`'s `"mode"` is `half_even` unless you say otherwise).
+   - Their results come back labelled `"rounded"`: correctly rounded to 30 significant digits (ask for more with
+     `"digits"`, up to 1000), with `error_at_most`, and never with an `exact` fraction. Anything computed from a rounded
+     value is labelled rounded too, with its bound. Where the result is rational it stays exact (`sqrt(9/4)` is `1.5`).
+5. **Read a refusal and fix the cause; never work around it.**
    - A `"status": "refused"` reply names the node, the operation and why. For example, `add cannot combine mm and g`
      means the computation is wrong, not the calculator. Tell the person what did not add up.
    - A "Malformed call" error names the field to fix: an unknown unit, a missing node, a cycle.
    - A near-miss unit may say what to write instead (`khz` gives `Write "kHz"`). Units are case-sensitive, and a
      prefix's case is its size: `mJ` is a millijoule and `MJ` a megajoule. When flo2-calc gives no hint, write the
      unit you mean yourself. Never change its prefix to get past the refusal.
-5. **Make the record** with `record_computation` once the computation is right. Give it a `name` such as
+   - `"kind": "undecidable"` means a rounded value's error bound straddles the answer: `sqrt(2) * sqrt(2) = 2` cannot be
+     told. Ask for more `digits`, or compute it another way (compare the exact squares instead). Never decide it
+     yourself.
+   - `"kind": "out_of_domain"` or `"undefined"`: the argument is outside what the function takes (`sqrt(-1)`, a
+     probability of 1, `tan(90 deg)`). The computation, not the calculator, needs fixing.
+6. **Make the record** with `record_computation` once the computation is right. Give it a `name` such as
    `fiber-bend-margin`, and `supports`: the decision it backs, as `{"design_node": "dec:..."}` or in words.
    - It returns the result and the record as a file: `calcfile:///<name>.calc.json`.
    - To save the record beside the work, add `output_path` (for example `decisions/fiber-bend-margin.calc.json`). The
      path is inside the folder flo2-calc was started in. It never writes outside that folder, and never over a
      different file.
-6. **Link the record to the decision, and quote the result there.** In a reflow2 design, register the file as an
+7. **Link the record to the decision, and quote the result there.** In a reflow2 design, register the file as an
    Artifact that documents the decision, with its sha256 as the checksum, and put the result into the decision's
    text: "margin 0.6 mm, needed 0.5 mm: fits (fiber-bend-margin.calc.json)". flo2-calc never writes to the design.
    Linking is your step, done with the design tool's own tools.
-7. **Check it later** with `rerun_record`. Pass the record itself, or its `path` when it was saved.
+8. **Check it later** with `rerun_record`. Pass the record itself, or its `path` when it was saved.
    - `reproduces: true` means the record is intact and its graph still gives every value it holds.
    - Anything else names each difference. Say so before relying on the number.
-8. **When a calculation passes the host's limits**, the reply is `"status": "refused"` with
+9. **When a calculation passes the host's limits**, the reply is `"status": "refused"` with
    `"kind": "exceeds_limits"`.
    - The refusal names the limit (a deadline, `max_digits` or `max_reply_bytes`), its value, the node reached and how
      large the numbers grew. It is the machine's limit, not a fault in the math. Never shrink the inputs, round them
@@ -97,13 +115,18 @@ When flo2-calc is reached through flo2's `use_helper_tool`, the steps are the sa
 - To re-check a record, pass its content to `rerun_record`.
 - flo2.io's limits are lower than a laptop's: 20 s a call, 2,000 digits, 2 MiB a reply. A calculation past them
   comes back as a not-yet-computed record, kept in the design like any other. The person, or an agent on their
-  machine, completes it there with the standalone flo2-calc (step 8). Then link the completed record to the decision
+  machine, completes it there with the standalone flo2-calc (step 9). Then link the completed record to the decision
   in its place.
 
 ## Talking about it
 
 Say what was computed in the person's terms: "the fiber needs 1.4 mm to bend, the cavity gives 2 mm, so there is
-0.6 mm to spare against the 0.5 mm you wanted". Do not say "graph" or "node" to them. When a value is rounded, the
-reply also gives its exact fraction: the exact value for these inputs. Quote the rounded value to the person, and
-keep the exact one in the record. Never call a result exact beyond its inputs. A result from a measured value, or
-from a typed decimal of pi or e, is exact for that value or decimal, and no more accurate than it is.
+0.6 mm to spare against the 0.5 mm you wanted". Do not say "graph" or "node" to them.
+
+- An exact value whose decimal does not end is written rounded with its exact fraction beside it (`"exact": "40/9 h"`):
+  the exact value for these inputs. Quote the rounded text to the person; the record keeps the exact one. Never call a
+  result exact beyond its inputs: a result from a measured value is exact for that value, and no more accurate than it
+  is. Use the `pi` and `e` operators rather than typing their digits.
+- A value labelled `"rounded"` is not exact, and the reply's `exactness` says so. Say so too, with its precision: "the
+  standard deviation is 0.2302 mm (rounded; correct to 30 digits)". Quote no more digits than the person needs, and
+  never call it exact.

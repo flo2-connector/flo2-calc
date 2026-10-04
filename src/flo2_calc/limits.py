@@ -261,6 +261,35 @@ class Guard:
                     needed=at_least,
                 )
 
+    def check_rounded_size(self, exponent: int, places: int, what: str = "result") -> None:
+        """BEFORE a rounded value of `places` significant digits and decimal
+        exponent `exponent` is written as an exact fraction: a value like
+        1.2e-3000 is short as text but its denominator has 3,000 digits, so it
+        is sized from its exponent first, never built and then measured."""
+        self.check_time()
+        needed = abs(exponent) + places + 1
+        if needed > self.limits.max_digits:
+            self._stop(
+                "max_digits",
+                f"{self._here()}the {what} is about 1e{exponent:+d}; carried exactly to {places} significant digits, "
+                f"its {'numerator' if exponent >= 0 else 'denominator'} would have about {needed:,} digits, past this "
+                f"host's budget of {self.limits.max_digits:,} digits for any exact number, so it was not made.",
+                needed=needed,
+            )
+
+    def check_precision(self, working: int, what: str) -> None:
+        """Deciding a correctly rounded value works at a precision that grows
+        until the rounding is decided (realmath.py). The host's digits budget
+        bounds that working precision too."""
+        self.check_time()
+        if working > self.limits.max_digits:
+            self._stop(
+                "max_digits",
+                f"{self._here()}deciding {what} needed more than this host's budget of {self.limits.max_digits:,} "
+                f"digits of working precision (it was about to work at {working:,}), so nothing was guessed.",
+                needed=working,
+            )
+
     def spend_reply(self, nbytes: int) -> None:
         """Count bytes written into the reply as they are written, so a reply
         too large to send stops early instead of being built whole."""
