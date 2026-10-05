@@ -9,10 +9,13 @@ only called the functions would miss a reason that never arrives.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import anyio
 import pytest
-from conftest import answer_of, graph, inp, op, reason_of, session, text_of
+from conftest import answer_of, graph, inp, op, reason_of, server_command, session, text_of
+from mcp import ClientSession
+from mcp.client.stdio import StdioServerParameters, stdio_client
 
 FIBER = graph(
     inp("cavity", "2 mm", {"design_node": "con:cavity-depth"}),
@@ -51,10 +54,11 @@ def test_a_unit_mismatch_reaches_the_agent_as_a_normal_reply_naming_the_operatio
 
 
 def test_an_unknown_unit_reaches_the_agent_as_a_malformed_call_with_its_reason():
-    r = one("evaluate_graph", {"graph": graph(inp("a", "2 furlong"))})
+    """The example of an unknown unit is one that is genuinely unknown: furlong is a unit now (0.5.0)."""
+    r = one("evaluate_graph", {"graph": graph(inp("a", "2 notaunit"))})
     reason = reason_of(r)
     assert reason.startswith("Malformed call. graph.nodes[0].value:"), reason
-    assert '"furlong" is not a unit flo2-calc knows' in reason
+    assert '"notaunit" is not a unit flo2-calc knows' in reason
     assert "never guessed" in reason
 
 
@@ -90,7 +94,9 @@ def test_a_bare_c_reaches_the_agent_pointing_at_degc():
 
 def test_an_expression_typed_as_a_value_reaches_the_agent_as_one():
     reason = reason_of(one("evaluate_graph", {"graph": graph(inp("a", "3 + * 4"))}))
-    assert "looks like an expression" in reason and "graph of nodes" in reason
+    assert "is a malformed expression" in reason and "graph of nodes" in reason
+    assert 'no operand between "+" at character 3 and "*" at character 5' in reason
+    assert '"value": "3"' not in reason and '"op": "add"' not in reason
 
 
 def test_every_answer_says_its_values_are_exact_for_these_inputs():
@@ -237,7 +243,7 @@ def test_rounded_values_reach_the_agent_labelled_and_a_decided_comparison_is_ans
 def test_a_record_with_rounded_values_is_made_and_re_runs_over_the_client():
     made, = anyio.run(calls, [("record_computation", {"graph": ROUNDED, "name": "ci-half-width"})])
     rec = json.loads(made.content[1].resource.text)
-    assert rec["schema_version"] == 4 and rec["produced_by"]["python_flint"] and rec["produced_by"]["numpy"]
+    assert rec["schema_version"] == 5 and rec["produced_by"]["python_flint"] and rec["produced_by"]["numpy"]
     assert {v["node"] for v in rec["values"] if "rounded" in v} == {"sd", "t", "half", "rad", "s", "pi"}
     again, = anyio.run(calls, [("rerun_record", {"record": made.content[1].resource.text})])
     assert json.loads(text_of(again))["reproduces"] is True
@@ -248,3 +254,83 @@ def test_an_undecidable_comparison_reaches_the_agent_as_a_refusal():
     answer = json.loads(text_of(one("evaluate_graph", {"graph": g})))
     assert answer["status"] == "refused" and answer["refused"]["kind"] == "undecidable"
     assert "does not guess" in answer["refused"]["reason"]
+
+
+# ---------------------------------------------------------------- the skill, served over MCP (round 2, fix 7)
+
+SKILL_FILE = Path(__file__).resolve().parent.parent / "skills" / "support-a-decision-with-math" / "SKILL.md"
+
+
+async def _skill_over_mcp():
+    async with session() as s:
+        prompts = await s.list_prompts()
+        got = await s.get_prompt("support-a-decision-with-math")
+        resources = await s.list_resources()
+        read = await s.read_resource(resources.resources[0].uri)
+        return prompts, got, resources, read
+
+
+def test_the_skill_is_served_as_a_prompt_and_a_resource_read_from_its_one_file():
+    """A client that starts flo2-calc as a plain command, with no plugin, gets
+    the skill's routing rules and its rules against typing constants: the five
+    routing passes of round 2 rested on guidance such a client never got."""
+    prompts, got, resources, read = anyio.run(_skill_over_mcp)
+    text = SKILL_FILE.read_text(encoding="utf-8")
+    front, body = text.split("\n---\n", 1)
+    assert [p.name for p in prompts.prompts] == ["support-a-decision-with-math"]
+    assert prompts.prompts[0].description and prompts.prompts[0].description in front
+    assert got.messages[0].role == "user" and got.messages[0].content.text == body.lstrip("\n")
+    assert [(str(r.uri), r.mime_type) for r in resources.resources] == [
+        ("skill://flo2-calc/support-a-decision-with-math/SKILL.md", "text/markdown")]
+    assert read.contents[0].text == text, "the file itself, as it is"
+    assert "flo2-cad" in read.contents[0].text, "it carries the routing rule"
+
+
+async def _instructions():
+    command = server_command()
+    params = StdioServerParameters(command=command[0], args=command[1:])
+    async with stdio_client(params) as (read, write), ClientSession(read, write) as s:
+        return await s.initialize()
+
+
+def test_the_instructions_name_the_served_skill_and_the_shown_back_working():
+    hello = anyio.run(_instructions)
+    assert "support-a-decision-with-math" in hello.instructions
+    assert "skill://flo2-calc/support-a-decision-with-math/SKILL.md" in hello.instructions
+    assert "numbered steps" in hello.instructions and "never decides which equation applies" in hello.instructions
+    assert hello.capabilities.prompts is not None and hello.capabilities.resources is not None
+
+
+# ---------------------------------------------------------------- every reply shows the computation back (round 2, fix 11)
+
+
+def test_every_tool_shows_the_formula_and_the_working():
+    g = graph(inp("C", "450 mAh", "datasheet"), inp("I", "13 mA", "measured"), op("t", "div", "C", "I"))
+    evaluated, added, recorded = anyio.run(calls, [
+        ("evaluate_graph", {"graph": g}),
+        ("add_node", {"graph": {"nodes": g["nodes"][:2]}, "node": g["nodes"][2]}),
+        ("record_computation", {"graph": g, "name": "battery"}),
+    ])
+    rerun, = anyio.run(calls, [("rerun_record", {"record": recorded.content[1].resource.text})])
+    for r in (evaluated, added, recorded, rerun):
+        answer = answer_of(r)
+        assert answer["formula"][-1]["text"] == "t = C / I = 450/13 h", answer["formula"]
+        assert answer["formula"][-1]["latex"].startswith(r"\text{t} = \frac")
+        assert [w["step"] for w in answer["working"]] == [1, 2, 3]
+        assert answer["working"][-1]["text"] == "t = C / I = 450 mAh / (13 mA) = 450/13 h"
+    rec = json.loads(recorded.content[1].resource.text)
+    assert rec["formula"] == answer_of(recorded)["formula"] and len(rec["working"]) == 3
+
+
+def test_several_results_come_back_by_name_over_the_client():
+    g = graph(inp("mid", "12 mm", "m"), inp("half", "0.3 mm", "m"), op("lo", "sub", "mid", "half"), op("hi", "add", "mid", "half"),
+              result=["lo", "hi"])
+    evaluated, recorded = anyio.run(calls, [("evaluate_graph", {"graph": g}), ("record_computation", {"graph": g, "name": "interval"})])
+    for r in (evaluated, recorded):
+        assert answer_of(r)["results"] == [{"node": "lo", "value": "11.7 mm"}, {"node": "hi", "value": "12.3 mm"}]
+    assert json.loads(recorded.content[1].resource.text)["results"][1]["node"] == "hi"
+
+
+def test_a_decibel_conversion_without_its_kind_reaches_the_agent_as_a_malformed_call():
+    reason = reason_of(one("evaluate_graph", {"graph": graph(inp("g", "6 dB"), op("r", "db_to_ratio", "g"))}))
+    assert reason.startswith("Malformed call. graph.nodes[1].kind:") and "never picks one" in reason

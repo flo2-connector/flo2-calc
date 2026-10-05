@@ -1,7 +1,8 @@
-# The image is built from pyproject.toml, README.md (its readme), LICENSE and src/ only.
+# The image is built from pyproject.toml, README.md (its readme), LICENSE, src/ and skills/ (the served skill) only.
 *
 !pyproject.toml
 !README.md
 !LICENSE
 !src/
+!skills/
 src/**/__pycache__

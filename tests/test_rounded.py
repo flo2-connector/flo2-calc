@@ -681,3 +681,39 @@ def test_the_chi_square_tail_brackets_the_published_critical_values(dof, alpha, 
     for x, name in ((c - half, "gt"), (c + half, "lt")):
         r = ok(inp("x", text(x)), inp("k", dof), op("q", "chi2_sf", "x", "k"), inp("a", alpha), op("r", name, "q", "a"))
         assert r["value"] == "true", (dof, x, name)
+
+
+# ---------------------------------------------------------------- every requested digit is shown (round 2, fix 5)
+
+
+def significant_digits(text: str) -> int:
+    mantissa = text.split()[0].lstrip("-").split("e")[0].replace(".", "").lstrip("0")
+    return len(mantissa)
+
+
+def test_forty_digits_asked_for_are_forty_digits_shown_the_trailing_zero_kept():
+    """q099: sqrt(2) at 40 digits showed 39; the agent proved the 40th with a second call and wrote it in itself."""
+    r = ok(inp("x", "2"), op("r", "sqrt", "x", digits=40))
+    assert r["value"] == "1.414213562373095048801688724209698078570"
+    assert r["rounded"]["digits"] == 40
+
+
+@pytest.mark.parametrize("digits", range(1, 61))
+def test_the_text_of_a_rounded_value_has_exactly_its_digits(digits):
+    for name, x in (("sqrt", "2"), ("exp", "1"), ("ln", "10")):
+        r = ok(inp("x", x), op("r", name, "x", digits=digits))
+        assert significant_digits(r["value"]) == digits == r["rounded"]["digits"], r
+
+
+def test_a_rounded_value_far_from_one_keeps_its_digits_in_e_notation():
+    r = ok(inp("x", "1e30"), op("r", "sqrt", "x"))
+    assert r == {"node": "r", "value": "1000000000000000"}, "exact: a perfect square stays exact"
+    r = ok(inp("x", "2e60"), op("r", "sqrt", "x", digits=5))
+    assert r["value"] == "1.4142e+30"
+    r = ok(inp("x", "1e-40"), op("r", "exp", "x", digits=45))
+    assert r["value"] == "1.00000000000000000000000000000000000000010000", "45 digits, the zeros between kept"
+
+
+def test_arithmetic_on_rounded_values_shows_the_digits_it_is_labelled_with():
+    r = ok(inp("x", "2"), op("s", "sqrt", "x", digits=40), inp("h", "100"), op("r", "mul", "s", "h"))
+    assert significant_digits(r["value"]) == r["rounded"]["digits"] == 40

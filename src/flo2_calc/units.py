@@ -11,7 +11,10 @@ THE DECISIONS THIS HOLDS (design 0bee0c00b35845f6):
     exact spelling. A spelling flo2-calc does not know is refused, never
     guessed;
   - dec:round-1-fixes-one-to-six, groups 3 and 4: psi, ksi, lbf, mil, arcmin,
-    arcsec and the two gallons; degC and degF as temperatures with an offset.
+    arcsec and the two gallons; degC and degF as temperatures with an offset;
+  - dec:round-2-fixes: furlong and fortnight; dB as its own kind of value, and
+    dBm and dBW as power levels (decibels.py); a computed value's compound unit
+    shown in a simpler unit of the same size where one exists (`simplify`).
 
 WHO DOES WHAT. The vocabulary below maps each spelling to a pint unit. pint,
 loaded with exact fractions, says what each unit measures (its dimension) and
@@ -36,6 +39,14 @@ DELIBERATE DEPARTURES FROM pint:
     degC/W, or as delta_degC and delta_degF) a degree is a CHANGE of
     temperature, and multiplies like any other unit.
   - "mil" is the thousandth of an inch (pint's "thou"), not pint's angular mil.
+  - "furlong" is the international furlong, 660 ft (exactly 201.168 m). pint's
+    furlong is the US survey furlong (40 rods of 16.5 survey feet, 201.1684 m).
+  - Decibels. "dB" is its own dimension, like a currency: dB adds to dB, dB/m
+    times m is dB, and dB with a plain ratio is refused, because a gain in dB
+    and a linear ratio are different things (10 dB is a ratio of 10 in power
+    and of about 3.16 in amplitude). "dBm" and "dBW" are power LEVELS, dB above
+    1 mW and 1 W: decibels.py holds what may be done with one, and they are
+    read only as a value's whole unit.
   - A bare "C" or "F" is not read at all (AMBIGUOUS below): C is the SI symbol
     for the coulomb and F for the farad, but both are written for degrees
     Celsius and Fahrenheit, and a temperature read silently as a charge or a
@@ -102,6 +113,7 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
     "in": ("inch", "length"),
     "ft": ("foot", "length"),
     "mil": ("thou", "length"),  # a thousandth of an inch, exactly 0.0254 mm
+    "furlong": (None, "length"),  # the international furlong, 660 ft (DEFINED below), not pint's survey furlong
     # mass
     "kg": ("kilogram", "mass"),
     "g": ("gram", "mass"),
@@ -119,6 +131,7 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
     "min": ("minute", "time"),
     "h": ("hour", "time"),
     "d": ("day", "time"),
+    "fortnight": ("fortnight", "time"),  # 14 d, exactly
     # electric current
     "A": ("ampere", "current"),
     "kA": ("kiloampere", "current"),
@@ -201,6 +214,10 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
     "rad": ("radian", "angle"),
     # a plain ratio
     "%": ("percent", "ratio"),
+    # decibels: a gain or a loss (its own dimension), and power levels (decibels.py)
+    "dB": (None, "a gain or loss in decibels"),
+    "dBm": (None, "a power level, in dB above 1 mW"),
+    "dBW": (None, "a power level, in dB above 1 W"),
     # money (see the module note)
     **{code: (None, f"money in {code}") for code in CURRENCIES},
 }
@@ -209,9 +226,10 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
 # prefix and one of these (or an SI symbol in OTHER_SYMBOLS), and means
 # exactly that: tests/test_units.py holds each to it.
 UNPREFIXED: frozenset[str] = frozenset({
-    "m", "in", "ft", "mil", "g", "t", "ct", "lb", "oz", "s", "min", "h", "d", "A", "V", "W", "J", "Wh", "eV",
-    "coulomb", "Ah", "ohm", "farad", "H", "Hz", "N", "lbf", "Pa", "bar", "psi", "ksi", "K", "degC", "degF",
-    "delta_degC", "delta_degF", "L", "gal_us", "gal_imp", "deg", "arcmin", "arcsec", "rad", "%", *CURRENCIES,
+    "m", "in", "ft", "mil", "furlong", "g", "t", "ct", "lb", "oz", "s", "min", "h", "d", "fortnight", "A", "V", "W",
+    "J", "Wh", "eV", "coulomb", "Ah", "ohm", "farad", "H", "Hz", "N", "lbf", "Pa", "bar", "psi", "ksi", "K", "degC",
+    "degF", "delta_degC", "delta_degF", "L", "gal_us", "gal_imp", "deg", "arcmin", "arcsec", "rad", "%", "dB", "dBm",
+    "dBW", *CURRENCIES,
 })
 
 # SI prefixes, case-sensitive: the case of a prefix is its size. "u", "µ"
@@ -244,7 +262,8 @@ NEAR_MISSES: dict[str, str] = {
     "coulombs": "coulomb", "farads": "farad",
     "sec": "s", "secs": "s", "second": "s", "seconds": "s", "hr": "h", "hrs": "h", "hour": "h", "hours": "h",
     "mins": "min", "minute": "min", "minutes": "min", "day": "d", "days": "d",
-    "inch": "in", "inches": "in", '"': "in", "feet": "ft", "foot": "ft", "thou": "mil",
+    "inch": "in", "inches": "in", '"': "in", "feet": "ft", "foot": "ft", "thou": "mil", "furlongs": "furlong",
+    "fortnights": "fortnight", "decibel": "dB", "decibels": "dB",
     "°": "deg", "degree": "deg", "degrees": "deg", "radian": "rad", "radians": "rad",
     "arcminute": "arcmin", "arcminutes": "arcmin", "arcsecond": "arcsec", "arcseconds": "arcsec",
     "°C": "degC", "℃": "degC", "°F": "degF", "℉": "degF",
@@ -292,6 +311,13 @@ ANGLES: dict[str, tuple[str, Fraction]] = {
     "arcsec": ("[angle, in deg]", Fraction(1, 3600)),
     "rad": ("[angle, in rad]", Fraction(1)),
 }
+# Units flo2-calc defines itself, as an exact multiple of another vocabulary unit, where pint's differs.
+DEFINED: dict[str, tuple[Fraction, str]] = {
+    "furlong": (Fraction(660), "ft"),  # the international furlong; pint's is the US survey one
+}
+# Decibels, each its own dimension (decibels.py holds the levels' rules).
+DECIBELS: dict[str, str] = {"dB": "[gain, in dB]", "dBm": "[power level, in dB above 1 mW]", "dBW": "[power level, in dB above 1 W]"}
+LEVELS = ("dBm", "dBW")  # a power level: read only as a value's whole unit
 PERCENT = "%"
 SCALES = ("degC", "degF")  # a temperature reading when one is a value's whole unit (temperature.py)
 INTERVAL_OF = {"degC": "delta_degC", "degF": "delta_degF"}
@@ -346,6 +372,12 @@ def atom(spelling: str) -> Atom:
         return Atom(spelling, f, ((dim, 1),))
     if spelling in CURRENCIES:
         return Atom(spelling, Fraction(1), ((f"[money, in {spelling}]", 1),))
+    if spelling in DECIBELS:
+        return Atom(spelling, Fraction(1), ((DECIBELS[spelling], 1),))
+    if spelling in DEFINED:
+        times, of = DEFINED[spelling]
+        base = atom(of)
+        return Atom(spelling, times * base.factor, base.dimension)
     assert pint_name is not None
     return _pint_atom(spelling, pint_name)
 
@@ -513,6 +545,12 @@ def parse_unit(text: str) -> Unit:
     elif numerator == "1":
         raise UnitTextError(f'"{whole}" is not a unit; a plain number has no unit at all.')
     unit = _combine(pairs)
+    levels = [s for s, _ in pairs if s in LEVELS]
+    if levels and unit != ((levels[0], 1),):
+        raise UnitTextError(
+            f'"{whole}": {levels[0]} is a power level (dB above a reference power), and flo2-calc reads a level only '
+            f'as a value\'s whole unit ("-30 {levels[0]}"), never inside a compound unit or raised to a power.'
+        )
     return as_change(unit) if len(pairs) > 1 else unit
 
 
@@ -601,6 +639,19 @@ def currencies_in(unit: Unit) -> set[str]:
     return {s for s, _ in unit if s in CURRENCIES}
 
 
+def gain_in(unit: Unit) -> bool:
+    """Whether a unit measures a gain in dB (dB, or dB inside a compound that still measures one)."""
+    return dimension(unit) == ((DECIBELS["dB"], 1),)
+
+
+DB_IS_NOT_A_RATIO = (
+    "a gain or loss in dB and a plain ratio are different things, so they are never mixed silently. A gain in dB "
+    "becomes a ratio only through db_to_ratio, and a ratio becomes dB only through ratio_to_db, each told whether it "
+    'is a power ratio ("kind": "power", 10 log10) or an amplitude ratio ("kind": "amplitude", 20 log10): 10 dB is a '
+    "power ratio of 10 and an amplitude ratio of about 3.16, and flo2-calc never picks one."
+)
+
+
 NO_RATES = (
     "flo2-calc holds no exchange rates, so it never turns one currency into another. Give the rate as an input, "
     'with its date and source (for example "0.92 EUR/USD", source "ECB reference rate, 2026-10-02"), and multiply '
@@ -636,6 +687,8 @@ def conversion(from_unit: Unit, to_unit: Unit, operation: str) -> Fraction:
             )
         if currencies_in(first) and currencies_in(second) and currencies_in(first) != currencies_in(second):
             raise Refusal(f"{said}: they are different currencies. {NO_RATES}", kind="unit_mismatch", units=named)
+        if (gain_in(first) and not dimension(second)) or (gain_in(second) and not dimension(first)):
+            raise Refusal(f"{said}: {DB_IS_NOT_A_RATIO}", kind="unit_mismatch", units=named)
         raise Refusal(
             f"{said}: they measure different things ({describe_dimension(first)} and "
             f"{describe_dimension(second)}). Nothing was computed, and no unit was dropped.",
@@ -727,3 +780,80 @@ def pi_conversion(from_unit: Unit, to_unit: Unit) -> tuple[Fraction, int] | None
     if rest_f != rest_t or deg_f + rad_f != deg_t + rad_t or deg_f == deg_t:
         return None
     return factor(from_unit) / factor(to_unit), deg_f - deg_t
+
+
+# ---------------------------------------------------------------- a computed unit, shown simpler (dec:round-2-fixes)
+
+# Never chosen as the unit to show a value in: a temperature reading (a degree
+# inside a compound is a change), and a percentage.
+_NEVER_SHOWN_IN = frozenset({"degC", "degF", PERCENT})
+# Not chosen by size alone (rule 2), being one size with K: a change of temperature.
+_NOT_BY_SIZE = frozenset({"delta_degC", "delta_degF", *LEVELS})
+
+
+@cache
+def _by_size() -> dict[tuple[tuple[tuple[str, int], ...], Fraction], str]:
+    """Each single unit of the vocabulary (one spelling, to the power 1), keyed
+    by what it measures and its exact size. No two share a key
+    (tests/test_units.py), so rule 2 of `simplify` never has to choose."""
+    out: dict[tuple[tuple[tuple[str, int], ...], Fraction], str] = {}
+    for s in VOCABULARY:
+        if s in _NEVER_SHOWN_IN or s in _NOT_BY_SIZE:
+            continue
+        a = atom(s)
+        out.setdefault((a.dimension, a.factor), s)
+    return out
+
+
+def simplify(unit: Unit) -> tuple[Unit, Fraction] | None:
+    """The unit to SHOW a computed value in, when it is simpler than the unit it
+    was computed in, and the exact factor its number takes (the number in
+    `unit` times the factor is the number in the simpler unit); None when the
+    unit is shown as it is. Only what is shown changes: the value, its
+    dimension and its exact fraction do not. The rule, in this order:
+
+      0. A unit of one spelling (mm, mm^2, 1/s, degC, %) is shown as it is.
+      1. A compound that measures nothing at all (mm/m, a plain ratio) is
+         shown as a plain number.
+      2. A compound that is exactly the size of one unit of the vocabulary that
+         measures the same thing is shown in that unit, and the number does not
+         change: mAh/mA is h, V/mA is kohm, V*mA is mW, kPa*m^2 is kN,
+         uF*V^2 is uJ.
+      3. Otherwise, a compound that measures what one of its own spellings
+         measures is shown in the first such spelling: um^2/m (a length) in um.
+         A degree inside a compound is a change of temperature, so degC is
+         shown as delta_degC.
+      4. Otherwise it is shown as it is: m/s, kg/(m*s^2), lbf*ft.
+
+    It never chooses across dimensions, never a temperature reading or a
+    percentage."""
+    if len(unit) <= 1:
+        return None
+    dims = dimension(unit)
+    size = factor(unit)
+    if not dims:
+        return PLAIN, size
+    exact = _by_size().get((dims, size))
+    if exact is not None:
+        return ((exact, 1),), Fraction(1)
+    for spelling, _exp in unit:
+        if atom(spelling).dimension == dims and spelling != PERCENT:
+            shown = INTERVAL_OF.get(spelling, spelling)
+            return ((shown, 1),), size / atom(shown).factor
+    return None
+
+
+def latex(unit: Unit) -> str:
+    """A unit as LaTeX: \\mathrm{mm}^{2}, \\mathrm{m}/\\mathrm{s}^{2}."""
+
+    def one(spelling: str, exp: int) -> str:
+        name = spelling.replace("\\", "").replace("%", r"\%").replace("_", r"\_")
+        return r"\mathrm{" + name + "}" + ("" if exp == 1 else "^{" + str(exp) + "}")
+
+    num = [one(s, e) for s, e in unit if e > 0]
+    den = [one(s, -e) for s, e in unit if e < 0]
+    top = r"\cdot ".join(num) if num else "1"
+    if not den:
+        return top
+    bottom = den[0] if len(den) == 1 else r"\left(" + r"\cdot ".join(den) + r"\right)"
+    return top + "/" + bottom

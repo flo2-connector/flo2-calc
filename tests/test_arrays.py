@@ -685,8 +685,8 @@ def make(g=REGRESSION, root=None, name="arrays"):
 
 def test_a_record_with_arrays_fits_its_schema_and_re_runs():
     rec = make()
-    assert rec["schema_version"] == 4 and rec["produced_by"]["numpy"] == np.__version__
-    jsonschema.validate(rec, R.schema(4))
+    assert rec["schema_version"] == 5 and rec["produced_by"]["numpy"] == np.__version__
+    jsonschema.validate(rec, R.schema(5))
     assert "ARRAY" in rec["arithmetic"]
     t_input = next(i for i in rec["inputs"] if i["id"] == "t")
     assert t_input["array"]["shape"] == [6] and "values" not in t_input["array"] and t_input["unit"] == "s"
@@ -728,7 +728,7 @@ def test_a_file_arrays_record_re_runs_where_the_file_is_and_says_so_where_it_is_
     g = graph(inp("t", arr(q063_style()[0], "s"), "frame times"), inp("y", {"file": "y.csv", "unit": "deg"}, "measurements"),
               op("b", "fit_slope", "t", "y"))
     rec = make(g, root=tmp_path)
-    jsonschema.validate(rec, R.schema(4))
+    jsonschema.validate(rec, R.schema(5))
     assert rec["result"]["exact"] == "316/21875 deg/s"
     assert R.rerun(rec, data_root=tmp_path)["reproduces"] is True
     elsewhere = R.rerun(rec)
@@ -746,7 +746,81 @@ def test_a_not_yet_computed_record_with_arrays_completes_to_the_direct_record():
     e = evaluate(read_graph(g), L.Guard(small))
     assert e.stopped and e.refusal["limit"]["name"] == "max_array_bytes"
     pending = R.build_pending(e.graph, "big", None, e.refusal, small)
-    jsonschema.validate(pending, R.schema(4))
+    jsonschema.validate(pending, R.schema(5))
     done = evaluate(read_graph(pending["graph"]), L.Guard())
     direct = evaluate(read_graph(g), L.Guard())
     assert R.file_bytes(R.build(done, "big", None)) == R.file_bytes(R.build(direct, "big", None))
+
+
+# ---------------------------------------------------------------- flo2-calc 0.5.0's additions, over arrays
+
+
+def test_count_true_and_k_of_n_take_a_true_false_array():
+    nodes = [inp("x", arr(["1", "5", "13", "2", "20"])), inp("lim", "12"), op("hi", "gt", "x", "lim")]
+    assert value(*nodes, op("n", "count_true", "hi")).magnitude == 2
+    assert value(*nodes, inp("k", "2"), op("v", "k_of_n", "k", "hi")) is True
+    assert value(*nodes, inp("k", "3"), op("v", "k_of_n", "k", "hi")) is False
+    assert refusal(*nodes, inp("k", "6"), op("v", "k_of_n", "k", "hi"))["kind"] == "out_of_domain"
+    grid = [inp("g", arr([["1", "20"], ["30", "4"]])), inp("lim", "12"), op("hi", "gt", "g", "lim")]
+    assert value(*grid, op("n", "count_true", "hi", axis=0)).data.tolist() == [1, 1]
+
+
+def test_magnitude_and_with_unit_apply_to_every_element():
+    m = value(inp("i", arr(["2", "0.5"], "A")), op("n", "magnitude", "i", unit="mA"))
+    assert m.unit == () and m.data.tolist() == [2000, 500]
+    r = refusal(inp("i", arr(["2", "0.5"], "A")), op("n", "magnitude", "i", unit="mm"))
+    assert r["kind"] == "unit_mismatch" and "never taken in the wrong unit" in r["reason"]
+    w = value(inp("a", arr(["1.5", "2"])), {"id": "w", "op": "with_unit", "args": ["a"], "unit": "mil^2", "source": "IPC-2221"})
+    assert w.unit == (("mil", 2),) and w.data.tolist() == [Fraction(3, 2), 2]
+    assert refusal(inp("a", arr(["1"], "mm")), {"id": "w", "op": "with_unit", "args": ["a"], "unit": "mil^2", "source": "x"})["kind"] == "unit_mismatch"
+
+
+def test_decibels_over_arrays_keep_their_rules():
+    lv = value(inp("p", arr(["10", "20"], "dBm")), inp("g", "3 dB"), op("s", "add", "p", "g"))
+    assert lv.unit == (("dBm", 1),) and lv.data.tolist() == [13, 23]
+    r = refusal(inp("p", arr(["10", "20"], "dBm")), inp("q", "3 dBm"), op("s", "add", "p", "q"))
+    assert r["kind"] == "decibel_level"
+    ratio = value(inp("g", arr(["10", "3", "-20"], "dB")), {"id": "r", "op": "db_to_ratio", "args": ["g"], "kind": "power"})
+    assert ratio.kind == A.FLOAT64
+    holds(ratio, [mp.mpf(10), mp.power(10, mp.mpf(3) / 10), mp.mpf("0.01")])
+    back = value(inp("r", arr(["100", "2"])), {"id": "d", "op": "ratio_to_db", "args": ["r"], "kind": "amplitude"})
+    assert back.unit == (("dB", 1),)
+    holds(back, [mp.mpf(40), 20 * mp.log10(2)])
+
+
+def test_formulas_show_array_operations_and_never_write_an_array_in():
+    g = graph(inp("x", arr(["1", "2", "3", "4"], "V")), op("s", "sum", "x"), op("f", "fft", "x"), op("p", "abs", "f"),
+              op("m", "max", "p"), inp("i", "1"), op("el", "element", "x", "i"), result=["s", "m", "el"])
+    out = evaluation_json(evaluate(read_graph(g), L.Guard()))
+    assert out["status"] == "ok" and [r["node"] for r in out["results"]] == ["s", "m", "el"]
+    lines = {line["node"]: line for line in out["formula"]}
+    assert lines["s"]["text"] == "s = sum(x) = 10 V" and r"\sum" in lines["s"]["latex"]
+    assert lines["m"]["text"].startswith("m = max(|fft(x)|) ≈ ") and r"\mathcal{F}" in lines["m"]["latex"]
+    assert lines["el"]["text"] == "el = x[i] = 2 V" and "_{" in lines["el"]["latex"]
+    steps = {s["node"]: s for s in out["working"] if "node" in s}
+    assert steps["s"]["text"] == "s = sum(x) = 10 V", "an array is named, never written in"
+    assert steps["f"]["label"].startswith("float64: error at most") and "array 4 (complex, float64, V)" in steps["f"]["text"]
+    assert steps["x"]["label"] == "given"
+
+
+def test_several_results_carry_arrays_and_the_record_re_runs():
+    g = graph(inp("t", arr(q063_style()[0], "s"), "times"), inp("y", arr(q063_style()[1], "deg"), "angles"),
+              op("slope", "fit_slope", "t", "y"), op("se", "fit_slope_se", "t", "y"), op("f", "fft", "y"),
+              result=["slope", "se", "f"])
+    rec = make(g)
+    jsonschema.validate(rec, R.schema(5))
+    assert [r["node"] for r in rec["results"]] == ["slope", "se", "f"]
+    assert rec["results"][2]["array"]["kind"] == "complex" and "float64" in rec["results"][2]
+    assert R.rerun(rec)["reproduces"] is True
+
+
+def test_a_computed_array_is_shown_in_a_simpler_unit_and_whole_numbers_in_full():
+    out = answer(inp("v", arr(["3.3", "5"], "V")), inp("i", "20 mA"), op("r", "div", "v", "i"))
+    r = out["result"]
+    assert r["array"]["unit"] == "kohm" and r["array"]["values"] == ["0.165", "0.25"] and r["simplified_from"] == "V/mA"
+    big = answer(inp("x", arr(["2", "3"])), inp("k", "200"), op("p", "pow", "x", "k"))["result"]
+    assert big["array"]["values"][0] == str(2**200) and "/" not in big["array"]["values"][0]
+    f = answer(inp("v", arr(["3.3", "5"], "V")), op("e", "exp", "v"), inp("i", "20 mA"), op("r", "div", "v", "i"), op("s", "sqrt", "r"))
+    assert f["status"] == "refused" and f["refused"]["kind"] == "unit_mismatch"  # exp of volts: a unit is never dropped
+    g = answer(inp("v", arr(["4", "9"], "V")), inp("i", "1 mA"), op("r", "div", "v", "i"), inp("one", "1"), op("x", "pow", "r", "one"))
+    assert g["result"]["array"]["unit"] == "kohm"

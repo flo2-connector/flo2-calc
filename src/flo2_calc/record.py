@@ -1,11 +1,11 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-4.schema.json; version 1, 2
-and 3 records, schemas/calc-record-1.schema.json to calc-record-3.schema.json,
+A record is one JSON object (schemas/calc-record-5.schema.json; version 1 to
+4 records, schemas/calc-record-1.schema.json to calc-record-4.schema.json,
 still re-run):
 
     record_format   "flo2-calc computation record"
-    schema_version  4
+    schema_version  5
     status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
@@ -19,7 +19,12 @@ still re-run):
                     "array" (shape, kind, unit, sha256, and every element up
                     to 1,024 of them) on an array, and "float64" (error_at_most,
                     how, from) on a float64 value (arrays.py)
-    result          {"node", "value"}, labelled the same way
+    result          {"node", "value"}, labelled the same way; or, when the graph
+                    names a list of results, "results": one such entry each
+    formula         the computation as equations, plain text with LaTeX beside
+                    it (formula.py)
+    working         every step, numbered, in evaluation order: its formula,
+                    its value and its label (formula.py)
     produced_by     {"flo2_calc", "pint", "python_flint", "numpy": versions}
     content_hash    "sha256:<hex>" over the canonical JSON of all of the above
 
@@ -32,6 +37,12 @@ machine with more room completes it: record_computation takes it in place of a
 graph, checks its seal, and evaluates its graph. The completed record is the
 record a direct computation of that graph gives, byte for byte: completing
 adds nothing about where it was first tried.
+
+EACH VERSION KEEPS ITS OWN WRITING. Version 4 (flo2-calc 0.5.0) writes a whole
+number in full, a rounded value with every one of its digits, a computed
+compound unit in a simpler unit of the same size, and adds the formula and
+the working. A record of version 1 to 3 is re-run under the writing of its
+own version (evaluator.LEGACY), so it reproduces byte for byte.
 
 DETERMINISTIC. There is no timestamp and no machine name, and the file is
 written with sorted keys, so the same graph (and name, and supports) gives a
@@ -80,24 +91,32 @@ from flo2_calc import realmath as RM
 from flo2_calc import units as U
 from flo2_calc.errors import CallError, LimitExceeded
 from flo2_calc.evaluator import (
+    CURRENT,
+    LEGACY,
+    WORKING_REST_RECORD,
     Evaluation,
     Graph,
     InputNode,
     Quantity,
+    Style,
     evaluate,
     read_graph,
+    results_json,
+    shown_back,
+    shown_json,
     value_json,
     values_json,
 )
 from flo2_calc.numbers import ARITHMETIC_NOTE, ARRAYS_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 SCHEMA_FILES = {
     1: "calc-record-1.schema.json",
     2: "calc-record-2.schema.json",
     3: "calc-record-3.schema.json",
     4: "calc-record-4.schema.json",
+    5: "calc-record-5.schema.json",
 }
 COMPUTED = "computed"
 NOT_COMPUTED = "not_computed"
@@ -166,6 +185,11 @@ def check_supports(supports: Any, path: str = "supports") -> str | dict[str, str
     raise CallError(path, "supports is free text, or {\"design_node\": \"<id>\"} naming the decision in a reflow2 design.")
 
 
+def style_of(version: int) -> Style:
+    """How a record of this schema version writes its values."""
+    return CURRENT if version >= 4 else LEGACY
+
+
 def check_sources(graph: Graph) -> None:
     """Every input must say where it came from: a decision rests on its inputs,
     and an input with no source is one nobody can check later. Checked before
@@ -187,7 +211,7 @@ def uses_arrays(graph: Graph) -> bool:
     )
 
 
-def inputs_of(graph: Graph) -> list[dict[str, Any]]:
+def inputs_of(graph: Graph, style: Style = CURRENT) -> list[dict[str, Any]]:
     """Each input with its value, its unit and its source, in the graph's order."""
     inputs = []
     for n in graph.nodes:
@@ -199,37 +223,45 @@ def inputs_of(graph: Graph) -> list[dict[str, Any]]:
                 entry["unit"] = U.format_unit(n.value.unit)
             inputs.append(entry)
             continue
-        entry = {"id": n.id, **value_json(n.value), "source": n.source}
+        entry = {"id": n.id, **value_json(n.value, style), "source": n.source}
         if isinstance(n.value, Quantity):
             entry["unit"] = U.format_unit(n.value.unit)
         inputs.append(entry)
     return inputs
 
 
-def _head(status: str, name: str, graph: Graph, supports: str | dict[str, str] | None) -> dict[str, Any]:
+def _head(status: str, name: str, graph: Graph, supports: str | dict[str, str] | None, version: int = SCHEMA_VERSION) -> dict[str, Any]:
     record: dict[str, Any] = {
         "record_format": RECORD_FORMAT,
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": version,
         "status": status,
         "name": name,
         "arithmetic": ARITHMETIC_NOTE + (" " + ARRAYS_NOTE if uses_arrays(graph) else ""),
         "graph": graph.to_json(),
-        "inputs": inputs_of(graph),
+        "inputs": inputs_of(graph, style_of(version)),
     }
     if supports is not None:
         record["supports"] = supports
     return record
 
 
-def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | None) -> dict[str, Any]:
-    """The record of an evaluation that answered. Writing its values out is
-    counted against the call's deadline and reply budget (LimitExceeded)."""
+def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | None, version: int = SCHEMA_VERSION) -> dict[str, Any]:
+    """The record of an evaluation that answered, in the shape and writing of
+    schema `version` (an older one only to re-run a record of that version).
+    Writing its values out is counted against the call's deadline and reply
+    budget (LimitExceeded)."""
     assert evaluation.ok
     graph = evaluation.graph
     check_sources(graph)
-    record = _head(COMPUTED, name, graph, supports)
-    record["values"] = values_json(evaluation)
-    record["result"] = {"node": graph.result, **value_json(evaluation.values[graph.result])}
+    record = _head(COMPUTED, name, graph, supports, version)
+    values = values_json(evaluation, style_of(version))
+    record["values"] = values
+    record.update(results_json(evaluation, values))
+    if version >= 4:
+        shown = shown_back(evaluation, values)
+        record["formula"] = shown.formula
+        record["working"] = shown.working
+        evaluation.guard.spend_reply(len(canonical({"formula": shown.formula, "working": shown.working})))
     record["produced_by"] = produced_by()
     record["content_hash"] = content_hash(record)
     return record
@@ -250,6 +282,9 @@ def build_pending(graph: Graph, name: str, supports: str | dict[str, str] | None
     no result."""
     check_sources(graph)
     record = _head(NOT_COMPUTED, name, graph, supports)
+    shown = shown_back(Evaluation(graph, L.Guard(limits)), None)  # the equations, with no values: none was computed
+    record["formula"] = shown.formula
+    record["working"] = shown.working
     record["stopped"] = L.stopped_for_record(refusal)
     record["limits_in_force"] = limits.describe()
     record["produced_by"] = produced_by()
@@ -266,7 +301,7 @@ def pending_problems(record: dict[str, Any], data_root: Path | None = None) -> l
     except CallError as e:
         return [{"field": e.path, "recorded": "(as written)", "now": f"cannot be read: {e.problem}"}]
     out = []
-    again = inputs_of(graph)
+    again = inputs_of(graph, style_of(record["schema_version"]))
     if again != record["inputs"]:
         out.append({"field": "inputs", "recorded": record["inputs"], "from_its_graph": again})
     stopped_at = record["stopped"].get("node")
@@ -312,7 +347,10 @@ def place(root: Path | None, requested: Any, field: str) -> Path:
 
 
 def _same_calculation(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    return all(a.get(k) == b.get(k) for k in ("record_format", "name", "supports", "graph", "inputs"))
+    """The same calculation: its name, what it supports and its graph. Not its
+    inputs as written: they follow from the graph, and their writing can differ
+    between schema versions (a whole number is written in full from version 4)."""
+    return all(a.get(k) == b.get(k) for k in ("record_format", "name", "supports", "graph"))
 
 
 def _replaceable_pending(target: Path, new: dict[str, Any]) -> bool:
@@ -324,7 +362,7 @@ def _replaceable_pending(target: Path, new: dict[str, Any]) -> bool:
         old = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return False
-    if not isinstance(old, dict) or old.get("schema_version") not in (2, 3, 4) or old.get("status") != NOT_COMPUTED:
+    if not isinstance(old, dict) or old.get("schema_version") not in (2, 3, 4, 5) or old.get("status") != NOT_COMPUTED:
         return False
     import jsonschema
 
@@ -425,7 +463,7 @@ def load(record: Any, field: str = "record", guard: L.Guard | None = None) -> di
 
 def _differences(recorded: dict[str, Any], again: dict[str, Any]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    for key in ("graph", "inputs", "result"):
+    for key in ("graph", "inputs", "result", "results", "formula", "working"):
         if recorded.get(key) != again.get(key):
             out.append({"field": key, "recorded": recorded.get(key), "rerun": again.get(key)})
     before = {v["node"]: v for v in recorded.get("values", [])}
@@ -541,9 +579,14 @@ def rerun(record: dict[str, Any], guard: L.Guard | None = None, data_root: Path 
             differences.append({"field": "result", "recorded": record["result"], "rerun": {"refused": evaluation.refusal}})
             answer["result"] = None
         else:
-            again = build(evaluation, record["name"], record.get("supports"))
+            again = build(evaluation, record["name"], record.get("supports"), record["schema_version"])
             differences += _differences(record, again)
-            answer["result"] = again["result"]
+            if "results" in again:
+                answer["results"] = again["results"]
+                answer["result"] = None
+            else:
+                answer["result"] = again["result"]
+            answer.update(shown_json(shown_back(evaluation, again["values"]), WORKING_REST_RECORD))
     except A.DataUnavailable as e:
         answer.update(status="refused", result=None, reproduces=None, differences=[])
         answer["refused"] = {"node": None, "op": None, "kind": "data_unavailable", "reason": f"{e.path}: {e.problem}"}

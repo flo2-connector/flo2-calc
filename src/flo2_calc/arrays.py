@@ -83,6 +83,12 @@ COMPLEX values come only from the FFT (and its inverse): abs (the modulus),
 phase, real, imag and conj take them apart; add, sub, mul, neg and div by a
 real value work on them.
 
+FLO2-CALC 0.5.0's OPERATORS work on arrays too: count_true counts a true/false
+array's elements (with an axis), k_of_n takes [k, array], magnitude and
+with_unit apply to every element, db_to_ratio and ratio_to_db are functions
+over an array, and a power level in dBm or dBW is computed element by element
+by decibels.py's rules, as a temperature reading is by temperature.py's.
+
 WRITTEN BACK, an array is {"value": a description, "array": {"shape", "kind",
 "unit", "sha256", "values"}}: every element as text (an exact element
 exactly, "1/3"; a float64 element as the shortest text that reads back as the
@@ -106,6 +112,7 @@ from typing import Any, Callable, Iterator
 
 import numpy as np
 
+from flo2_calc import decibels as D
 from flo2_calc import evaluator as E
 from flo2_calc import limits as L
 from flo2_calc import numbers as N
@@ -576,7 +583,7 @@ def element_texts(a: Array) -> list[str]:
     if k == EXACT:
         out = []
         for q in flat:
-            text, exact = N.format_number(q)
+            text, exact = N.format_number(q, True)  # a whole number in full, never "/1" or e-notation
             out.append(exact if exact is not None else text)
         return out
     if k == BOOL:
@@ -638,9 +645,43 @@ def describe(a: Array) -> str:
     return f"array {shape_text(a.shape)} ({kind}{', ' + unit if unit else ''})"
 
 
-def value_json(a: Array, elements: bool = True) -> dict[str, Any]:
+def simplified(a: Array) -> tuple[Array, str] | None:
+    """A computed array shown in a simpler unit of the same size (units.simplify,
+    as a single value is), and the unit it was computed in; None when it is
+    shown as it is. An exact array's elements take the exact factor; a float64
+    one is shown simpler only when the factor is 1, so a shown double is never
+    one its bound does not cover."""
+    if a.kind == BOOL:
+        return None
+    simpler = U.simplify(a.unit)
+    if simpler is None:
+        return None
+    to, k = simpler
+    if a.kind == EXACT:
+        return exact_array([q * k for q in a.data.ravel()], a.shape, to), U.format_unit(a.unit)
+    if k != 1:
+        return None
+    return Array(a.data, to, a.error, a.label, a.norm), U.format_unit(a.unit)
+
+
+def value_json(a: Array, elements: bool = True, computed: bool = False) -> dict[str, Any]:
     """An array as replies and records write it (see the module's note). A
-    float64 value of shape () is written like a single value, with its label."""
+    float64 value of shape () is written like a single value, with its label.
+    A `computed` array's compound unit may be shown simpler, with
+    "simplified_from" naming the unit it was computed in (evaluator.value_json's
+    rule for a single value)."""
+    simplified_from = None
+    if computed:
+        shown = simplified(a)
+        if shown is not None:
+            a, simplified_from = shown
+    out = _value_json(a, elements)
+    if simplified_from is not None:
+        out["simplified_from"] = simplified_from
+    return out
+
+
+def _value_json(a: Array, elements: bool) -> dict[str, Any]:
     unit = U.format_unit(a.unit)
     if a.shape == ():
         z = a.data.item()
@@ -788,7 +829,8 @@ FITS = ("fit_slope", "fit_intercept", "fit_slope_se", "fit_intercept_se", "fit_r
 TRANSFORMS = ("fft", "ifft", "fft2", "ifft2")
 COMPLEX_PARTS = ("phase", "real", "imag", "conj")
 SHAPING = ("linspace", "column", "transpose", "element")
-ARRAY_ONLY = frozenset(REDUCTIONS + DATA_STATS + FITS + TRANSFORMS + COMPLEX_PARTS + SHAPING) - {"min", "max"}
+# count_true of true/false values (not an array) is evaluator's, as min and max of several values are.
+ARRAY_ONLY = frozenset(REDUCTIONS + DATA_STATS + FITS + TRANSFORMS + COMPLEX_PARTS + SHAPING) - {"min", "max", "count_true"}
 
 # Element-wise operators whose result is rational in rational arguments: exact on exact arrays.
 RATIONAL = frozenset({"add", "sub", "mul", "div", "neg", "abs", "pow", "min", "max", "convert", "ceil", "floor", "round",
@@ -803,6 +845,10 @@ def uses_arrays(op: str, args: list[Any]) -> bool:
 
 def apply(node: Any, values: list[Any], guard: L.Guard) -> Any:
     op = node.op
+    if op in ("magnitude", "with_unit"):
+        return _units_op(node, values, guard)
+    if op == "k_of_n":
+        return _k_of_n(node, values, guard)
     if op in REDUCTIONS and (op not in ("min", "max") or len(values) == 1):
         return _reduce(node, values, guard)
     if op in DATA_STATS:
@@ -816,6 +862,71 @@ def apply(node: Any, values: list[Any], guard: L.Guard) -> Any:
     if op in SHAPING:
         return _shaping(node, values, guard)
     return _elementwise(node, values, guard)
+
+
+def _units_op(node: Any, values: list[Any], guard: L.Guard) -> Any:
+    """magnitude and with_unit (flo2-calc 0.5.0's units for an empirical
+    formula) on every element: magnitude is convert to the node's unit, then
+    that unit taken off; with_unit puts the node's unit on a plain array."""
+    from dataclasses import replace
+
+    name = node.args[0]
+    a = values[0]
+    if isinstance(a, bool) or (isinstance(a, Array) and a.kind == BOOL):
+        raise Refusal(f'{node.op} takes numbers, and "{name}" is true/false.', kind="type_mismatch")
+    if node.op == "magnitude":
+        try:
+            out = _elementwise(replace(node, op="convert"), values, guard)
+        except Refusal as r:
+            raise Refusal(
+                f'magnitude reads "{name}" as numbers of {node.unit_text} only when it measures what {node.unit_text} '
+                f"measures, so a number is never taken in the wrong unit. {r.reason}",
+                kind=r.kind,
+                units=r.units,
+            ) from None
+        if isinstance(out, Array):
+            return Array(out.data, U.PLAIN, out.error, out.label, out.norm)
+        return E.Quantity(out.magnitude, U.PLAIN, out.rounding)
+    unit, scale = fold(a.unit)
+    if unit != U.PLAIN:
+        raise Refusal(
+            f'with_unit puts a stated unit on a plain number, and "{name}" is in {U.format_unit(a.unit)} '
+            f"({U.describe_dimension(a.unit)}). A unit is never replaced: use convert to change one, or magnitude to "
+            "take its number in a named unit first.",
+            kind="unit_mismatch",
+            units=(U.format_unit(a.unit), node.unit_text or ""),
+        )
+    if scale == 1:
+        return Array(a.data, node.unit, a.error, a.label, a.norm)
+    return _with_scale(a, scale, node.unit, node, guard)
+
+
+def _with_scale(a: Array, scale: Fraction, unit: U.Unit, node: Any, guard: L.Guard) -> Array:
+    """A "%" array folded into plain numbers, then given `unit`."""
+    if a.kind == EXACT:
+        return exact_array([q * scale for q in a.data.ravel()], a.shape, unit)
+    v, e = _scaled(node.op, operand(a, node.args[0]), scale, guard)
+    return float_array(v, e, unit, a.label or Label((), ()), None)
+
+
+def _k_of_n(node: Any, values: list[Any], guard: L.Guard) -> Any:
+    """k_of_n with a true/false array: true when at least k of its elements are."""
+    names = node.args
+    k = values[0]
+    votes = values[1:]
+    if len(votes) != 1 or not isinstance(votes[0], Array) or votes[0].kind != BOOL:
+        raise Refusal(
+            "k_of_n takes [k, b1, b2, ...] of single true/false values, or [k, one true/false array]; not a mix, and "
+            "not an array of numbers.",
+            kind="type_mismatch",
+        )
+    n = votes[0].size
+    if not isinstance(k, E.Quantity) or k.unit != U.PLAIN or k.rounding is not None or k.magnitude.denominator != 1 or not 0 <= k.magnitude <= n:
+        raise Refusal(
+            f'k_of_n\'s first argument is k, an exact whole plain number from 0 to {n} (the elements of "{names[1]}").',
+            kind="out_of_domain",
+        )
+    return int(np.count_nonzero(votes[0].data)) >= k.magnitude
 
 
 # ---------------------------------------------------------------- element-wise
@@ -911,8 +1022,8 @@ def _temperature_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...]
 def _exact_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -> Any:
     op, names = node.op, node.args
     units = [a.unit for a in args]
-    if E.OPS[op][0] != E.ROUNDING and T.involved(op, units, node.unit):
-        return _temperature_elementwise(node, args, shape, guard)
+    if E.OPS[op][0] != E.ROUNDING and (T.involved(op, units, node.unit) or D.involved(op, units, node.unit)):
+        return _temperature_elementwise(node, args, shape, guard)  # temperature.py's or decibels.py's rules
     flats = [_flat(a, shape) for a in args]
     out: list[Any] = []
     unit = units[0]
@@ -1075,6 +1186,12 @@ def _float_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guar
             f"{op}: a temperature reading in degC or degF is carried exactly or not at all, and here it would be "
             "float64. Convert it to K first while it is exact, or work with a change of temperature.",
             kind="offset_temperature",
+        )
+    if D.involved(op, units, node.unit):
+        raise Refusal(
+            f"{op}: a power level in dBm or dBW is carried exactly or not at all, and here it would be float64. Convert "
+            "it to a power (mW or W) first while it is exact.",
+            kind=D.KIND,
         )
     if op not in RATIONAL or op == "pow" or (op == "convert" and not _plain_conversion(units[0], node.unit)):
         return _arb_elementwise(node, args, shape, guard)
@@ -1375,6 +1492,21 @@ def _plan(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -
             _domain(op, names[1], i, shape, b[1] > 0, b[1] <= 0, "degrees of freedom > 0")
 
         return _Plan(RM.CHI2_SF.arb, [sx, sd], U.PLAIN, chk)
+    if op in ("db_to_ratio", "ratio_to_db"):
+        k = D.DB_FACTOR[node.kind]
+        if op == "db_to_ratio":
+            if not U.gain_in(units[0]) or D.level_of(units[0]):
+                raise Refusal(f'db_to_ratio takes gains in dB, and "{names[0]}" is in {U.format_unit(units[0]) or "plain numbers"}.', kind="unit_mismatch", units=(U.format_unit(units[0]), "dB"))
+            f = U.conversion(units[0], (("dB", 1),), op)
+            return _Plan(lambda x: F.arb(10) ** (x / k), [f], U.PLAIN)
+        if U.gain_in(units[0]) or D.level_of(units[0]):
+            raise Refusal(f'ratio_to_db takes plain ratios, and "{names[0]}" is already in decibels.', kind="unit_mismatch", units=(U.format_unit(units[0]), ""))
+        scale = _plain_scale(op, names[0], units[0], "a ratio, a plain number")
+
+        def chk(i: int, b: list[Any], _x: list[Any]) -> None:
+            _domain(op, names[0], i, shape, b[0] > 0, b[0] <= 0, "a ratio greater than 0")
+
+        return _Plan(lambda r: k * r.log() / F.arb.const_log10(), [scale], (("dB", 1),), chk)
     raise Refusal(f"{op} does not work over arrays yet; apply it to single values (element picks one out).", kind="type_mismatch")
 
 

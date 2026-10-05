@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/flo2-connector/flo2-calc/blob/main/src/flo2_calc/schemas/calc-record-4.schema.json",
-  "title": "flo2-calc computation record, schema version 4",
-  "description": "What flo2-calc computed, from what, with what, and how to check it: the file a design decision cites. Version 4 (flo2-calc 0.5.0, dec:round-2-fixes) adds: the computation SHOWN BACK, as `formula` (equations, plain text with LaTeX beside it, named sub-expressions where the graph is large) and `working` (every node as a numbered step in evaluation order, with its formula, its value and its label), both rendered from what was evaluated; SEVERAL RESULTS, when the graph names a list (`result` in the graph is then a list of ids, and the record holds `results` in place of `result`); the operators magnitude, with_unit (with the `source` of the unit it states), db_to_ratio and ratio_to_db (with `kind`, power or amplitude), count_true and k_of_n; and a new WRITING of values: a whole number in full, a rounded value with every one of its digits, and a computed compound unit shown in a simpler unit of the same size, with `simplified_from` naming the unit it was computed in. A rounded value is still labelled `rounded` and never has `exact`. A COMPUTED record (status \"computed\") holds its values, its result or results, its formula and working; a NOT-YET-COMPUTED record (status \"not_computed\") holds the graph, the inputs, the formula and working with no values, the limit it passed and the limits in force, until flo2-calc on a larger machine completes it. A computed record is deterministic and carries no host limits. Version 1 to 3 records still re-run, each under its own version's writing; this file sits beside calc-record-1 to calc-record-3.schema.json, which are never edited.",
+  "$id": "https://github.com/flo2-connector/flo2-calc/blob/main/src/flo2_calc/schemas/calc-record-5.schema.json",
+  "title": "flo2-calc computation record, schema version 5",
+  "description": "Version 5 (flo2-calc 0.6.0) adds ARRAYS (req:flo2-calc-computes-over-arrays): an input's value may be an inline array ({\"array\": [...], \"unit\"}, one or two dimensions, kept element for element) or a data file ({\"file\", \"sha256\", \"unit\"}, kept as its path and the sha256 of its bytes, so the content hash covers the data); a value may be an array (`array`: shape, kind, unit, sha256 over every element's text, and every element when there are at most 1,024), and a FLOAT64 value (an FFT, a function over an array, a large array, or anything computed from one) carries `float64`: a rigorous bound on every element's distance from the true value (`error_at_most`), what it rests on (`how`) and where float64 entered (`from`). New operators: reductions, statistics over data, the FFT, complex parts, and making and shaping arrays, with `axis`. `produced_by` names numpy. A host's limits gain `max_array_bytes`. Versions 1 to 4 still re-run; this file sits beside their schemas, which are never edited. What flo2-calc computed, from what, with what, and how to check it: the file a design decision cites. Version 4 (flo2-calc 0.5.0, dec:round-2-fixes) adds: the computation SHOWN BACK, as `formula` (equations, plain text with LaTeX beside it, named sub-expressions where the graph is large) and `working` (every node as a numbered step in evaluation order, with its formula, its value and its label), both rendered from what was evaluated; SEVERAL RESULTS, when the graph names a list (`result` in the graph is then a list of ids, and the record holds `results` in place of `result`); the operators magnitude, with_unit (with the `source` of the unit it states), db_to_ratio and ratio_to_db (with `kind`, power or amplitude), count_true and k_of_n; and a new WRITING of values: a whole number in full, a rounded value with every one of its digits, and a computed compound unit shown in a simpler unit of the same size, with `simplified_from` naming the unit it was computed in. A rounded value is still labelled `rounded` and never has `exact`. A COMPUTED record (status \"computed\") holds its values, its result or results, its formula and working; a NOT-YET-COMPUTED record (status \"not_computed\") holds the graph, the inputs, the formula and working with no values, the limit it passed and the limits in force, until flo2-calc on a larger machine completes it. A computed record is deterministic and carries no host limits. Version 1 to 3 records still re-run, each under its own version's writing; this file sits beside calc-record-1 to calc-record-3.schema.json, which are never edited.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -23,7 +23,7 @@
       "const": "flo2-calc computation record"
     },
     "schema_version": {
-      "const": 4
+      "const": 5
     },
     "status": {
       "description": "\"computed\": the record holds its values and result. \"not_computed\": it was stopped at a limit of the host that made it, and holds no values and no result until flo2-calc on a larger machine completes it.",
@@ -76,6 +76,12 @@
           },
           "source": {
             "$ref": "#/$defs/reference"
+          },
+          "array": {
+            "$ref": "#/$defs/array"
+          },
+          "float64": {
+            "$ref": "#/$defs/float64"
           }
         }
       }
@@ -158,7 +164,7 @@
             "minLength": 1
           },
           "label": {
-            "description": "\"given\" (an input), \"exact\", \"rounded: ...\" with its digits and bound, or \"not computed\".",
+            "description": "\"given\" (an input), \"exact\", \"rounded: ...\" with its digits and bound, \"float64: ...\" with its bound, or \"not computed\".",
             "type": "string",
             "minLength": 1
           }
@@ -189,7 +195,8 @@
               "enum": [
                 "deadline",
                 "max_digits",
-                "max_reply_bytes"
+                "max_reply_bytes",
+                "max_array_bytes"
               ]
             },
             "value": {
@@ -261,7 +268,8 @@
       "required": [
         "deadline",
         "max_digits",
-        "max_reply_bytes"
+        "max_reply_bytes",
+        "max_array_bytes"
       ],
       "properties": {
         "deadline": {
@@ -276,6 +284,11 @@
         "max_reply_bytes": {
           "type": "integer",
           "minimum": 1
+        },
+        "max_array_bytes": {
+          "description": "The most bytes the arrays of one call may hold.",
+          "type": "integer",
+          "minimum": 1
         }
       }
     },
@@ -285,7 +298,8 @@
       "required": [
         "flo2_calc",
         "pint",
-        "python_flint"
+        "python_flint",
+        "numpy"
       ],
       "properties": {
         "flo2_calc": {
@@ -300,6 +314,11 @@
         },
         "python_flint": {
           "description": "The version of python-flint (FLINT's Arb ball arithmetic) that gave the enclosures rounded values are decided from.",
+          "type": "string",
+          "minLength": 1
+        },
+        "numpy": {
+          "description": "The version of numpy that computed the FFT and the float64 arithmetic.",
           "type": "string",
           "minLength": 1
         }
@@ -455,8 +474,50 @@
                     "$ref": "#/$defs/id"
                   },
                   "value": {
-                    "type": "string",
-                    "minLength": 1
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "title": "inline array",
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "array"
+                        ],
+                        "properties": {
+                          "array": {
+                            "$ref": "#/$defs/arrayText"
+                          },
+                          "unit": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "title": "array from a data file",
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "file",
+                          "sha256"
+                        ],
+                        "properties": {
+                          "file": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "sha256": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$"
+                          },
+                          "unit": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    ]
                   },
                   "source": {
                     "$ref": "#/$defs/reference"
@@ -519,6 +580,34 @@
                       "nand",
                       "nor",
                       "xor",
+                      "sum",
+                      "product",
+                      "mean",
+                      "any",
+                      "all",
+                      "argmin",
+                      "argmax",
+                      "variance_sample",
+                      "variance_population",
+                      "sd_sample",
+                      "sd_population",
+                      "fit_slope",
+                      "fit_intercept",
+                      "fit_slope_se",
+                      "fit_intercept_se",
+                      "fit_residual_se",
+                      "fft",
+                      "ifft",
+                      "fft2",
+                      "ifft2",
+                      "phase",
+                      "real",
+                      "imag",
+                      "conj",
+                      "linspace",
+                      "column",
+                      "transpose",
+                      "element",
                       "eq",
                       "ne",
                       "lt",
@@ -580,6 +669,13 @@
                   "note": {
                     "type": "string",
                     "maxLength": 2000
+                  },
+                  "axis": {
+                    "description": "A reduction over a grid: 0 down each column, 1 along each row.",
+                    "enum": [
+                      0,
+                      1
+                    ]
                   }
                 }
               }
@@ -665,13 +761,143 @@
           "description": "Where a computed value's compound unit was shown in a simpler unit of the same size: the unit it was computed in. The value is unchanged.",
           "type": "string",
           "minLength": 1
+        },
+        "array": {
+          "$ref": "#/$defs/array"
+        },
+        "float64": {
+          "$ref": "#/$defs/float64"
         }
       },
       "not": {
-        "required": [
-          "exact",
-          "rounded"
+        "anyOf": [
+          {
+            "required": [
+              "exact",
+              "rounded"
+            ]
+          },
+          {
+            "required": [
+              "rounded",
+              "float64"
+            ]
+          },
+          {
+            "required": [
+              "exact",
+              "float64"
+            ]
+          }
         ]
+      }
+    },
+    "arrayText": {
+      "description": "An array's elements as text, row by row for a grid: an exact element exactly (a decimal that ends, else \"p/q\"), a float64 element as the shortest text that reads back as the same double, a complex one as \"re+imj\", or \"true\"/\"false\".",
+      "oneOf": [
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "array": {
+      "description": "An array value: its shape, kind, unit (absent for true/false), the sha256 over the canonical text of every element, and every element when it has at most 1,024 (else the first few, the least and the greatest).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shape",
+        "kind",
+        "sha256"
+      ],
+      "properties": {
+        "shape": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "kind": {
+          "enum": [
+            "exact",
+            "bool",
+            "float64",
+            "complex"
+          ]
+        },
+        "unit": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "values": {
+          "$ref": "#/$defs/arrayText"
+        },
+        "first": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "least": {
+          "type": "string"
+        },
+        "greatest": {
+          "type": "string"
+        }
+      }
+    },
+    "float64": {
+      "description": "Present when the value is a FLOAT64 one: not exact. Every element lies within error_at_most of the true value.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "error_at_most",
+        "how",
+        "from"
+      ],
+      "properties": {
+        "error_at_most": {
+          "description": "A rigorous bound on every element's distance from the true value, with the value's unit.",
+          "type": "string",
+          "minLength": 1
+        },
+        "how": {
+          "description": "What each part of the bound rests on, in words (an FFT's names its cited bound).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "from": {
+          "description": "The nodes where float64 entered.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
       }
     }
   }

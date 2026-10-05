@@ -23,7 +23,10 @@ expression, to be built as nodes.
 
 An OPERATION node has an `op` and `args`, the ids of the nodes it takes, in
 order. `convert` also takes the `unit` to convert to, and so do asin, acos,
-atan and atan2 (the angle unit of their result, "deg" or "rad"). An operator
+atan and atan2 (the angle unit of their result, "deg" or "rad"), `magnitude`
+(the unit to read a quantity's number in) and `with_unit` (the unit it states,
+with the `source` that states it). db_to_ratio and ratio_to_db take `kind`,
+"power" or "amplitude", which is never defaulted. An operator
 of the rounded class may take `digits`, the significant digits of its result
 (30 when not given); ceil, floor and round may take `places`, the decimal
 places to round to (0 when not given), and round a `mode` (half_even when not
@@ -42,6 +45,14 @@ written decimal, and its bound grows by what the arguments' bounds allow. A
 comparison, ceil, floor or round of a rounded value is answered only when the
 bound decides it, and refused (kind "undecidable") otherwise: a true/false or
 a whole number is never a guess.
+
+RESULTS. `result` names the result node, or a list of them: then each is
+reported by name, in that order, as "results" (dec:round-2-fixes). With no
+`result`, the last node listed is the result.
+
+SHOWN BACK (formula.py). Every answer carries the computation as a formula and
+as numbered steps, each in plain text with LaTeX beside it, rendered from what
+was evaluated.
 
 ARRAYS (arrays.py; req:flo2-calc-computes-over-arrays). An input's value may
 be an array, {"array": [...], "unit": "<unit>"} (one or two dimensions, one
@@ -83,11 +94,13 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from fractions import Fraction
 from typing import Any
 
 from flo2_calc import arrays as A
+from flo2_calc import decibels as D
+from flo2_calc import formula as FM
 from flo2_calc import limits as L
 from flo2_calc import numbers as N
 from flo2_calc import realmath as RM
@@ -139,6 +152,7 @@ Value = Quantity | bool  # | arrays.Array: an array, or a single float64 value (
 ARITHMETIC, FUNCTIONS, CONSTANTS, TRIG, ROUNDING, STATISTICS = (
     "arithmetic", "functions", "constants", "trigonometry", "rounding", "statistics",
 )
+UNITS_OPS, DECIBELS, COUNTING = "units", "decibels", "counting"  # dec:round-2-fixes
 REDUCTION, DATA, TRANSFORM, COMPLEX, ARRAY = (
     "reductions", "statistics over data", "transforms", "complex values", "making and shaping arrays",
 )
@@ -201,8 +215,6 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
             "(a discretised integral is a sum of an element-wise product); exact for exact data"),
     "product": (REDUCTION, 1, 1, 'the product of a plain array\'s elements ("axis" as for sum)'),
     "mean": (REDUCTION, 1, 1, 'the mean of an array\'s elements, in its unit ("axis" as for sum); exact for exact data'),
-    "count_true": (REDUCTION, 1, None, 'the number of true elements of a true/false array ("axis" as for sum), or of true values '
-                   "among several true/false values; an exact whole number"),
     "any": (REDUCTION, 1, 1, 'true when any element of a true/false array is ("axis" as for sum)'),
     "all": (REDUCTION, 1, 1, 'true when every element of a true/false array is ("axis" as for sum)'),
     "argmin": (REDUCTION, 1, 1, "the index (0 for the first) of the smallest element of a 1-D array; the first of exact ties"),
@@ -238,18 +250,35 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "le": ("comparison", 2, 2, "the first is less than or equal to the second"),
     "gt": ("comparison", 2, 2, "the first is greater than the second"),
     "ge": ("comparison", 2, 2, "the first is greater than or equal to the second"),
+    # dec:round-2-fixes
+    "magnitude": (UNITS_OPS, 1, 1, 'the number of the node\'s "unit" a quantity is, a plain number (2 A in "mA" is 2000); '
+                  "refused unless the quantity measures what that unit measures. For an empirical formula, whose "
+                  "numbers are taken in stated units"),
+    "with_unit": (UNITS_OPS, 1, 1, 'a plain number given the node\'s "unit", which the node\'s "source" states (an '
+                  'empirical formula\'s result, e.g. "IPC-2221: A in mil^2"); flo2-calc cannot check it, so it is recorded'),
+    "db_to_ratio": (DECIBELS, 1, 1, 'a gain in dB as a plain ratio: "kind" "power" gives 10^(x/10), "amplitude" '
+                    "10^(x/20); kind is never defaulted; rounded unless exact"),
+    "ratio_to_db": (DECIBELS, 1, 1, 'a plain ratio > 0 as a gain in dB: "kind" "power" gives 10 log10(r), '
+                    '"amplitude" 20 log10(r); kind is never defaulted; rounded unless exact'),
+    "count_true": (COUNTING, 1, None, "how many of the true/false arguments are true, or how many elements of one "
+                   'true/false array are ("axis" 0 or 1 for each column or row of a grid): an exact whole number'),
+    "k_of_n": (COUNTING, 2, None, "args [k, b1, b2, ...]: true when at least k of the true/false values b are true; "
+               "k is an exact whole number from 0 to their count; [k, array] counts a true/false array's elements"),
 }
 
 # Operators that may give a rounded value, and so take "digits".
 ROUNDED_OPS = frozenset(
-    k for k, v in OPS.items() if v[0] in (FUNCTIONS, CONSTANTS, TRIG, STATISTICS)
-) | {"pow", "convert", "sd_sample", "sd_population", "fit_slope_se", "fit_intercept_se", "fit_residual_se"}
-UNIT_OPS = frozenset({"convert", "asin", "acos", "atan", "atan2", "phase"})
+    k for k, v in OPS.items() if v[0] in (FUNCTIONS, CONSTANTS, TRIG, STATISTICS, DECIBELS)
+) | {"pow", "convert", "magnitude", "sd_sample", "sd_population", "fit_slope_se", "fit_intercept_se", "fit_residual_se"}
+UNIT_OPS = frozenset({"convert", "asin", "acos", "atan", "atan2", "magnitude", "with_unit", "phase"})
+ANGLE_UNIT_OPS = frozenset({"asin", "acos", "atan", "atan2", "phase"})
+KIND_OPS = frozenset({"db_to_ratio", "ratio_to_db"})  # each must be told "kind"
+SOURCED_OPS = frozenset({"with_unit"})  # each must say, in "source", where what it asserts comes from
 AXIS_OPS = frozenset({"sum", "product", "mean", "min", "max", "count_true", "any", "all"})
 ROUND_MODES = ("half_even", "half_away_from_zero", "half_toward_zero", "half_up", "half_down")
 
 INPUT_KEYS = ("id", "value", "source", "note")
-OP_KEYS = ("id", "op", "args", "unit", "digits", "places", "mode", "axis", "note")
+OP_KEYS = ("id", "op", "args", "unit", "digits", "places", "mode", "kind", "source", "axis", "note")
 GRAPH_KEYS = ("nodes", "result")
 SOURCE_KEYS = ("design_node", "design")
 
@@ -274,7 +303,9 @@ class OpNode:
     digits: int | None = None
     places: int | None = None
     mode: str | None = None
-    axis: int | None = None
+    kind: str | None = None  # db_to_ratio, ratio_to_db: "power" or "amplitude"
+    source: str | dict[str, str] | None = None  # with_unit: where the unit it states comes from
+    axis: int | None = None  # a reduction over a grid: 0 down each column, 1 along each row
 
 
 Node = InputNode | OpNode
@@ -283,8 +314,13 @@ Node = InputNode | OpNode
 @dataclass(frozen=True)
 class Graph:
     nodes: tuple[Node, ...]
-    result: str
+    result: str  # the result; with a list of results, the first of them
     result_named: bool  # whether the graph named its result (else: the last node)
+    results: tuple[str, ...] | None = None  # "result" given as a list: every result, in its order
+
+    @property
+    def result_ids(self) -> tuple[str, ...]:
+        return self.results if self.results is not None else (self.result,)
 
     def by_id(self) -> dict[str, Node]:
         return {n.id: n for n in self.nodes}
@@ -302,14 +338,16 @@ class Graph:
                 d = {"id": n.id, "op": n.op, "args": list(n.args)}
                 if n.unit_text is not None:
                     d["unit"] = n.unit_text
-                for key in ("digits", "places", "mode", "axis"):
+                for key in ("digits", "places", "mode", "kind", "source", "axis"):
                     if getattr(n, key) is not None:
                         d[key] = getattr(n, key)
             if n.note is not None:
                 d["note"] = n.note
             out.append(d)
         g: dict[str, Any] = {"nodes": out}
-        if self.result_named:
+        if self.results is not None:
+            g["result"] = list(self.results)
+        elif self.result_named:
             g["result"] = self.result
         return g
 
@@ -338,17 +376,56 @@ class Evaluation:
 # ---------------------------------------------------------------- values as text
 
 
-def value_json(v: Value) -> dict[str, Any]:
+@dataclass(frozen=True)
+class Style:
+    """How values are written, by the record format they are written for. A
+    record re-runs under its own version's style, so a record made by an
+    earlier flo2-calc still reproduces byte for byte."""
+
+    whole_in_full: bool  # a whole number in full, never "/1" or e-notation
+    every_digit: bool  # a rounded value with every one of its digits, trailing zeros kept
+    simplify_units: bool  # a computed value's compound unit shown simpler where one is the same size (units.simplify)
+
+
+LEGACY = Style(False, False, False)  # record schema versions 1 to 3 (flo2-calc 0.1.0 to 0.4.0)
+CURRENT = Style(True, True, True)  # schema version 4 (0.5.0), and every reply
+
+
+def _power_of_ten(f: Fraction) -> bool:
+    n, d = f.numerator, f.denominator
+    if n != 1 and d != 1:
+        return False
+    k = n if d == 1 else d
+    return L.ten_to(L.digits(k) - 1) == k
+
+
+def value_json(v: Value, style: Style = CURRENT, computed: bool = False) -> dict[str, Any]:
     """A value as replies and records write it: {"value": "0.3 mm"}, plus
     "exact" when the text of an exact value is rounded (the exact value FOR
     THESE INPUTS: the inputs as written, no more accurate than they are), or
     "rounded" (its digits, its error bound and where its rounding came from)
     when the value itself is a rounded one. A rounded value is never given an
-    "exact", and is never exact."""
+    "exact", and is never exact.
+
+    A `computed` value (an operation's whose unit came from a rule of
+    arithmetic, not an input's or a unit the graph chose) whose compound unit
+    has a simpler one of the same size (units.simplify) is shown in it, with
+    "simplified_from" naming the unit it was computed in. Only what is shown
+    changes, and a rounded value's only by a power of ten."""
     if isinstance(v, bool):
         return {"value": "true" if v else "false"}
     if isinstance(v, A.Array):
-        return A.value_json(v)
+        return A.value_json(v, computed=computed and style.simplify_units)
+    simplified_from = None
+    if computed and style.simplify_units:
+        simpler = U.simplify(v.unit)
+        if simpler is not None and (v.rounding is None or _power_of_ten(simpler[1])):
+            to, k = simpler
+            simplified_from = U.format_unit(v.unit)
+            rounding = v.rounding
+            if rounding is not None:
+                rounding = Rounding(rounding.digits, rounding.error * k, rounding.correctly_rounded, rounding.origins)
+            v = Quantity(v.magnitude * k, to, rounding)
     unit = U.format_unit(v.unit)
 
     def with_unit(text: str) -> str:
@@ -356,8 +433,9 @@ def value_json(v: Value) -> dict[str, Any]:
 
     if v.rounding is not None:
         r = v.rounding
-        return {
-            "value": with_unit(N.decimal_text(v.magnitude)),
+        text = N.significant_text(v.magnitude, r.digits) if style.every_digit else N.decimal_text(v.magnitude)
+        out: dict[str, Any] = {
+            "value": with_unit(text),
             "rounded": {
                 "digits": r.digits,
                 "correctly_rounded": r.correctly_rounded,
@@ -365,10 +443,13 @@ def value_json(v: Value) -> dict[str, Any]:
                 "from": list(r.origins),
             },
         }
-    text, exact = format_number(v.magnitude)
-    out: dict[str, Any] = {"value": with_unit(text)}
-    if exact is not None:
-        out["exact"] = with_unit(exact)
+    else:
+        text, exact = format_number(v.magnitude, style.whole_in_full)
+        out = {"value": with_unit(text)}
+        if exact is not None:
+            out["exact"] = with_unit(exact)
+    if simplified_from is not None:
+        out["simplified_from"] = simplified_from
     return out
 
 
@@ -533,19 +614,50 @@ def _node(obj: Any, path: str, data_root: Any = None) -> Node:
         if "unit" not in obj or not isinstance(obj["unit"], str):
             if op == "convert":
                 raise CallError(at(path, "unit"), 'convert needs "unit": the unit to convert to, e.g. "mm" ("" for a plain number).')
+            if op == "magnitude":
+                raise CallError(at(path, "unit"), 'magnitude needs "unit": the unit to take the quantity\'s number in, e.g. "mil".')
+            if op == "with_unit":
+                raise CallError(at(path, "unit"), 'with_unit needs "unit": the unit the formula states for its result, e.g. "mil^2".')
             raise CallError(at(path, "unit"), f'{op} needs "unit": the angle unit of its result, "deg" or "rad" (or "arcmin", "arcsec").')
         unit_text = obj["unit"]
+        if op in ("magnitude", "with_unit") and not unit_text.strip():
+            raise CallError(at(path, "unit"), f'{op} takes a unit to name; "" (a plain number) is no unit. Use convert to make a ratio plain.')
         try:
             unit = U.parse_unit(unit_text)
         except ValueError as e:
             raise CallError(at(path, "unit"), str(e)) from None
-        if op != "convert" and U.angle_kind(unit) is None:
+        if op in ANGLE_UNIT_OPS and U.angle_kind(unit) is None:
             raise CallError(at(path, "unit"), f'{op} gives an angle: its "unit" is "deg" or "rad" (or "arcmin", "arcsec"), not "{unit_text}".')
     elif "unit" in obj:
         raise CallError(
             at(path, "unit"),
-            f'only convert, asin, acos, atan, atan2 and phase take a "unit"; "{op}" keeps the units of what it takes.',
+            f'only convert, magnitude, with_unit, asin, acos, atan, atan2 and phase take a "unit"; "{op}" keeps the '
+            "units of what it takes.",
         )
+    kind = None
+    if op in KIND_OPS:
+        kind = obj.get("kind")
+        if kind not in D.KINDS:
+            given = "" if "kind" not in obj else f" {kind!r} is neither."
+            raise CallError(
+                at(path, "kind"),
+                f'{op} needs "kind": "power" (10 log10, a ratio of two powers) or "amplitude" (20 log10, a ratio of two '
+                f"field quantities such as voltages or pressures).{given} The same dB is a different ratio in each "
+                "(10 dB is a power ratio of 10 and an amplitude ratio of about 3.16), so flo2-calc never picks one.",
+            )
+    elif "kind" in obj:
+        raise CallError(at(path, "kind"), f'only db_to_ratio and ratio_to_db take "kind"; "{op}" takes none.')
+    source = None
+    if op in SOURCED_OPS:
+        source = _source(obj, path)
+        if source is None:
+            raise CallError(
+                at(path, "source"),
+                f'{op} states a unit flo2-calc cannot check, so it must say where that unit comes from: give it a '
+                '"source", the relation that states it (for example "IPC-2221: A in mil^2"), or {"design_node": "<id>"}.',
+            )
+    elif "source" in obj:
+        raise CallError(at(path, "source"), f'only an input and with_unit take a "source"; "{op}" computes its value.')
     if "digits" in obj and op not in ROUNDED_OPS:
         raise CallError(at(path, "digits"), f'"{op}" gives an exact result, so it takes no "digits".')
     digits_ = _whole(obj, "digits", path, 1, RM.MAX_DIGITS, "digits is how many significant digits a rounded result has")
@@ -567,7 +679,7 @@ def _node(obj: Any, path: str, data_root: Any = None) -> Node:
         axis = obj["axis"]
         if axis not in (0, 1) or isinstance(axis, bool):
             raise CallError(at(path, "axis"), 'a grid\'s "axis" is 0 (down each column) or 1 (along each row).')
-    return OpNode(nid, op, tuple(args), unit, unit_text, _note(obj, path), digits_, places, mode, axis)
+    return OpNode(nid, op, tuple(args), unit, unit_text, _note(obj, path), digits_, places, mode, kind, source, axis)
 
 
 def read_nodes(items: list[tuple[Any, str]], result: Any = None, result_path: str = "graph.result", data_root: Any = None) -> Graph:
@@ -591,15 +703,27 @@ def read_nodes(items: list[tuple[Any, str]], result: Any = None, result_path: st
             for i, a in enumerate(node.args):
                 if a not in ids:
                     raise CallError(at(at(path, "args"), i), f'"{a}" is not the id of any node in this graph.')
+    results: tuple[str, ...] | None = None
     if result is None:
         named = False
         result_id = nodes[-1].id
+    elif isinstance(result, list):
+        named = True
+        if not result:
+            raise CallError(result_path, 'a list of results names at least one node; leave "result" out for the last node.')
+        for i, r in enumerate(result):
+            if not isinstance(r, str) or r not in ids:
+                raise CallError(at(result_path, i), f"{r!r} is not the id of any node in this graph.")
+            if result.index(r) != i:
+                raise CallError(at(result_path, i), f'"{r}" is named twice; name each result once.')
+        results = tuple(result)
+        result_id = results[0]
     else:
         named = True
         if not isinstance(result, str) or result not in ids:
-            raise CallError(result_path, f"{result!r} is not the id of any node in this graph.")
+            raise CallError(result_path, f"{result!r} is not the id of any node in this graph (or a list of ids).")
         result_id = result
-    graph = Graph(tuple(nodes), result_id, named)
+    graph = Graph(tuple(nodes), result_id, named, results)
     evaluation_order(graph)  # refuses a cycle now, as a malformed call
     return graph
 
@@ -609,7 +733,7 @@ def read_graph(obj: Any, path: str = "graph", data_root: Any = None) -> Graph:
         raise CallError(path, 'a graph is an object: {"nodes": [...], "result": "<id>"}.')
     unknown = [k for k in obj if k not in GRAPH_KEYS]
     if unknown:
-        raise CallError(at(path, unknown[0]), 'a graph has only "nodes" and, optionally, "result".')
+        raise CallError(at(path, unknown[0]), 'a graph has only "nodes" and, optionally, "result" (an id, or a list of ids).')
     nodes = obj.get("nodes")
     if not isinstance(nodes, list):
         raise CallError(at(path, "nodes"), "a graph's nodes are a list.")
@@ -1202,6 +1326,165 @@ def _temperature(node: OpNode, qs: list[Quantity]) -> Value:
     return _settle(value, unit, max(abs(a[0] - value) for a in answers), qs)  # type: ignore[arg-type]
 
 
+# ---------------------------------------------------------------- decibels (decibels.py; dec:round-2-fixes)
+
+DB: U.Unit = (("dB", 1),)
+
+
+def _ten_to_the(node: OpNode, exponent: RM.Ball, scale: Fraction, unit: U.Unit, qs: list[Quantity], guard: L.Guard) -> Quantity:
+    """scale * 10^exponent, in `unit`: exact when the exponent is a whole
+    number (sized before it is computed), else correctly rounded (or, from a
+    rounded exponent, rounded with its bound)."""
+    places = _places(node, qs)  # type: ignore[arg-type]
+    # Sized before Arb is asked, from the exponent: 10^x has about x digits.
+    guard.check_rounded_size(int(abs(exponent.mid)) + int(abs(N.decade(scale))), places, "power of ten")
+    out = RM.evaluate(RM.scaled(RM.pow_fn(guard), scale), [RM.Ball(Fraction(10)), exponent], places, guard)
+    return _outcome(out, unit, node, qs, places)  # type: ignore[arg-type]
+
+
+def _ten_log10(node: OpNode, ratio: RM.Ball, k: int, unit: U.Unit, q: Quantity, name: str, guard: L.Guard) -> Quantity:
+    """k * log10(ratio), in `unit` (dB, dBm or dBW): ratio > 0."""
+    s = _sign(ratio)
+    if s is not None and s <= 0:
+        raise Refusal(f'{node.op}: "{name}" is {value_text(q)}; a logarithm needs a ratio greater than 0.', kind="out_of_domain")
+    if s is None:
+        raise _undecidable(f'{node.op}: "{name}" may be 0 or less within its error bound', q)
+    places = _places(node, [q])
+    return _outcome(RM.evaluate(RM.scaled(RM.LOG10, Fraction(k)), [ratio], places, guard), unit, node, [q], places)
+
+
+def _decibels(node: OpNode, q: Quantity, guard: L.Guard) -> Quantity:
+    """db_to_ratio and ratio_to_db, told "power" (10) or "amplitude" (20)."""
+    op, name = node.op, node.args[0]
+    k = D.DB_FACTOR[node.kind]  # type: ignore[index]
+    if op == "db_to_ratio":
+        if D.level_of(q.unit):
+            raise Refusal(
+                f'db_to_ratio takes a gain in dB, and "{name}" is {value_text(q)}, a power level: a level is a power, not '
+                "a ratio. Convert it to a power instead (convert to mW or W).",
+                kind="unit_mismatch",
+                units=(U.format_unit(q.unit), "dB"),
+            )
+        if not U.gain_in(q.unit):
+            what = "a plain number" if q.unit == U.PLAIN else f"in {U.format_unit(q.unit)} ({U.describe_dimension(q.unit)})"
+            raise Refusal(
+                f'db_to_ratio takes a gain in dB, and "{name}" is {what}. Write its unit ("6 dB"), so that a ratio is '
+                "never taken for a gain, or a gain for a ratio.",
+                kind="unit_mismatch",
+                units=(U.format_unit(q.unit), "dB"),
+            )
+        f = U.conversion(q.unit, DB, op)
+        exponent = RM.Ball(q.magnitude * f / k, q.error * f / k)
+        return _ten_to_the(node, exponent, Fraction(1), U.PLAIN, [q], guard)
+    if U.gain_in(q.unit) or D.level_of(q.unit):
+        raise Refusal(
+            f'ratio_to_db takes a plain ratio, and "{name}" is already in decibels ({value_text(q)}).',
+            kind="unit_mismatch",
+            units=(U.format_unit(q.unit), ""),
+        )
+    r = _plain(op, q, name, "a ratio, a plain number (a power or an amplitude divided by one in the same unit)")
+    return _ten_log10(node, _ball(r), k, DB, q, name, guard)
+
+
+def _shifted(q: Quantity, to: U.Unit) -> Quantity:
+    """A power level written on another level's scale (dBW to dBm: + 30), exactly."""
+    off = D.offset_db(D.level_of(q.unit), D.level_of(to))  # type: ignore[arg-type]
+    return Quantity(q.magnitude + off, to, q.rounding)
+
+
+def _level(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Value:
+    """An operation on a power level in dBm or dBW (decibels.py's rules)."""
+    op, names = node.op, node.args
+    plan = D.plan(op, [q.unit for q in qs], names, node.unit)
+    first = qs[0]
+    if plan == "shift":
+        assert node.unit is not None
+        moved = _shifted(first, node.unit)
+        return _settle(moved.magnitude, node.unit, first.error, qs)  # type: ignore[arg-type]
+    if plan == "to_power":
+        assert node.unit is not None
+        ref = D.REFERENCE_W[D.level_of(first.unit)]  # type: ignore[index]
+        exponent = RM.Ball(first.magnitude / 10, first.error / 10)
+        return _ten_to_the(node, exponent, ref / U.factor(node.unit), node.unit, qs, guard)
+    if plan == "to_level":
+        assert node.unit is not None
+        ref = D.REFERENCE_W[D.level_of(node.unit)]  # type: ignore[index]
+        return _ten_log10(node, _ball(first, U.factor(first.unit) / ref), 10, node.unit, first, names[0], guard)
+    if plan == "add":
+        level = next(q for q in qs if D.level_of(q.unit))
+        total = sum((q.magnitude * (1 if q is level else U.conversion(q.unit, DB, op)) for q in qs), Fraction(0))
+        error = sum((q.error * (1 if q is level else U.conversion(q.unit, DB, op)) for q in qs), Fraction(0))
+        return _settle(total, level.unit, error, qs)  # type: ignore[arg-type]
+    if plan == "difference":
+        b = _shifted(qs[1], first.unit)
+        return _settle(first.magnitude - b.magnitude, DB, first.error + b.error, qs)  # type: ignore[arg-type]
+    if plan == "level_minus_gain":
+        f = U.conversion(qs[1].unit, DB, op)
+        return _settle(first.magnitude - qs[1].magnitude * f, first.unit, first.error + qs[1].error * f, qs)  # type: ignore[arg-type]
+    on_one_scale = [_shifted(q, first.unit) for q in qs]  # "compare": levels with levels
+    if op in ("min", "max"):
+        return _arithmetic(node, on_one_scale, guard)
+    return _compare(op, on_one_scale[0], on_one_scale[1], names)
+
+
+# ---------------------------------------------------------------- units for an empirical formula (dec:round-2-fixes)
+
+
+def _units_op(node: OpNode, q: Value, guard: L.Guard) -> Quantity:
+    """magnitude: a quantity's number in a named unit; with_unit: a stated unit
+    put on a plain number. An empirical formula (IPC-2221's I = k dT^0.44
+    A^0.725, with A in mil^2) works on numbers taken in stated units; these
+    two make those units part of the graph and the record."""
+    name = node.args[0]
+    if isinstance(q, bool):
+        raise Refusal(f'{node.op} takes a number, and "{name}" is {"true" if q else "false"}.', kind="type_mismatch")
+    if node.op == "magnitude":
+        try:
+            v = _apply(replace(node, op="convert"), [q], guard)
+        except Refusal as r:
+            raise Refusal(
+                f'magnitude reads "{name}" ({value_text(q)}) as a number of {node.unit_text} only when it measures what '
+                f"{node.unit_text} measures, so the number is never taken in the wrong unit. {r.reason}",
+                kind=r.kind,
+                units=r.units,
+            ) from None
+        assert isinstance(v, Quantity)
+        return Quantity(v.magnitude, U.PLAIN, v.rounding)
+    p = _fold(q)
+    if p.unit != U.PLAIN:
+        raise Refusal(
+            f'with_unit puts a stated unit on a plain number, and "{name}" is {value_text(q)} '
+            f"({U.describe_dimension(q.unit)}). A unit is never replaced: use convert to change one, or magnitude to take "
+            "its number in a named unit first.",
+            kind="unit_mismatch",
+            units=(U.format_unit(q.unit), node.unit_text or ""),
+        )
+    assert node.unit is not None
+    return Quantity(p.magnitude, node.unit, p.rounding)
+
+
+# ---------------------------------------------------------------- counting true values (dec:round-2-fixes)
+
+
+def _counting(node: OpNode, args: list[Value]) -> Value:
+    """count_true: how many are true, an exact whole number (add refuses
+    true/false, so booleans never add as numbers). k_of_n: at least k true."""
+    op, names = node.op, node.args
+    if op == "count_true":
+        return Quantity(Fraction(sum(_booleans(op, args, names))))
+    k, votes = args[0], args[1:]
+    if isinstance(k, bool):
+        raise Refusal(f'k_of_n\'s first argument is k, a whole number, and "{names[0]}" is {"true" if k else "false"}.', kind="type_mismatch")
+    n = len(votes)
+    if k.unit != U.PLAIN or k.rounding is not None or k.magnitude.denominator != 1 or not 0 <= k.magnitude <= n:
+        raise Refusal(
+            f'k_of_n\'s first argument is k, an exact whole plain number from 0 to {n} (the count of true/false values '
+            f'after it), and "{names[0]}" is {value_text(k)}.',
+            kind="out_of_domain" if k.unit == U.PLAIN else "unit_mismatch",
+        )
+    return sum(_booleans(op, votes, names[1:])) >= k.magnitude
+
+
 # ---------------------------------------------------------------- one node
 
 
@@ -1210,6 +1493,10 @@ def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value:
     if A.uses_arrays(op, args):
         return A.apply(node, args, guard)  # an array among the arguments, or an operator only arrays have
     family = OPS[op][0]
+    if family == COUNTING:
+        return _counting(node, args)
+    if family == UNITS_OPS:
+        return _units_op(node, args[0], guard)
     if family == "logic":
         bs = _booleans(op, args, names)
         if op == "and":
@@ -1228,8 +1515,12 @@ def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value:
     if op in ("eq", "ne") and (isinstance(args[0], bool) != isinstance(args[1], bool)):
         raise Refusal(f"{op} compares like with like, and one of {names[0]!r}, {names[1]!r} is true/false and the other a number.", kind="type_mismatch")
     qs = _numbers(op, args, names)
+    if family == DECIBELS:
+        return _decibels(node, qs[0], guard)
     if family != ROUNDING and T.involved(op, [q.unit for q in qs], node.unit):
         return _temperature(node, qs)  # a temperature on degC or degF: temperature.py
+    if family != ROUNDING and D.involved(op, [q.unit for q in qs], node.unit):
+        return _level(node, qs, guard)  # a power level in dBm or dBW: decibels.py
     if family == "comparison":
         return _compare(op, qs[0], qs[1], names)
     if family == ARITHMETIC:
@@ -1295,17 +1586,57 @@ def _entry_bytes(entry: dict[str, Any]) -> int:
     return sum(len(v) if isinstance(v, str) else len(json.dumps(v)) for v in entry.values()) + 32
 
 
-def values_json(ev: Evaluation) -> list[dict[str, Any]]:
+def values_json(ev: Evaluation, style: Style = CURRENT) -> list[dict[str, Any]]:
     """Every value computed, in evaluation order, as replies write them. Writing
     out a large value takes time and room, so each is counted against the
     deadline and the reply budget as it is written (LimitExceeded)."""
+    nodes = ev.graph.by_id()
     out = []
     for nid in ev.order:
         if nid in ev.values:
-            entry = {"node": nid, **value_json(ev.values[nid])}
+            entry = {"node": nid, **value_json(ev.values[nid], style, _unit_chosen_by_rule(nodes[nid]))}
             ev.guard.spend_reply(_entry_bytes(entry))
             out.append(entry)
     return out
+
+
+def _unit_chosen_by_rule(node: Node) -> bool:
+    """Whether a value's unit came from a rule of arithmetic, and so may be shown
+    simpler: not an input's (as written), and not a unit the graph chose
+    itself (convert's, with_unit's, an inverse trigonometric function's)."""
+    return isinstance(node, OpNode) and node.op not in UNIT_OPS
+
+
+def results_json(ev: Evaluation, values: list[dict[str, Any]]) -> dict[str, Any]:
+    """{"result": ...}, or, when the graph names a list of results,
+    {"results": [...]}: each the result node's entry in `values`."""
+    by_node = {v["node"]: v for v in values}
+    if ev.graph.results is not None:
+        return {"results": [by_node[r] for r in ev.graph.results]}
+    return {"result": by_node[ev.graph.result]}
+
+
+def shown_back(ev: Evaluation, values: list[dict[str, Any]] | None) -> FM.Rendering:
+    """The formula and the working, from the graph and the values as written."""
+    shown = {
+        v["node"]: FM.Shown(v["value"], v.get("exact"), v.get("rounded"), v.get("float64"), "array" in v)
+        for v in values or []
+    }
+    graph = ev.graph
+    return FM.render(list(graph.nodes), evaluation_order(graph), graph.result_ids, shown, ev.refusal)
+
+
+WORKING_REST_REPLY = "are not shown here; record_computation keeps every one in its record"
+WORKING_REST_RECORD = 'are in the record ("formula" and "working" hold every one)'
+
+
+def shown_json(rendering: FM.Rendering, where_rest: str = WORKING_REST_REPLY) -> dict[str, Any]:
+    """What a reply shows back: readable views of the formula and the working
+    (a record holds every line and every step)."""
+    return {
+        "formula": FM.view_formula(rendering.formula, where_rest),
+        "working": FM.view(rendering.working, rendering.shapes, where_rest),
+    }
 
 
 def exactness(ev: Evaluation) -> str:
@@ -1321,9 +1652,12 @@ def exactness(ev: Evaluation) -> str:
 
 
 def evaluation_json(ev: Evaluation) -> dict[str, Any]:
-    """What a reply says about an evaluation. An answer too large for the
-    host's reply budget, or one whose writing passes the deadline, is itself
-    stopped there: a refusal of kind exceeds_limits, with no values."""
+    """What a reply says about an evaluation: its result (or results), every
+    value, and the computation shown back as a formula and numbered steps. An
+    answer too large for the host's reply budget, or one whose writing passes
+    the deadline, is itself stopped there: a refusal of kind exceeds_limits,
+    with no values."""
+    many = ev.graph.results is not None
     if ev.ok:
         try:
             values = values_json(ev)
@@ -1331,8 +1665,9 @@ def evaluation_json(ev: Evaluation) -> dict[str, Any]:
             return {"status": "refused", "refused": e.refusal, "result": None, "values": None, "next": STOPPED_NEXT}
         return {
             "status": "ok",
-            "result": {"node": ev.graph.result, **value_json(ev.values[ev.graph.result])},
+            **results_json(ev, values),
             "values": values,
+            **shown_json(shown_back(ev, values)),
             "exactness": exactness(ev),
         }
     try:
@@ -1340,6 +1675,9 @@ def evaluation_json(ev: Evaluation) -> dict[str, Any]:
     except LimitExceeded:
         values = None  # the values before the stop are too large to send: the refusal says why
     answer = {"status": "refused", "refused": ev.refusal, "result": None, "values": values}
+    if many:
+        answer["results"] = None
+    answer.update(shown_json(shown_back(ev, values)))
     if ev.stopped:
         answer["next"] = STOPPED_NEXT
     return answer

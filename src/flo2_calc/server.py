@@ -18,7 +18,15 @@ reads each text block as JSON and keeps each resource as a file. A reply with
 a result carries "exactness": the result is exact for these inputs, as
 written, and no more accurate than they are (numbers.EXACT_FOR_THESE_INPUTS),
 except any value labelled "rounded", which is not exact
-(numbers.EXACT_BUT_ROUNDED).
+(numbers.EXACT_BUT_ROUNDED). Every reply shows the computation back
+(formula.py): "formula", its equations, and "working", its numbered steps,
+each in plain text with LaTeX beside it; a record holds every step.
+
+THE SKILL, SERVED (skill.py). Beside the four tools, the server offers
+skills/support-a-decision-with-math/SKILL.md as an MCP prompt of that name and
+as a resource, so a client that starts flo2-calc as a plain command gets the
+same guidance a plugin install does. Prompts and resources are not tools:
+flo2's door, which holds exactly the four tools, is unchanged by them.
 
 LIMITS (limits.py). Every call runs under the host's limits, set at start-up:
 a deadline, a digits budget for exact numbers, and a reply budget. Passing one
@@ -56,8 +64,21 @@ from pydantic import Field
 from flo2_calc import __version__
 from flo2_calc import limits as L
 from flo2_calc import record as R
+from flo2_calc import skill as SK
+from flo2_calc.units import VOCABULARY as U_VOCABULARY
 from flo2_calc.errors import CallError, LimitExceeded
-from flo2_calc.evaluator import OPS, STOPPED_NEXT, evaluate, evaluation_json, exactness, read_graph, read_nodes
+from flo2_calc.evaluator import (
+    OPS,
+    STOPPED_NEXT,
+    WORKING_REST_RECORD,
+    evaluate,
+    evaluation_json,
+    exactness,
+    read_graph,
+    read_nodes,
+    shown_back,
+    shown_json,
+)
 
 INSTRUCTIONS = (
     "flo2-calc does exact math and logic for the decisions in a design, so a decision can carry the computation "
@@ -65,49 +86,65 @@ INSTRUCTIONS = (
     '("value": "1.4 mm", with a "source") and operations ("op": "sub", "args": ["a", "b"]). Arithmetic is exact '
     "for the inputs as written (no binary floats; a typed 3.14159 is taken as that decimal, not as pi), units are "
     "carried and checked, and units that measure different things are refused, never stripped. pi, e, roots, exp, "
-    "ln, log10, non-whole powers, trigonometry (sin to atan2, in deg or rad), deg-rad conversion and the normal, "
-    "chi-square and Student-t distributions give ROUNDED values: correctly rounded to 30 significant digits (or a "
-    'node\'s "digits"), labelled "rounded" with "error_at_most", never called exact, and exact wherever the result '
-    "is rational. A comparison, ceil, floor or round of a rounded value is answered only when its error bound "
-    "decides it. ARRAYS (vectors and grids, one unit each, written {\"array\": [...], \"unit\": \"mm\"}) work "
+    "ln, log10, non-whole powers, trigonometry (sin to atan2, in deg or rad), deg-rad conversion, decibel "
+    "conversions and the normal, chi-square and Student-t distributions give ROUNDED values: correctly rounded to 30 "
+    'significant digits (or a node\'s "digits"), labelled "rounded" with "error_at_most", never called exact, and '
+    "exact wherever the result is rational. A comparison, ceil, floor or round of a rounded value is answered only "
+    "when its error bound decides it. dB is its own kind of value: a dB-to-ratio conversion must be told \"power\" "
+    "or \"amplitude\". ARRAYS (vectors and grids, one unit each, written {\"array\": [...], \"unit\": \"mm\"}) work "
     "element by element with every operator, with numpy's broadcasting; they reduce (sum, mean, min, max, count_true, "
     "any, all, with an axis for a grid), give statistics over data (variance and sd, sample or population, named; a "
     "least-squares fit with standard errors) and the FFT. An exact array stays exact through rational operations; an "
     "FFT, a function over an array, or a large array is float64, labelled \"float64\" with a rigorous "
-    "\"error_at_most\" and how it was found. You decide what to compute; flo2-calc computes it. "
-    "evaluate_graph takes a whole graph; add_node builds one node at a time; record_computation "
-    "returns a computation record, a .calc.json file to link to the decision it supports; rerun_record checks that "
-    "a record still reproduces. flo2-calc stands alone: it never calls reflow2 or anything else. Linking a record "
-    "to a design is the agent's job, with the design tool's own tools."
+    "\"error_at_most\" and how it was found. Every reply shows the computation back as a formula and as numbered "
+    "steps (plain text, with LaTeX beside it), so you can check it is the computation you meant. evaluate_graph takes "
+    "a whole graph; add_node builds one node at a time; record_computation returns a computation record, a .calc.json "
+    "file to link to the decision it supports; rerun_record checks that a record still reproduces. flo2-calc "
+    "calculates and you reason: it never decides which equation applies, and a domain's own formulas (ring sizes, "
+    "metal weight, a building's areas) belong to the helper that owns the domain. READ THE SKILL before using it: the "
+    f"prompt \"{SK.NAME}\", or the resource {SK.RESOURCE_URI}. flo2-calc stands alone: it never calls reflow2 or "
+    "anything else. Linking a record to a design is the agent's job, with the design tool's own tools."
 )
 
 GRAPH_HELP = (
-    'The computation graph: {"nodes": [...], "result": "<id>"} ("result" defaults to the last node). An input '
+    'The computation graph: {"nodes": [...], "result": "<id>"} ("result" defaults to the last node; a list of ids '
+    'reports each of them by name, as "results"). An input '
     'node is {"id": "bend", "value": "1.4 mm", "source": "fiber datasheet"}: the value is text, a number with its '
     'unit as reflow2 spells it (mm, g, V, mA, ...), a plain number ("0.1", "1/3", or a JSON integer), or true/false. '
     'A value is one number: build arithmetic as operation nodes, never inside a value. Temperatures are K, degC or '
     'degF ("25 degC"), and a change of temperature is delta_degC or delta_degF; a bare C or F is refused (write '
     'coulomb or farad for those). Money is an ISO 4217 code ("12.50 USD"); currencies are never converted except by '
-    'a rate you give as an input with its source ("0.92 EUR/USD"). '
+    'a rate you give as an input with its source ("0.92 EUR/USD"). A gain or loss is in dB ("6 dB", "0.2 dB/m"), '
+    'and a power level in dBm or dBW ("-30 dBm"); convert turns a level into mW or W and back. '
     'The source is free text or {"design_node": "con:..."} naming a node in a reflow2 design (recorded, never '
     'resolved). An operation node is {"id": "margin", "op": "sub", "args": ["cavity", "bend"]}; "convert" also '
-    'takes "unit", as do asin, acos, atan and atan2 ("deg" or "rad", the unit of the angle they give). A rounded '
-    'operator may take "digits" (1 to 1000 significant digits; 30 when left out). ceil, floor and round may take '
-    '"places" (decimal places; 0 when left out), and round a "mode". A rounded value comes back with "rounded": '
-    '{"digits", "correctly_rounded", "error_at_most", "from"}, never with "exact". An ARRAY input is '
-    '{"id": "t", "value": {"array": ["0", "2", "4.5"], "unit": "s"}, "source": "..."}: one or two dimensions (a list of '
-    'rows for a grid), ONE unit for the whole array, each element a number as text or all true/false; or, run locally, '
-    '{"file": "data/x.csv", "unit": "mm"} inside the folder flo2-calc was started with (the record keeps the file\'s '
-    'sha256). Every operator works element by element on arrays (shapes equal, or a single value, a row against a '
-    'grid, a column against a row); sum, product, mean, min, max, count_true, any and all take one array and an '
-    'optional "axis" (0: each column, 1: each row). An array comes back as {"array": {"shape", "kind", "unit", '
-    '"sha256", "values"}} (values only up to 1,024 elements); a float64 value carries "float64": {"error_at_most", '
-    '"how", "from"}. Operators: '
+    'takes "unit", as do asin, acos, atan and atan2 ("deg" or "rad", the unit of the angle they give), phase (the '
+    'same, for the angle of a complex value), magnitude (the unit to take a quantity\'s number in) and with_unit (the '
+    'unit it states, with a "source" saying where that unit comes from). db_to_ratio and ratio_to_db need "kind": '
+    '"power" or "amplitude", never defaulted. A rounded operator may take "digits" (1 to 1000 significant digits; 30 '
+    'when left out). ceil, floor and round may take "places" (decimal places; 0 when left out), and round a "mode". '
+    'A rounded value comes back with "rounded": {"digits", "correctly_rounded", "error_at_most", "from"}, never with '
+    '"exact". An ARRAY input is {"id": "t", "value": {"array": ["0", "2", "4.5"], "unit": "s"}, "source": "..."}: one '
+    'or two dimensions (a list of rows for a grid), ONE unit for the whole array, each element a number as text or '
+    'all true/false; or, run locally, {"file": "data/x.csv", "unit": "mm"} inside the folder flo2-calc was started '
+    'with (the record keeps the file\'s sha256). Every operator works element by element on arrays (shapes equal, or '
+    'a single value, a row against a grid, a column against a row); sum, product, mean, min, max, count_true, any and '
+    'all take one array and an optional "axis" (0: each column, 1: each row); abs of an FFT\'s complex values is '
+    'their modulus. An array comes back as {"array": {"shape", "kind", "unit", "sha256", "values"}} (values only up '
+    'to 1,024 elements); a float64 value carries "float64": {"error_at_most", "how", "from"}. Operators: '
     + "; ".join(f"{k} ({v[3]})" for k, v in OPS.items())
-    + ". Units: one '/', '*' between units, '^n' for powers, e.g. \"mm^2\", \"m/s^2\", \"kg/(m*s^2)\"."
+    + ". Units: one '/', '*' between units, '^n' for powers, e.g. \"mm^2\", \"m/s^2\", \"kg/(m*s^2)\". Units "
+    "flo2-calc knows: " + ", ".join(sorted(U_VOCABULARY, key=str.lower)) + "."
 )
 
 Graph = Annotated[dict[str, Any], Field(description=GRAPH_HELP)]
+
+
+def _shown_pending(g: Any) -> dict[str, Any]:
+    """The formula and working of a graph not computed: equations, no values."""
+    from flo2_calc.evaluator import Evaluation
+
+    return shown_json(shown_back(Evaluation(g, L.Guard()), None), WORKING_REST_RECORD)
 
 
 def _text(payload: dict[str, Any]) -> str:
@@ -177,6 +214,16 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
     )
     reading = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
 
+    @server.prompt(name=SK.NAME, title="Support a decision with math", description=SK.front_matter().get("description"))
+    def served_skill() -> str:
+        """The skill's body, read from its one file."""
+        return SK.body()
+
+    @server.resource(SK.RESOURCE_URI, name=SK.NAME, title="The skill: support a decision with math", mime_type=SK.MIME_TYPE,
+                     description="How and when to use flo2-calc: skills/support-a-decision-with-math/SKILL.md, as it is.")
+    def served_skill_file() -> str:
+        return SK.text()
+
     @server.tool(
         name="evaluate_graph",
         title="Evaluate a computation graph",
@@ -232,6 +279,8 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                 "status": "ok",
                 "added": {"node": grown.result, **{k: v for k, v in answer["result"].items() if k != "node"}},
                 "values": answer["values"],
+                "formula": answer["formula"],
+                "working": answer["working"],
                 "graph": grown.to_json(),
                 "exactness": answer["exactness"],
             }
@@ -342,9 +391,10 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                 data = R.file_bytes(rec)
                 answer = {
                     "status": "ok",
-                    "result": rec["result"],
+                    **({"results": rec["results"]} if "results" in rec else {"result": rec["result"]}),
                     "record": _record_facts(rec, data, file_name),
                     "values": rec["values"],
+                    **shown_json(shown_back(ev, rec["values"]), WORKING_REST_RECORD),
                     "exactness": exactness(ev),
                     "next": "Link this record to the decision it supports in the design (an Artifact that documents "
                     "the decision), and quote its result there. rerun_record checks it any time later.",
@@ -377,6 +427,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
             "status": "refused",
             "refused": stop,
             "result": None,
+            **_shown_pending(g),
             "record": _record_facts(pending, data, file_name),
             "next": "The record came back NOT YET COMPUTED: it holds the graph, the inputs with their sources and the "
             f"limit it passed, and no result. It needs {R.needs_of(pending['stopped'])}. Keep it with the decision, "
