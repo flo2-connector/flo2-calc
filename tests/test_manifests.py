@@ -96,3 +96,67 @@ def test_the_skill_is_a_well_formed_agent_skill():
 def test_the_readme_puts_standalone_use_before_hosted_use():
     readme = (REPO / "README.md").read_text(encoding="utf-8")
     assert readme.index("## Standalone") < readme.index("## Hosted on flo2.io")
+
+
+# ---------------------------------------------------------------- an empirical formula's constants (round 3, q077)
+#
+# ver:an-empirical-formulas-constants-come-from-the-person-or-a-cited-document.
+# Held-out q077 asked for an IPC-2221 trace width with no constants given; the
+# agent recalled four from memory and computed it, following the skill's
+# IPC-2221 example (written from seen q078, where the constants ARE given).
+# flo2-calc cannot tell where a number came from, so the guard is what the
+# agent is told, in the served skill and in the server's instructions. The rule
+# is general, not IPC-2221's.
+
+# The four constants q077's agent recalled, and IPC-2221's internal-layer k.
+RECALLED = ("0.048", "0.44", "0.725", "1.378", "0.024")
+
+
+def _section(text: str, start: str) -> str:
+    i = text.index(start)
+    j = text.find("\n## ", i + 1)
+    k = text.find("\n### ", i + len(start))
+    ends = [e for e in (j, k) if e != -1]
+    return text[i: min(ends) if ends else len(text)]
+
+
+def test_the_skill_says_where_an_empirical_formulas_constants_come_from():
+    text = SKILL.read_text(encoding="utf-8")
+    rule = _section(text, "### An empirical formula's constants come from the person or a document, never from your memory")
+    assert "only when the formula and every constant in it were given" in rule
+    assert "do not recall them" in rule and "even when" in rule and "sure" in rule
+    assert "Ask the person for the formula and its constants" in rule
+    assert "name the document" in rule and "edition" in rule and "confirm" in rule
+    assert '"given by the person"' in rule and '"given in the question"' in rule, "q078's case still computes"
+    m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+    assert "never your memory" in m.group(1), "the description, which a client reads first, says it too"
+
+
+def test_the_skills_example_supplies_no_constant_of_any_standard():
+    text = SKILL.read_text(encoding="utf-8")
+    for c in RECALLED:
+        assert c not in text, f"the skill must not carry a standard's constant ({c}) for an agent to copy"
+    example = text[text.index("**An empirical formula with stated units**"):]
+    example = example[: example.index("**Give data as an array")]
+    sources = re.findall(r'"id": "(k|b)", "value": "([^"]*)", "source": "([^"]*)"', example)
+    assert {s[0] for s in sources} == {"k", "b"}
+    for _id, value, source in sources:
+        assert value.startswith("<") and source.startswith("given by the person"), (value, source)
+    assert "IPC-2221" not in example, "the example is general, not the one round 2 wrote from q078"
+
+
+def test_the_instructions_say_it_too_and_list_an_electronics_standard_among_the_domain_formulas():
+    from flo2_calc.server import INSTRUCTIONS, build_server
+    from flo2_calc import limits as L
+
+    for words in ("NEVER FROM YOUR MEMORY", "COMES FROM THE PERSON OR FROM A DOCUMENT", "ask the person for them",
+                  "have the person confirm before you calculate", "never recall them"):
+        assert words in INSTRUCTIONS, words
+    assert "IPC-2221's trace width" in INSTRUCTIONS and "ring sizes" in INSTRUCTIONS
+    assert "NEVER FROM YOUR MEMORY" in build_server(None, L.LAPTOP).instructions
+
+
+def test_with_unit_names_no_standard_in_its_description_or_its_refusal():
+    from flo2_calc.evaluator import OPS
+
+    assert "IPC-2221" not in OPS["with_unit"][3] and "never recalled from memory" in OPS["with_unit"][3]

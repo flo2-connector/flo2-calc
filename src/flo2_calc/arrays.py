@@ -91,6 +91,14 @@ with_unit apply to every element, db_to_ratio and ratio_to_db are functions
 over an array, and a power level in dBm or dBW is computed element by element
 by decibels.py's rules, as a temperature reading is by temperature.py's.
 
+ROUND 3's (0.7.0): length counts an array's elements (with an axis, the
+length of each column or row), exactly; to_number turns a true/false array
+into an exact array of 1 and 0; choose, factorial and the binomial
+distribution work element by element on exact arrays, through the evaluator's
+own rules for one value; a whole power has no exponent cap, only the digits
+budget; and a change of temperature converted to K is delta_K, as a single
+value's is.
+
 WRITTEN BACK, an array is {"value": a description, "array": {"shape", "kind",
 "unit", "sha256", "values"}}: every element as text (an exact element
 exactly, "1/3"; a float64 element as the shortest text that reads back as the
@@ -837,7 +845,7 @@ TRANSFORMS = ("fft", "ifft", "fft2", "ifft2")
 COMPLEX_PARTS = ("phase", "real", "imag", "conj")
 SHAPING = ("linspace", "column", "transpose", "element")
 # count_true of true/false values (not an array) is evaluator's, as min and max of several values are.
-ARRAY_ONLY = frozenset(REDUCTIONS + DATA_STATS + FITS + TRANSFORMS + COMPLEX_PARTS + SHAPING) - {"min", "max", "count_true"}
+ARRAY_ONLY = frozenset(REDUCTIONS + DATA_STATS + FITS + TRANSFORMS + COMPLEX_PARTS + SHAPING + ("length",)) - {"min", "max", "count_true"}
 
 # Element-wise operators whose result is rational in rational arguments: exact on exact arrays.
 RATIONAL = frozenset({"add", "sub", "mul", "div", "neg", "abs", "pow", "min", "max", "convert", "ceil", "floor", "round",
@@ -856,6 +864,10 @@ def apply(node: Any, values: list[Any], guard: L.Guard) -> Any:
         return _units_op(node, values, guard)
     if op == "k_of_n":
         return _k_of_n(node, values, guard)
+    if op == "length":
+        return _length(node, values)
+    if op == "to_number":
+        return _to_number(node, values, guard)
     if op in REDUCTIONS and (op not in ("min", "max") or len(values) == 1):
         return _reduce(node, values, guard)
     if op in DATA_STATS:
@@ -916,6 +928,31 @@ def _with_scale(a: Array, scale: Fraction, unit: U.Unit, node: Any, guard: L.Gua
     return float_array(v, e, unit, a.label or Label((), ()), None)
 
 
+def _length(node: Any, values: list[Any]) -> E.Quantity:
+    """The number of an array's elements (round 3, q070): exact, of any kind of
+    array. With "axis" 0, the length of each column (a grid's rows); with 1,
+    the length of each row."""
+    a = _an_array(node.op, values[0], node.args[0])
+    axis = getattr(node, "axis", None)
+    if axis is None:
+        return E.Quantity(Fraction(a.size))
+    if a.data.ndim != 2:
+        if axis == 0:
+            return E.Quantity(Fraction(a.size))
+        raise Refusal(f'length: "{node.args[0]}" is 1-D, so it has no axis 1 (its rows); leave "axis" out, or give 0.', kind="shape_mismatch")
+    return E.Quantity(Fraction(a.shape[axis]))
+
+
+def _to_number(node: Any, values: list[Any], guard: L.Guard) -> Any:
+    """A true/false array as an exact array of 1 (true) and 0 (false)."""
+    a = values[0]
+    if not isinstance(a, Array) or a.kind != BOOL:
+        what = "an array of numbers" if isinstance(a, Array) else "a number"
+        raise Refusal(f'to_number takes true/false values, and "{node.args[0]}" is {what}.', kind="type_mismatch")
+    make_room(guard, a.shape, EXACT)
+    return _result([Fraction(1) if x else Fraction(0) for x in a.data.ravel().tolist()], a.shape, U.PLAIN, node, guard)
+
+
 def _k_of_n(node: Any, values: list[Any], guard: L.Guard) -> Any:
     """k_of_n with a true/false array: true when at least k of its elements are."""
     names = node.args
@@ -954,6 +991,15 @@ def _elementwise(node: Any, values: list[Any], guard: L.Guard) -> Any:
     if any(a.kind == COMPLEX for a in args):
         return _complex_elementwise(node, args, shape, guard)
     exact_args = all(a.kind == EXACT for a in args)
+    if op in E.PER_ELEMENT:
+        if not exact_args:
+            raise Refusal(
+                f"{op} works on exact values, one element at a time, and here an argument is float64 or rounded. Keep "
+                "the data exact, or apply it to single values (element picks one out).",
+                kind="type_mismatch",
+            )
+        make_room(guard, shape, EXACT)
+        return _temperature_elementwise(node, args, shape, guard)  # the evaluator's rules, element by element
     if exact_args and op in RATIONAL and _rational_here(node, args) and math.prod(shape) <= guard.limits.max_exact_elements:
         make_room(guard, shape, EXACT)
         return _exact_elementwise(node, args, shape, guard)
@@ -1007,7 +1053,8 @@ def _logic(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) 
 
 def _temperature_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -> Any:
     """An operation on temperature readings (degC, degF), element by element
-    through temperature.py, exactly as for single values."""
+    through temperature.py, exactly as for single values; and so, through the
+    evaluator, choose, factorial and the binomial over exact arrays."""
     out: list[Any] = []
     unit: U.Unit | None = None
     for i, elems in enumerate(zip(*(_flat(a, shape) for a in args))):
@@ -1086,7 +1133,7 @@ def _exact_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guar
         each((lambda a: -a) if op == "neg" else abs)
     elif op == "convert":
         f = U.conversion(units[0], node.unit, "convert")
-        unit = node.unit
+        unit = U.converted_unit(units[0], node.unit)  # a change of temperature converted to K stays a change
         each(lambda a: a * f)
     elif op in ("ceil", "floor", "round"):
         places = node.places if node.places is not None else 0
@@ -1128,8 +1175,6 @@ def _exact_pow(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Gua
     for i, (b, e) in enumerate(zip(_flat(base, shape), _flat(ex, shape))):
         n = int(e)
         try:
-            if abs(n) > E.MAX_POWER_ARG:
-                raise Refusal(f"pow: an exponent is at most {E.MAX_POWER_ARG} either way; this one is {n}.", kind="too_large")
             if b == 0 and n < 0:
                 raise Refusal(f'pow: "{node.args[0]}" is zero there, and a negative power of zero divides by zero.', kind="division_by_zero")
             if b == 0 and n == 0:
@@ -1255,7 +1300,7 @@ def _float_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guar
         unit = units[0]
     elif op == "convert":
         v, e = _scaled(op, args[0], U.conversion(units[0], node.unit, "convert"), guard)
-        unit = node.unit
+        unit = U.converted_unit(units[0], node.unit)
     else:  # pragma: no cover
         raise AssertionError(op)
     v, e = np.broadcast_to(v, shape), np.broadcast_to(e, shape)
@@ -1551,8 +1596,6 @@ def _pow_plan(node: Any, args: list[_Arg], shape: tuple[int, ...]) -> _Plan:
         unit = U.PLAIN
     if whole_scalar:
         n = int(ex.exact[()])  # type: ignore[index]
-        if abs(n) > E.MAX_POWER_ARG:
-            raise Refusal(f"pow: an exponent is at most {E.MAX_POWER_ARG} either way; this one is {n}.", kind="too_large")
         unit, pscale = U.power(base.unit, n)
         # As for a single value: a "%" the power folds is folded into the base first.
         bscale = Fraction(1, 100) ** dict(base.unit)[U.PERCENT] if pscale != 1 else Fraction(1)
@@ -1578,8 +1621,6 @@ def _pow_plan(node: Any, args: list[_Arg], shape: tuple[int, ...]) -> _Plan:
         x, y = b
         k = whole(y)
         if k is not None:  # a whole exponent among them: as a whole power
-            if abs(k) > E.MAX_POWER_ARG:
-                raise Refusal(f"pow: at element {index_text(i, shape)} the exponent is {k}; an exponent is at most {E.MAX_POWER_ARG} either way.", kind="too_large")
             if k <= 0 and not (x > 0 or x < 0):
                 if x == 0:
                     if k == 0:

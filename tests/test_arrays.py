@@ -706,8 +706,8 @@ def make(g=REGRESSION, root=None, name="arrays"):
 
 def test_a_record_with_arrays_fits_its_schema_and_re_runs():
     rec = make()
-    assert rec["schema_version"] == 6 and rec["produced_by"]["numpy"] == np.__version__
-    jsonschema.validate(rec, R.schema(6))
+    assert rec["schema_version"] == 7 and rec["produced_by"]["numpy"] == np.__version__
+    jsonschema.validate(rec, R.schema(R.SCHEMA_VERSION))
     assert "ARRAY" in rec["arithmetic"]
     t_input = next(i for i in rec["inputs"] if i["id"] == "t")
     assert t_input["array"]["shape"] == [6] and "values" not in t_input["array"] and t_input["unit"] == "s"
@@ -749,7 +749,7 @@ def test_a_file_arrays_record_re_runs_where_the_file_is_and_says_so_where_it_is_
     g = graph(inp("t", arr(q063_style()[0], "s"), "frame times"), inp("y", {"file": "y.csv", "unit": "deg"}, "measurements"),
               op("b", "fit_slope", "t", "y"))
     rec = make(g, root=tmp_path)
-    jsonschema.validate(rec, R.schema(6))
+    jsonschema.validate(rec, R.schema(R.SCHEMA_VERSION))
     assert rec["result"]["exact"] == "316/21875 deg/s"
     assert R.rerun(rec, data_root=tmp_path)["reproduces"] is True
     elsewhere = R.rerun(rec)
@@ -767,7 +767,7 @@ def test_a_not_yet_computed_record_with_arrays_completes_to_the_direct_record():
     e = evaluate(read_graph(g), L.Guard(small))
     assert e.stopped and e.refusal["limit"]["name"] == "max_array_bytes"
     pending = R.build_pending(e.graph, "big", None, e.refusal, small)
-    jsonschema.validate(pending, R.schema(6))
+    jsonschema.validate(pending, R.schema(R.SCHEMA_VERSION))
     done = evaluate(read_graph(pending["graph"]), L.Guard())
     direct = evaluate(read_graph(g), L.Guard())
     assert R.file_bytes(R.build(done, "big", None)) == R.file_bytes(R.build(direct, "big", None))
@@ -829,7 +829,7 @@ def test_several_results_carry_arrays_and_the_record_re_runs():
               op("slope", "fit_slope", "t", "y"), op("se", "fit_slope_se", "t", "y"), op("f", "fft", "y"),
               result=["slope", "se", "f"])
     rec = make(g)
-    jsonschema.validate(rec, R.schema(6))
+    jsonschema.validate(rec, R.schema(R.SCHEMA_VERSION))
     assert [r["node"] for r in rec["results"]] == ["slope", "se", "f"]
     assert rec["results"][2]["array"]["kind"] == "complex" and "float64" in rec["results"][2]
     assert R.rerun(rec)["reproduces"] is True
@@ -862,7 +862,7 @@ FIVE_THOUSAND = graph(inp("x", arr([str(i) for i in range(5_000)], "mm"), "data"
 
 def test_a_record_keeps_its_exact_limit_and_re_runs_with_it_on_any_host():
     laptop = _record(FIVE_THOUSAND)
-    jsonschema.validate(laptop, R.schema(6))
+    jsonschema.validate(laptop, R.schema(R.SCHEMA_VERSION))
     assert laptop["max_exact_elements"] == 65_536 and laptop["result"]["value"].endswith(" mm") and "float64" not in laptop["result"]
     on_flo2 = R.rerun(laptop, L.Guard(L.FLO2_IO))
     assert on_flo2["reproduces"] is True and on_flo2["outcome"] == "reproduced"
@@ -959,3 +959,65 @@ def test_a_large_fft_result_kept_only_as_its_sha256_cannot_be_weighed(monkeypatc
     again = R.rerun(rec)
     assert again["reproduces"] is False
     assert any("keeps only this array's sha256" in d.get("why", "") for d in again["differences"])
+
+
+# ---------------------------------------------------------------- round 3: length, to_number, combinatorics over arrays
+
+
+BEZEL = ["12.1", "11.8", "12.4", "12.0", "11.9"]
+
+
+def test_length_counts_an_arrays_elements_exactly():
+    """q070 typed n = 5 beside the five measurements; n now comes from the data."""
+    assert value(inp("x", arr(BEZEL, "mm")), op("n", "length", "x")).magnitude == 5
+    grid = arr([["1", "2", "3"], ["4", "5", "6"]])
+    assert value(inp("g", grid), op("n", "length", "g")).magnitude == 6
+    assert value(inp("g", grid), op("n", "length", "g", axis=0)).magnitude == 2, "each column's length: the rows"
+    assert value(inp("g", grid), op("n", "length", "g", axis=1)).magnitude == 3, "each row's length: the columns"
+    assert value(inp("b", arr([True, False])), op("n", "length", "b")).magnitude == 2
+    big = arr([str(i) for i in range(5000)])
+    assert value(inp("x", big), op("n", "length", "x"), limits=L.FLO2_IO).magnitude == 5000, "float64 data, an exact count"
+    n = value(inp("x", arr(BEZEL, "mm")), op("n", "length", "x"))
+    assert n.unit == () and n.rounding is None
+
+
+def test_length_refuses_a_single_value_and_an_axis_a_vector_has_not():
+    assert refusal(inp("a", "5"), op("n", "length", "a"))["kind"] == "type_mismatch"
+    assert refusal(inp("x", arr(BEZEL)), op("n", "length", "x", axis=1))["kind"] == "shape_mismatch"
+    assert value(inp("x", arr(BEZEL)), op("n", "length", "x", axis=0)).magnitude == 5
+
+
+def test_q070_the_t_interval_rests_on_the_data_alone():
+    import mpmath as mp_
+
+    nodes = [inp("x", arr(BEZEL, "mm")), op("n", "length", "x"), inp("one", "1"), op("dof", "sub", "n", "one"),
+             op("m", "mean", "x"), op("s", "sd_sample", "x"), op("rt", "sqrt", "n"), op("se", "div", "s", "rt"),
+             inp("p", "0.975"), op("t", "t_quantile", "p", "dof"), op("h", "mul", "t", "se")]
+    h = value(*nodes)
+    mp_.mp.dps = 50
+    assert abs(mp_.mpf(h.magnitude.numerator) / h.magnitude.denominator - mp_.mpf("0.28585252")) < mp_.mpf("1e-8")
+
+
+def test_to_number_over_a_true_false_array_is_an_exact_array_of_ones_and_zeros():
+    out = answer(inp("b", arr([True, False, True])), op("x", "to_number", "b"), op("s", "sum", "x"), result="x")
+    assert out["result"]["array"]["values"] == ["1", "0", "1"] and out["result"]["array"]["kind"] == "exact"
+    assert value(inp("b", arr([True, False, True])), op("x", "to_number", "b"), op("s", "sum", "x")).magnitude == 2
+    assert refusal(inp("x", arr(["1", "2"])), op("y", "to_number", "x"))["kind"] == "type_mismatch"
+
+
+def test_choose_factorial_and_the_binomial_work_element_by_element_on_exact_arrays():
+    c = value(inp("n", arr(["5", "6", "10"])), inp("k", "2"), op("c", "choose", "n", "k"))
+    assert texts(c.data.tolist()) == ["10", "15", "45"]
+    f = value(inp("n", arr(["0", "1", "5"])), op("f", "factorial", "n"))
+    assert texts(f.data.tolist()) == ["1", "1", "120"]
+    tail = value(inp("k", arr(["0", "1", "2", "3", "4", "5"])), inp("n", "5"), inp("p", "0.8"), op("sf", "binomial_sf", "k", "n", "p"))
+    assert tail.data.tolist()[2] == Fraction("0.94208") and tail.data.tolist()[5] == 0
+    r = refusal(inp("x", arr(["1", "2"])), op("e", "exp", "x"), inp("k", "1"), op("c", "choose", "e", "k"))
+    assert r["kind"] == "type_mismatch" and "exact" in r["reason"]
+
+
+def test_a_whole_power_over_an_array_has_no_exponent_cap():
+    """Round 3: the cap of 1000 is gone here too; the digits budget is the limit."""
+    p = value(inp("b", arr(["2", "3"])), inp("n", "1001"), op("p", "pow", "b", "n"))
+    assert p.data.tolist() == [Fraction(2**1001), Fraction(3**1001)]
+    assert refusal(inp("b", arr(["2", "3"])), inp("n", "100000"), op("p", "pow", "b", "n"))["kind"] == "exceeds_limits"

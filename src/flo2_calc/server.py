@@ -91,9 +91,12 @@ INSTRUCTIONS = (
     'significant digits (or a node\'s "digits"), labelled "rounded" with "error_at_most", never called exact, and '
     "exact wherever the result is rational. A comparison, ceil, floor or round of a rounded value is answered only "
     "when its error bound decides it. dB is its own kind of value: a dB-to-ratio conversion must be told \"power\" "
-    "or \"amplitude\". ARRAYS (vectors and grids, one unit each, written {\"array\": [...], \"unit\": \"mm\"}) work "
+    "or \"amplitude\". Counting and combinatorics are exact: count_true, k_of_n, to_number (true is 1, false 0), "
+    "choose, factorial, and the binomial distribution (binomial_pmf, binomial_cdf, binomial_sf, exact for an exact p). "
+    "A change of temperature stays a change: converted to K it is delta_K, which never converts to degC or degF as a "
+    "temperature. ARRAYS (vectors and grids, one unit each, written {\"array\": [...], \"unit\": \"mm\"}) work "
     "element by element with every operator, with numpy's broadcasting; they reduce (sum, mean, min, max, count_true, "
-    "any, all, with an axis for a grid), give statistics over data (variance and sd, sample or population, named; a "
+    "any, all, with an axis for a grid; length counts their elements), give statistics over data (variance and sd, sample or population, named; a "
     "least-squares fit with standard errors) and the FFT. An exact array stays exact through rational operations; an "
     "FFT, a function over an array, or a large array is float64, labelled \"float64\" with a rigorous "
     "\"error_at_most\" and how it was found. Every reply shows the computation back as a formula and as numbered "
@@ -101,7 +104,13 @@ INSTRUCTIONS = (
     "a whole graph; add_node builds one node at a time; record_computation returns a computation record, a .calc.json "
     "file to link to the decision it supports; rerun_record checks that a record still reproduces. flo2-calc "
     "calculates and you reason: it never decides which equation applies, and a domain's own formulas (ring sizes, "
-    "metal weight, a building's areas) belong to the helper that owns the domain. READ THE SKILL before using it: the "
+    "metal weight, a building's areas, an electronics standard's sizing rule such as IPC-2221's trace width) belong to "
+    "the helper that owns the domain. AN EMPIRICAL OR A STANDARD'S FORMULA, AND EVERY CONSTANT IN IT, COMES FROM THE "
+    "PERSON OR FROM A DOCUMENT THEY CAN CHECK, NEVER FROM YOUR MEMORY: compute one only when the formula and each "
+    "constant were given (each constant an input whose source says where: \"given by the person\", or the document, "
+    "its edition and clause). When a named standard's result is asked for without them, ask the person for them, or "
+    "name the document and edition you would take them from and have the person confirm before you calculate; never "
+    "recall them, even when you are sure. flo2-calc cannot tell where a number came from. READ THE SKILL before using it: the "
     f"prompt \"{SK.NAME}\", or the resource {SK.RESOURCE_URI}. flo2-calc stands alone: it never calls reflow2 or "
     "anything else. Linking a record to a design is the agent's job, with the design tool's own tools."
 )
@@ -112,8 +121,9 @@ GRAPH_HELP = (
     'node is {"id": "bend", "value": "1.4 mm", "source": "fiber datasheet"}: the value is text, a number with its '
     'unit as reflow2 spells it (mm, g, V, mA, ...), a plain number ("0.1", "1/3", or a JSON integer), or true/false. '
     'A value is one number: build arithmetic as operation nodes, never inside a value. Temperatures are K, degC or '
-    'degF ("25 degC"), and a change of temperature is delta_degC or delta_degF; a bare C or F is refused (write '
-    'coulomb or farad for those). Money is an ISO 4217 code ("12.50 USD"); currencies are never converted except by '
+    'degF ("25 degC"), and a change of temperature is delta_degC, delta_degF or delta_K (a change converted to K comes '
+    'back as delta_K); a bare C or F is refused (write coulomb or farad for those). Money is an ISO 4217 code '
+    '("12.50 USD"); currencies are never converted except by '
     'a rate you give as an input with its source ("0.92 EUR/USD"). A gain or loss is in dB ("6 dB", "0.2 dB/m"), '
     'and a power level in dBm or dBW ("-30 dBm"); convert turns a level into mW or W and back. '
     'The source is free text or {"design_node": "con:..."} naming a node in a reflow2 design (recorded, never '
@@ -128,9 +138,9 @@ GRAPH_HELP = (
     'or two dimensions (a list of rows for a grid), ONE unit for the whole array, each element a number as text or '
     'all true/false; or, run locally, {"file": "data/x.csv", "unit": "mm"} inside the folder flo2-calc was started '
     'with (the record keeps the file\'s sha256). Every operator works element by element on arrays (shapes equal, or '
-    'a single value, a row against a grid, a column against a row); sum, product, mean, min, max, count_true, any and '
-    'all take one array and an optional "axis" (0: each column, 1: each row); abs of an FFT\'s complex values is '
-    'their modulus. An array comes back as {"array": {"shape", "kind", "unit", "sha256", "values"}} (values only up '
+    'a single value, a row against a grid, a column against a row); sum, product, mean, min, max, count_true, any, all '
+    'and length take one array and an optional "axis" (0: each column, 1: each row); abs of an FFT\'s complex values '
+    'is their modulus. An array comes back as {"array": {"shape", "kind", "unit", "sha256", "values"}} (values only up '
     'to 1,024 elements); a float64 value carries "float64": {"error_at_most", "how", "from"}. Operators: '
     + "; ".join(f"{k} ({v[3]})" for k, v in OPS.items())
     + ". Units: one '/', '*' between units, '^n' for powers, e.g. \"mm^2\", \"m/s^2\", \"kg/(m*s^2)\". Units "
@@ -208,8 +218,9 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
         name="flo2-calc",
         version=__version__,
         instructions=INSTRUCTIONS
-        + f" This flo2-calc's limits: {limits.in_words()}. A calculation past one is stopped with its reason "
-        "(status refused, kind exceeds_limits), never cut short, and record_computation then returns a "
+        + f" This flo2-calc's limits: {limits.in_words()}. They are the only limits on a calculation (a power has "
+        "no exponent cap of its own: it is sized against the digits budget). A calculation past one is stopped with its "
+        "reason (status refused, kind exceeds_limits), never cut short, and record_computation then returns a "
         "not-yet-computed record that flo2-calc on a machine with more room completes.",
     )
     reading = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=False)

@@ -15,8 +15,12 @@ is folded into its user (and so needs no name of its own) when exactly one
 node uses it, it is not a result, and its text is at most FOLD_AT characters;
 pi and e are always folded. So a small graph reads as one equation
 ("in_h = convert(capacity / draw, h) = 450/13 h"), and a large one as named
-sub-expressions. A result's line ends with its value: "=" for an exact value
-(its exact fraction where its decimal does not end), "≈" for a rounded one.
+sub-expressions. Every line ends with its value, as the working's steps do:
+"=" for an exact value (its exact fraction where its decimal does not end),
+"≈" for a rounded or float64 one, and an array by its description. Records of
+schema versions 4 to 6 (flo2-calc 0.5.0 to 0.6.1) ended only a result's line
+with its value (`every_line_valued` False), and re-run that way; round 3 found
+17 answers whose intermediate lines ("t_raw = C / I_avg") carried none.
 
 THE WORKING is every node as a numbered step, in evaluation order: an input
 as given, then each operation with its arguments by name, the same with their
@@ -37,9 +41,9 @@ says "float64" with its bound. The array operators have renderings of their
 own: sum and product as sigma and pi, mean as a bar, fft as script F, an
 element as a subscript, and the rest as named functions.
 
-The renderings are part of the record's format (schema version 4): a change
-to them is a change of schema version, because a record re-runs to exactly the
-fields it holds.
+The renderings are part of the record's format (schema version 4, and 7 for
+every line's value): a change to them is a change of schema version, because a
+record re-runs to exactly the fields it holds.
 """
 
 from __future__ import annotations
@@ -267,6 +271,16 @@ def expression(node: Any, args: list[Expr]) -> Expr:
             _op_tex("k_of_n") + r"\left(" + k.latex + r";\ " + r",\ ".join(a.latex for a in votes) + r"\right)",
             CALL,
         )
+    if op == "choose":
+        n, k = args
+        return Expr(f"choose({n.text}, {k.text})", CALL, r"\binom{" + n.latex + "}{" + k.latex + "}", ATOM)
+    if op == "factorial":
+        return Expr(f"factorial({args[0].text})", CALL, _pl(args[0], ATOM) + "!", POW)
+    if op == "to_number":
+        return Expr(f"to_number({args[0].text})", CALL, r"\left[" + args[0].latex + r"\right]", ATOM)
+    if op == "length":
+        text, tex = _with_axis(node, args[0].text, args[0].latex)
+        return Expr(f"length({text})", CALL, _op_tex("length") + r"\left(" + tex + r"\right)", CALL)
     if op in ("ceil", "floor", "round"):
         extra = []
         if getattr(node, "places", None) is not None:
@@ -339,11 +353,14 @@ def render(
     results: tuple[str, ...],
     shown: dict[str, Shown],
     refused: dict[str, Any] | None = None,
+    every_line_valued: bool = True,
 ) -> Rendering:
     """The formula and the working of a graph: `nodes` in the graph's order,
     `order` the evaluation order, `results` the result nodes, `shown` every
     computed value (none for a graph not yet computed), `refused` the refusal
-    an evaluation stopped at, if any."""
+    an evaluation stopped at, if any. With `every_line_valued` (schema version
+    7, and every reply) each formula line ends with its value; without it
+    (versions 4 to 6) only a result's line does."""
     by_id = {n.id: n for n in nodes}
     uses: dict[str, int] = {n.id: 0 for n in nodes}
     for n in nodes:
@@ -372,7 +389,7 @@ def render(
         if not is_input and full[nid].text != nid:
             text += " = " + full[nid].text
             tex += " = " + full[nid].latex
-        if nid in results and nid in shown:
+        if nid in shown and (every_line_valued or nid in results):
             sign, said, said_tex = _value_part(shown[nid])
             text += sign + said
             tex += said_tex

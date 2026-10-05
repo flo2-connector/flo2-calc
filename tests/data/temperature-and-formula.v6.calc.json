@@ -1,0 +1,400 @@
+{
+  "arithmetic": "Exact rational arithmetic on the inputs as written: no binary floating point. + - * / and integer powers are exact, and so is every unit conversion but deg-rad and dBm-mW, so every value not marked \"rounded\" is exact FOR THESE INPUTS and no more accurate than they are: a decimal typed for an irrational number (a truncated pi or e) is taken as exactly that decimal, not as the number it stands for (the pi and e operators are the constants themselves). A whole number is written in full. Any other value whose decimal ends (at most 40 significant digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact value for these inputs is given beside it as a fraction. A computed value whose compound unit is exactly a simpler unit is shown in it (\"simplified_from\" names the unit it was computed in); the value does not change. Comparisons use exact values. A value marked \"rounded\" is NOT exact: it comes from pi, e, a root, exp, ln, log10, a non-whole power, trigonometry, a deg-rad conversion, a decibel conversion or a distribution, or from arithmetic on such a value. It is a decimal of the stated number of significant digits, every one written, given no \"exact\" fraction, and \"error_at_most\" bounds its distance from the true value. Where it says \"correctly_rounded\", it is the true value rounded half-even, decided from a rigorous enclosure (Arb ball arithmetic, python-flint). A comparison, ceil, floor or round of a rounded value is answered only when its error bound decides it, and refused otherwise. An ARRAY of exact numbers stays exact through rational operations, reductions and the statistics that are rational; a value marked \"float64\" is NOT exact: an FFT, a rounded-class function over an array, an array of more elements than this record's max_exact_elements (the host's setting where it was made), or anything mixed with such a value, computed in IEEE 754 double precision. Every element of a float64 value lies within its \"error_at_most\" of the true value, a rigorous bound whose basis \"how\" names (the FFT's: Higham 2002, Theorem 24.2, for a power-of-two length; Arb's rigorous DFT for any other). An array of more than 1,024 elements is written as its sha256 over every element's text, which re-running compares.",
+  "content_hash": "sha256:188170cff51b9d6ac3c9f0e6f20314ebd5d17c8cbd689e4f5e9ade56e8d7c01a",
+  "formula": [
+    {
+      "latex": "\\text{rise\\_k} = \\operatorname{convert}\\left(\\text{rise},\\ \\mathrm{K}\\right) = 10\\,\\mathrm{K}",
+      "node": "rise_k",
+      "text": "rise_k = convert(rise, K) = 10 K"
+    },
+    {
+      "latex": "\\text{diff} = \\text{t\\_hot} - \\text{t\\_room} = 1.85\\,\\mathrm{K}",
+      "node": "diff",
+      "text": "diff = t_hot - t_room = 1.85 K"
+    },
+    {
+      "latex": "\\text{dt} = \\text{rth} \\cdot \\text{p}",
+      "node": "dt",
+      "text": "dt = rth * p"
+    },
+    {
+      "latex": "\\text{total} = \\text{rise\\_k} + \\text{dt} + \\text{dt} \\cdot \\text{two} = 40\\,\\mathrm{K}",
+      "node": "total",
+      "text": "total = rise_k + dt + dt * two = 40 K"
+    },
+    {
+      "latex": "\\text{rises\\_k} = \\operatorname{convert}\\left(\\text{rises},\\ \\mathrm{K}\\right) = \\text{array 3 (exact, K)}",
+      "node": "rises_k",
+      "text": "rises_k = convert(rises, K) = array 3 (exact, K)"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "rise",
+        "source": "imported spec: allowed temperature rise",
+        "value": "18 delta_degF"
+      },
+      {
+        "args": [
+          "rise"
+        ],
+        "id": "rise_k",
+        "op": "convert",
+        "unit": "K"
+      },
+      {
+        "id": "t_hot",
+        "source": "sensor reading",
+        "value": "300 K"
+      },
+      {
+        "id": "t_room",
+        "source": "room",
+        "value": "25 degC"
+      },
+      {
+        "args": [
+          "t_hot",
+          "t_room"
+        ],
+        "id": "diff",
+        "op": "sub"
+      },
+      {
+        "id": "rth",
+        "source": "heatsink datasheet",
+        "value": "2.5 K/W"
+      },
+      {
+        "id": "p",
+        "source": "dissipation",
+        "value": "4 W"
+      },
+      {
+        "args": [
+          "rth",
+          "p"
+        ],
+        "id": "dt",
+        "op": "mul"
+      },
+      {
+        "args": [
+          "dt",
+          "two"
+        ],
+        "id": "twice",
+        "op": "mul"
+      },
+      {
+        "id": "two",
+        "source": "two stages",
+        "value": "2"
+      },
+      {
+        "args": [
+          "rise_k",
+          "dt",
+          "twice"
+        ],
+        "id": "total",
+        "op": "add"
+      },
+      {
+        "id": "rises",
+        "source": "three specs",
+        "value": {
+          "array": [
+            "9",
+            "18",
+            "27"
+          ],
+          "unit": "delta_degF"
+        }
+      },
+      {
+        "args": [
+          "rises"
+        ],
+        "id": "rises_k",
+        "op": "convert",
+        "unit": "K"
+      }
+    ],
+    "result": [
+      "rise_k",
+      "diff",
+      "total",
+      "rises_k"
+    ]
+  },
+  "inputs": [
+    {
+      "id": "rise",
+      "source": "imported spec: allowed temperature rise",
+      "unit": "delta_degF",
+      "value": "18 delta_degF"
+    },
+    {
+      "id": "t_hot",
+      "source": "sensor reading",
+      "unit": "K",
+      "value": "300 K"
+    },
+    {
+      "id": "t_room",
+      "source": "room",
+      "unit": "degC",
+      "value": "25 degC"
+    },
+    {
+      "id": "rth",
+      "source": "heatsink datasheet",
+      "unit": "K/W",
+      "value": "2.5 K/W"
+    },
+    {
+      "id": "p",
+      "source": "dissipation",
+      "unit": "W",
+      "value": "4 W"
+    },
+    {
+      "id": "two",
+      "source": "two stages",
+      "unit": "",
+      "value": "2"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:714eac85d723d33f7e869c27c26b7c01668a70f94c92d88ce4221e1fa0baee2b",
+        "shape": [
+          3
+        ],
+        "unit": "delta_degF"
+      },
+      "id": "rises",
+      "source": "three specs",
+      "unit": "delta_degF",
+      "value": "array 3 (exact, delta_degF)"
+    }
+  ],
+  "max_exact_elements": 65536,
+  "name": "temperature-and-formula",
+  "produced_by": {
+    "flo2_calc": "0.6.1",
+    "numpy": "2.5.3",
+    "pint": "0.26.1",
+    "python_flint": "0.9.0"
+  },
+  "record_format": "flo2-calc computation record",
+  "results": [
+    {
+      "node": "rise_k",
+      "value": "10 K"
+    },
+    {
+      "node": "diff",
+      "value": "1.85 K"
+    },
+    {
+      "node": "total",
+      "value": "40 K"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:780fcb415f6a70ade208e9e1614ce773c84a3c0a0e27e51405d9310c7f639664",
+        "shape": [
+          3
+        ],
+        "unit": "K",
+        "values": [
+          "5",
+          "10",
+          "15"
+        ]
+      },
+      "node": "rises_k",
+      "value": "array 3 (exact, K)"
+    }
+  ],
+  "schema_version": 6,
+  "status": "computed",
+  "supports": "round 3: a v6 record of the paths 0.7.0 changes",
+  "values": [
+    {
+      "node": "rise",
+      "value": "18 delta_degF"
+    },
+    {
+      "node": "rise_k",
+      "value": "10 K"
+    },
+    {
+      "node": "t_hot",
+      "value": "300 K"
+    },
+    {
+      "node": "t_room",
+      "value": "25 degC"
+    },
+    {
+      "node": "diff",
+      "value": "1.85 K"
+    },
+    {
+      "node": "rth",
+      "value": "2.5 K/W"
+    },
+    {
+      "node": "p",
+      "value": "4 W"
+    },
+    {
+      "node": "dt",
+      "value": "10 K"
+    },
+    {
+      "node": "two",
+      "value": "2"
+    },
+    {
+      "node": "twice",
+      "value": "20 K"
+    },
+    {
+      "node": "total",
+      "value": "40 K"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:714eac85d723d33f7e869c27c26b7c01668a70f94c92d88ce4221e1fa0baee2b",
+        "shape": [
+          3
+        ],
+        "unit": "delta_degF",
+        "values": [
+          "9",
+          "18",
+          "27"
+        ]
+      },
+      "node": "rises",
+      "value": "array 3 (exact, delta_degF)"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:780fcb415f6a70ade208e9e1614ce773c84a3c0a0e27e51405d9310c7f639664",
+        "shape": [
+          3
+        ],
+        "unit": "K",
+        "values": [
+          "5",
+          "10",
+          "15"
+        ]
+      },
+      "node": "rises_k",
+      "value": "array 3 (exact, K)"
+    }
+  ],
+  "working": [
+    {
+      "label": "given",
+      "latex": "\\text{rise} = 18\\,\\mathrm{delta\\_degF}",
+      "node": "rise",
+      "step": 1,
+      "text": "rise = 18 delta_degF"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{rise\\_k} = \\operatorname{convert}\\left(\\text{rise},\\ \\mathrm{K}\\right) = \\operatorname{convert}\\left(18\\,\\mathrm{delta\\_degF},\\ \\mathrm{K}\\right) = 10\\,\\mathrm{K}",
+      "node": "rise_k",
+      "step": 2,
+      "text": "rise_k = convert(rise, K) = convert(18 delta_degF, K) = 10 K"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{t\\_hot} = 300\\,\\mathrm{K}",
+      "node": "t_hot",
+      "step": 3,
+      "text": "t_hot = 300 K"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{t\\_room} = 25\\,\\mathrm{degC}",
+      "node": "t_room",
+      "step": 4,
+      "text": "t_room = 25 degC"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{diff} = \\text{t\\_hot} - \\text{t\\_room} = 300\\,\\mathrm{K} - 25\\,\\mathrm{degC} = 1.85\\,\\mathrm{K}",
+      "node": "diff",
+      "step": 5,
+      "text": "diff = t_hot - t_room = 300 K - 25 degC = 1.85 K"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{rth} = 2.5\\,\\mathrm{K}/\\mathrm{W}",
+      "node": "rth",
+      "step": 6,
+      "text": "rth = 2.5 K/W"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{p} = 4\\,\\mathrm{W}",
+      "node": "p",
+      "step": 7,
+      "text": "p = 4 W"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{dt} = \\text{rth} \\cdot \\text{p} = 2.5\\,\\mathrm{K}/\\mathrm{W} \\cdot 4\\,\\mathrm{W} = 10\\,\\mathrm{K}",
+      "node": "dt",
+      "step": 8,
+      "text": "dt = rth * p = 2.5 K/W * 4 W = 10 K"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{two} = 2",
+      "node": "two",
+      "step": 9,
+      "text": "two = 2"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{twice} = \\text{dt} \\cdot \\text{two} = 10\\,\\mathrm{K} \\cdot 2 = 20\\,\\mathrm{K}",
+      "node": "twice",
+      "step": 10,
+      "text": "twice = dt * two = 10 K * 2 = 20 K"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{total} = \\text{rise\\_k} + \\text{dt} + \\text{twice} = 10\\,\\mathrm{K} + 10\\,\\mathrm{K} + 20\\,\\mathrm{K} = 40\\,\\mathrm{K}",
+      "node": "total",
+      "step": 11,
+      "text": "total = rise_k + dt + twice = 10 K + 10 K + 20 K = 40 K"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{rises} = \\text{array 3 (exact, delta\\_degF)}",
+      "node": "rises",
+      "step": 12,
+      "text": "rises = array 3 (exact, delta_degF)"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{rises\\_k} = \\operatorname{convert}\\left(\\text{rises},\\ \\mathrm{K}\\right) = \\text{array 3 (exact, K)}",
+      "node": "rises_k",
+      "step": 13,
+      "text": "rises_k = convert(rises, K) = array 3 (exact, K)"
+    }
+  ]
+}

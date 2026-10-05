@@ -66,9 +66,11 @@ def test_a_rounded_result_is_shown_approximately_equal_never_equal():
     assert r"\sqrt{\text{x}} \approx 1.41421356237309504880168872421" in line["latex"]
 
 
-def test_a_node_used_twice_is_its_own_named_line():
+def test_a_node_used_twice_is_its_own_named_line_and_ends_with_its_value():
+    """Round 3 (17 questions): a line that is not a result ended with no value
+    ("t_raw = C / I_avg"). Every line ends with its value now, as every step does."""
     answer = run(graph(inp("a", "3"), inp("b", "4"), op("s", "add", "a", "b"), op("sq", "mul", "s", "s")))
-    assert [f["text"] for f in answer["formula"]] == ["s = a + b", "sq = s * s = 49"]
+    assert [f["text"] for f in answer["formula"]] == ["s = a + b = 7", "sq = s * s = 49"]
 
 
 def test_a_large_graph_reads_as_named_sub_expressions_each_short():
@@ -230,3 +232,66 @@ def test_latex_is_given_beside_every_line_and_balanced():
         assert tex.count("{") == tex.count("}"), tex
         assert tex.count(r"\left") == tex.count(r"\right"), tex
         assert line["text"] and not re.search(r"\\[a-z]", line["text"]), "the plain text holds no LaTeX"
+
+
+# ---------------------------------------------------------------- every line ends with its value (round 3, flo2-calc 0.7.0)
+#
+# Round 3 found 17 answers whose intermediate lines carried no value: "t_raw =
+# C / I_avg" (q002), "max_slope = one / twelve" (q017), "rV = sV / V" (q053).
+# A line a person reads against the problem should say what it came to, as
+# every step of the working does.
+
+Q002 = graph(
+    inp("d", "2/10", "duty"), inp("I_on", "12 mA", "datasheet"), inp("I_sleep", "4 uA", "datasheet"),
+    inp("one", "1", "whole"), inp("C", "225 mAh", "coin cell"),
+    op("on_part", "mul", "d", "I_on"), op("off", "sub", "one", "d"), op("off_part", "mul", "off", "I_sleep"),
+    op("I_avg", "add", "on_part", "off_part"), op("t_raw", "div", "C", "I_avg"), op("t", "convert", "t_raw", unit="h"),
+    op("days", "convert", "t_raw", unit="d"), result=["t", "days"],
+)
+
+
+def _ends_with_its_value(line, values):
+    v = values[line["node"]]
+    said = v.get("exact", v["value"])
+    return line["text"].endswith(" = " + said) or line["text"].endswith(" ≈ " + said) or (
+        len(said) > FM.SHOW_VALUE_AT and line["text"].endswith('-character value: see "values")')
+    )
+
+
+def test_every_formula_line_ends_with_its_value_not_only_a_results():
+    answer = run(Q002)
+    values = {v["node"]: v for v in answer["values"]}
+    lines = {f["node"]: f for f in answer["formula"]}
+    assert "t_raw" in lines and "t_raw" not in ("t", "days"), "t_raw is used twice: a line of its own, not a result"
+    assert lines["t_raw"]["text"] == "t_raw = C / (d * I_on + (one - d) * I_sleep) = 140625/1502 h"
+    for line in answer["formula"]:
+        assert _ends_with_its_value(line, values), line["text"]
+        assert r"\approx" in line["latex"] or " = " in line["latex"]
+
+
+def test_an_array_line_ends_with_its_description_and_a_rounded_one_with_approx():
+    g = graph(inp("x", {"array": ["1", "2", "3"], "unit": "mm"}, "data"), op("m", "mean", "x"), op("d", "sub", "x", "m"),
+              op("sq", "mul", "d", "d"), op("two", "sqrt", "sq"), op("s", "sum", "d"), op("t", "sum", "sq"), result=["s", "t"])
+    answer = run(g)
+    lines = {f["node"]: f["text"] for f in answer["formula"]}
+    assert lines["d"].endswith(" = array 3 (exact, mm)")
+    assert lines["sq"].endswith(" = array 3 (exact, mm^2)")
+    r = run(graph(inp("x", "2"), op("r", "sqrt", "x"), op("a", "add", "r", "r"), op("b", "mul", "r", "a"), result="b"))
+    assert {f["node"]: f["text"] for f in r["formula"]}["r"] == "r = sqrt(x) ≈ 1.41421356237309504880168872421"
+
+
+def test_a_version_7_record_holds_the_same_lines_as_the_reply():
+    ev = evaluate(read_graph(Q002))
+    rec = R.build(ev, "q002", None)
+    assert rec["schema_version"] == 7
+    values = {v["node"]: v for v in rec["values"]}
+    assert all(_ends_with_its_value(line, values) for line in rec["formula"])
+    assert rec["formula"] == run(Q002)["formula"], "reply and record show the same equations"
+
+
+def test_a_record_of_version_6_keeps_its_lines_as_they_were():
+    ev = evaluate(read_graph(Q002))
+    v6 = R.build(ev, "q002", None, 6)
+    lines = {f["node"]: f["text"] for f in v6["formula"]}
+    assert lines["t_raw"] == "t_raw = C / (d * I_on + (one - d) * I_sleep)", "versions 4 to 6 end only a result's line with its value"
+    assert R.rerun(v6)["reproduces"] is True

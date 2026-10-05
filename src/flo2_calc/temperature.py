@@ -2,14 +2,17 @@
 
 A READING is a value whose whole unit is degC or degF ("25 degC"): a point on
 a scale whose zero is not zero temperature. A CHANGE is a difference of
-temperatures: delta_degC, delta_degF, or a degree inside a compound unit
-("2.5 degC/W" is 2.5 K/W). K has no offset, so a value in K can be either; each
-rule below says which it is, and where both are possible the operation is
-refused rather than guessed.
+temperatures: delta_degC, delta_degF, delta_K, or a degree inside a compound
+unit ("2.5 degC/W" is 2.5 K/W). K has no offset, so a value in K can be either;
+each rule below says which it is, and where both are possible the operation is
+refused rather than guessed. A K known to be a change is written delta_K
+(flo2-calc 0.7.0, round 3's q036), so it is never read as a temperature.
 
   convert     a reading to degC, degF or K, and K to degC or degF, exactly
               (K = C + 273.15, F = C * 9/5 + 32). A reading is never turned
-              into a change, nor a change into a reading.
+              into a change, nor a change into a reading: a change converted
+              to K is delta_K (units.converted_unit), and delta_K to degC or
+              degF is refused.
   add         at most one reading. Everything added to it is a change
               (delta_degC, delta_degF, or K), and the sum is a reading on the
               reading's scale, wherever it stands among the arguments. Two
@@ -17,10 +20,12 @@ refused rather than guessed.
   sub         reading - reading: a change, in delta_ of the first one's scale
               (30 degC - 77 degF is 5 delta_degC).
               reading - delta_degC or delta_degF: a reading.
+              reading - delta_K: a reading.
               reading - K: REFUSED, because "5 K" could be a change (giving a
               reading) or a temperature (giving a change).
               K - reading: K is a temperature here (a change minus a
-              temperature means nothing), so the answer is a change, in K.
+              temperature means nothing), so the answer is a change, delta_K
+              (a bare K before 0.7.0).
               a change - a reading: refused.
   eq ne lt le gt ge, min, max
               readings, and K (a temperature here), compared exactly on one
@@ -126,7 +131,9 @@ def _convert(x: Number, kind: str, name: str, target: U.Unit) -> Number:
     if kind == "change" and to_kind == "reading":
         raise Refusal(
             f'convert cannot turn {U.show(x[1])} into {U.show(target)}: "{name}" is a change of temperature, not a '
-            "temperature. Add it to a temperature to get one.",
+            f"temperature, and a change converted as a temperature would be wrong by the scale's offset. Convert it "
+            f"to {U.INTERVAL_OF[U.scale_of(target)]} for the same change on that scale, or add it to a temperature "
+            "to get one.",
             kind=KIND,
             units=_named(x[1], target),
         )
@@ -168,13 +175,14 @@ def _sub(args: list[Number], kinds: list[str], names: tuple[str, ...]) -> Number
         if kb == "K":
             raise Refusal(
                 f'sub cannot tell whether "{names[1]}", in K, is a temperature or a change of temperature, and the '
-                f"answers differ. Write a change as delta_degC or delta_degF, or convert \"{names[0]}\" to K first.",
+                f"answers differ. Write a change as delta_K, delta_degC or delta_degF, or convert \"{names[0]}\" to K "
+                "first.",
                 kind=KIND,
                 units=_named(ua, ub),
             )
         return ma - mb * U.conversion(ub, ua, "sub"), ua  # a change; anything else is refused, naming both
     if ka == "K":
-        return ma - kelvin_of(mb, ub), U.KELVIN
+        return ma - kelvin_of(mb, ub), (U.KELVIN_CHANGE if U.delta_k() else U.KELVIN)
     if ka == "change":
         raise Refusal(
             f'sub cannot take a temperature ("{names[1]}") from a change of temperature ("{names[0]}"): that means '
