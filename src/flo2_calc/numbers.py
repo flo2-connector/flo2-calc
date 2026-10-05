@@ -70,7 +70,8 @@ ARITHMETIC_NOTE = (
 ARRAYS_NOTE = (
     "An ARRAY of exact numbers stays exact through rational "
     "operations, reductions and the statistics that are rational; a value marked \"float64\" is NOT exact: an FFT, "
-    "a rounded-class function over an array, an array of more than 4,096 elements, or anything mixed with such a "
+    "a rounded-class function over an array, an array of more elements than this record's max_exact_elements (the "
+    "host's setting where it was made), or anything mixed with such a "
     "value, computed in IEEE 754 double precision. Every element of a float64 value lies within its "
     "\"error_at_most\" of the true value, a rigorous bound whose basis \"how\" names (the FFT's: Higham 2002, "
     "Theorem 24.2, for a power-of-two length; Arb's rigorous DFT for any other). An array of more than 1,024 "

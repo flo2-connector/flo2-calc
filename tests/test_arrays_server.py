@@ -79,7 +79,7 @@ def test_a_record_with_arrays_is_made_and_re_runs_over_the_client():
     a = answer_of(made)
     assert a["status"] == "ok" and a["record"]["status"] == "computed"
     rec = json.loads(made.content[1].resource.text)
-    assert rec["schema_version"] == 5 and rec["graph"]["nodes"][1]["value"] == {"array": Y, "unit": "deg"}
+    assert rec["schema_version"] == 6 and rec["graph"]["nodes"][1]["value"] == {"array": Y, "unit": "deg"}
     (again,) = anyio.run(calls, [("rerun_record", {"record": rec})])
     assert answer_of(again)["reproduces"] is True
 

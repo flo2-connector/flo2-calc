@@ -40,7 +40,9 @@ TWO MODES (dec:idea-how-arrays-are-computed).
   arrays is exact. A root of an exact value is the rounded class: a standard
   deviation or a standard error is correctly rounded, as a single value is.
 - FLOAT64. An FFT, a function of the rounded class over an array (sqrt, exp,
-  ln, sin ...), an array of more than EXACT_MAX_ELEMENTS elements, and
+  ln, sin ...), an array of more elements than the host's max_exact_elements
+  (limits.py: 65,536 on a laptop, 4,096 on flo2.io; a record keeps the value
+  it was made with, and re-runs with it), and
   anything that mixes such a value in (or a rounded value into an array) are
   computed in IEEE 754 double precision, and LABELLED "float64": every
   element carries a rigorous bound on its distance from the true value, and
@@ -121,7 +123,9 @@ from flo2_calc import temperature as T
 from flo2_calc import units as U
 from flo2_calc.errors import CallError, Refusal, at
 
-EXACT_MAX_ELEMENTS = 4_096  # past this (a 64 x 64 grid), an array is carried in float64: a "large grid"
+# Past the host's max_exact_elements (limits.py; dec:v0-6-0-array-choices), an array is carried in float64: a
+# "large grid". A version 5 record (flo2-calc 0.6.0) was made with this fixed limit, and re-runs with it.
+EXACT_ELEMENTS_0_6_0 = 4_096
 FULL_ELEMENTS = 1_024  # an array of at most this many elements is written out in full
 FIRST_SHOWN = 8
 MAX_ELEMENTS = 1 << 21  # any one array (2,097,152 elements), whatever the host's budget
@@ -140,9 +144,8 @@ _KIND = {"O": EXACT, "b": BOOL, "f": FLOAT64, "c": COMPLEX}
 
 # What each part of a float64 bound rests on, in words (the label's "how").
 HOW_TAKEN = "an exact value taken into float64: its exact rounding error to the nearest double"
-HOW_LARGE = (
-    f"an array of more than {EXACT_MAX_ELEMENTS:,} elements is carried in float64 (dec:idea-how-arrays-are-computed)"
-)
+def how_large(limit: int) -> str:
+    return f"an array of more than {limit:,} elements is carried in float64 (dec:idea-how-arrays-are-computed)"
 HOW_ROUNDED_IN = "a rounded value taken into float64 with its error bound and the rounding to the nearest double"
 HOW_ARITH = (
     "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and "
@@ -407,9 +410,9 @@ def _unit_of(obj: dict[str, Any], path: str) -> tuple[str | None, U.Unit]:
         raise CallError(at(path, "unit"), str(e)) from None
 
 
-def _build(items: list[Any], shape: tuple[int, ...], unit: U.Unit, path: str, where: Callable[[int], str]) -> Array:
+def _build(items: list[Any], shape: tuple[int, ...], unit: U.Unit, path: str, where: Callable[[int], str], exact_limit: int) -> Array:
     """An array from its elements as given (text, JSON numbers, true/false).
-    Past EXACT_MAX_ELEMENTS each number goes straight into float64, so no
+    Past `exact_limit` each number goes straight into float64, so no
     large list of exact numbers is ever held."""
     n = len(items)
     if n > MAX_ELEMENTS:
@@ -426,7 +429,7 @@ def _build(items: list[Any], shape: tuple[int, ...], unit: U.Unit, path: str, wh
                 raise CallError(where(i), mixed)
             flags.append(x)
         return bool_array(flags, shape)
-    if n <= EXACT_MAX_ELEMENTS:
+    if n <= exact_limit:
         elements = [first]
         for i in range(1, n):
             x = _element(items[i], where(i))
@@ -444,11 +447,14 @@ def _build(items: list[Any], shape: tuple[int, ...], unit: U.Unit, path: str, wh
             values[i], errors[i] = to_float(x)
         except OverflowError:
             raise CallError(where(i), "this number passes float64's range (about 1.8e308), and an array this large is carried in float64.") from None
-    return float_array(values.reshape(shape), errors.reshape(shape), unit, Label((), (HOW_LARGE, HOW_TAKEN)))
+    return float_array(values.reshape(shape), errors.reshape(shape), unit, Label((), (how_large(exact_limit), HOW_TAKEN)))
 
 
-def parse_input(raw: dict[str, Any], path: str, data_root: Path | None) -> tuple[dict[str, Any], Array]:
-    """(the value as a record keeps it, the array) from an input's object value."""
+def parse_input(raw: dict[str, Any], path: str, data_root: Path | None, exact_limit: int | None = None) -> tuple[dict[str, Any], Array]:
+    """(the value as a record keeps it, the array) from an input's object
+    value. An array of more than `exact_limit` elements (the host's
+    max_exact_elements; a laptop's when not given) is read into float64."""
+    exact_limit = L.LAPTOP.max_exact_elements if exact_limit is None else exact_limit
     keys = set(raw)
     if keys - {"array", "file", "unit", "sha256"} or ("array" in raw) == ("file" in raw):
         raise CallError(
@@ -466,7 +472,7 @@ def parse_input(raw: dict[str, Any], path: str, data_root: Path | None) -> tuple
         def where(i: int) -> str:
             return at(field, i) if len(shape) == 1 else f"{field}[{i // shape[1]}][{i % shape[1]}]"
 
-        array = _build(items, shape, unit, field, where)
+        array = _build(items, shape, unit, field, where, exact_limit)
         texts = [_kept_text(x) for x in items]
         kept: dict[str, Any] = {"array": _nested(texts, shape)}
         if unit_text is not None:
@@ -480,7 +486,7 @@ def parse_input(raw: dict[str, Any], path: str, data_root: Path | None) -> tuple
             f'the file "{raw["file"]}" now has sha256 {digest}, not the {raw["sha256"]!r} given: it is not the data '
             "this computation was made with.",
         )
-    array = _parse_file(target, data, unit, at(path, "file"))
+    array = _parse_file(target, data, unit, at(path, "file"), exact_limit)
     kept = {"file": raw["file"], "sha256": digest}
     if unit_text is not None:
         kept["unit"] = unit_text
@@ -521,7 +527,7 @@ def _read_file(root: Path | None, requested: Any, field: str) -> tuple[Path, byt
     return target, target.read_bytes()
 
 
-def _parse_file(target: Path, data: bytes, unit: U.Unit, field: str) -> Array:
+def _parse_file(target: Path, data: bytes, unit: U.Unit, field: str, exact_limit: int) -> Array:
     if target.suffix == ".npy":
         import io
 
@@ -540,7 +546,7 @@ def _parse_file(target: Path, data: bytes, unit: U.Unit, field: str) -> Array:
             return bool_array(a, a.shape)
         if k in "iu":
             items = [int(x) for x in a.ravel().tolist()]
-            return _build(items, a.shape, unit, field, lambda i: f"{field} (element {i})")
+            return _build(items, a.shape, unit, field, lambda i: f"{field} (element {i})", exact_limit)
         if k == "f":
             v = a.astype(np.float64)
             if not np.all(np.isfinite(v)):
@@ -566,7 +572,7 @@ def _parse_file(target: Path, data: bytes, unit: U.Unit, field: str) -> Array:
     items = [t for r in rows for t in r]
     del rows
     try:
-        return _build(items, shape, unit, field, lambda i: f"row {i // width + 1}, value {i % width + 1}")
+        return _build(items, shape, unit, field, lambda i: f"row {i // width + 1}, value {i % width + 1}", exact_limit)
     except CallError as e:
         raise CallError(field, f"{e.path}: {e.problem}" if e.path != field else e.problem) from None
 
@@ -802,17 +808,18 @@ def broadcast_shape(op: str, args: list[_Arg]) -> tuple[int, ...]:
 
 def _result(values: list[Any], shape: tuple[int, ...], unit: U.Unit, node: Any, guard: L.Guard) -> Any:
     """An exact result: an array, or (shape ()) a single value. An array of
-    more than EXACT_MAX_ELEMENTS elements is carried in float64, labelled."""
+    more than the host's max_exact_elements elements is carried in float64, labelled."""
     if shape == ():
         v = values[0]
         return v if isinstance(v, bool) else E.Quantity(v, unit)
     if values and isinstance(values[0], (bool, np.bool_)):
         return bool_array(values, shape)
-    if len(values) > EXACT_MAX_ELEMENTS:
+    limit = guard.limits.max_exact_elements
+    if len(values) > limit:
         xs = np.empty(len(values), dtype=object)
         xs[:] = values
         v, e = floats_of(xs.reshape(shape), node.op, guard)
-        return float_array(v, e, unit, Label((node.id,), (HOW_LARGE, HOW_TAKEN)))
+        return float_array(v, e, unit, Label((node.id,), (how_large(limit), HOW_TAKEN)))
     return exact_array(values, shape, unit)
 
 
@@ -947,14 +954,14 @@ def _elementwise(node: Any, values: list[Any], guard: L.Guard) -> Any:
     if any(a.kind == COMPLEX for a in args):
         return _complex_elementwise(node, args, shape, guard)
     exact_args = all(a.kind == EXACT for a in args)
-    if exact_args and op in RATIONAL and _rational_here(node, args) and math.prod(shape) <= EXACT_MAX_ELEMENTS:
+    if exact_args and op in RATIONAL and _rational_here(node, args) and math.prod(shape) <= guard.limits.max_exact_elements:
         make_room(guard, shape, EXACT)
         return _exact_elementwise(node, args, shape, guard)
     make_room(guard, shape, FLOAT64)
     large = exact_args and op in RATIONAL and _rational_here(node, args)  # exact, but too many elements to stay so
     out = _float_elementwise(node, args, shape, guard)
     if large and isinstance(out, Array) and out.label is not None:
-        out = Array(out.data, out.unit, out.error, out.label.plus(how=(HOW_LARGE,)), out.norm)
+        out = Array(out.data, out.unit, out.error, out.label.plus(how=(how_large(guard.limits.max_exact_elements),)), out.norm)
     return out
 
 
@@ -1298,7 +1305,7 @@ def _decided_rounding(node: Any, a: _Arg, shape: tuple[int, ...], guard: L.Guard
     mode = node.mode or "half_even"
     v, e = a.floats(node.op, guard)
     n = max(1, math.prod(shape))
-    large = n > EXACT_MAX_ELEMENTS
+    large = n > guard.limits.max_exact_elements
     out: list[Any] = []
     fv, fe = (np.empty(n), np.empty(n)) if large else (None, None)
     for i, (x, err) in enumerate(zip(floats_in(np.broadcast_to(v, shape)), floats_in(np.broadcast_to(e, shape)))):
@@ -1313,7 +1320,7 @@ def _decided_rounding(node: Any, a: _Arg, shape: tuple[int, ...], guard: L.Guard
         else:
             out.append(lo)
     if large:  # decided, then carried in float64 because it is large
-        return float_array(fv.reshape(shape), fe.reshape(shape), a.unit, Label((node.id,), (HOW_LARGE, HOW_TAKEN)))  # type: ignore[union-attr]
+        return float_array(fv.reshape(shape), fe.reshape(shape), a.unit, Label((node.id,), (how_large(guard.limits.max_exact_elements), HOW_TAKEN)))  # type: ignore[union-attr]
     return _result(out, shape, a.unit, node, guard)
 
 
@@ -2395,9 +2402,10 @@ def _shaping(node: Any, values: list[Any], guard: L.Guard) -> Any:
         f = U.conversion(stop.unit, start.unit, op)
         lo, hi = start.magnitude, stop.magnitude * f
         exact_ends = start.rounding is None and stop.rounding is None
-        make_room(guard, (n,), EXACT if n <= EXACT_MAX_ELEMENTS and exact_ends else FLOAT64)
+        limit = guard.limits.max_exact_elements
+        make_room(guard, (n,), EXACT if n <= limit and exact_ends else FLOAT64)
         step = (hi - lo) / (n - 1)
-        if exact_ends and n <= EXACT_MAX_ELEMENTS:
+        if exact_ends and n <= limit:
             return _result([lo + step * k for k in range(n)], (n,), start.unit, node, guard)
         v, e = np.empty(n), np.empty(n)
         for k in range(n):  # each exact, straight into float64: no large list of exact numbers is held
@@ -2408,7 +2416,7 @@ def _shaping(node: Any, values: list[Any], guard: L.Guard) -> Any:
             except OverflowError:
                 raise _too_large(op, "a value") from None
         if exact_ends:
-            return float_array(v, e, start.unit, Label((node.id,), (HOW_LARGE, HOW_TAKEN)))
+            return float_array(v, e, start.unit, Label((node.id,), (how_large(limit), HOW_TAKEN)))
         bound = float_up(max(start.error, stop.error * f))  # interpolation weights lie in [0, 1]
         lab = label_of(origins=_origin_ids(start, stop) + (node.id,), how=(HOW_ROUNDED_IN, HOW_TAKEN))
         return float_array(v, (e + bound) * INFLATE, start.unit, lab)

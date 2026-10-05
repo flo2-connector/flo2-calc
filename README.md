@@ -107,6 +107,7 @@ reason**. It is never cut short, never guessed, and never killed by a sandbox as
 | digits of any exact numerator or denominator | `--max-digits N` | `FLO2_CALC_MAX_DIGITS` | 20,000 | 2,000 |
 | bytes in a reply, its record included | `--max-reply-bytes N` | `FLO2_CALC_MAX_REPLY_BYTES` | 8,388,608 (8 MiB) | 2,097,152 (2 MiB) |
 | bytes the arrays of one call may hold | `--max-array-bytes N` | `FLO2_CALC_MAX_ARRAY_BYTES` | 536,870,912 (512 MiB) | 16,777,216 (16 MiB) |
+| elements an exact array may have (past it: float64, labelled) | `--max-exact-elements N` | `FLO2_CALC_MAX_EXACT_ELEMENTS` | 65,536 (a 256 x 256 grid) | 4,096 (a 64 x 64 grid) |
 
 Why each value:
 
@@ -131,8 +132,14 @@ Why each value:
   what each array holds (a float64 element and its bound 16 bytes, a complex one 24, a true/false 1, an exact one about
   128 with its digits) and, for an FFT whose length is not a power of two, the room Arb's check of it takes while it
   runs.
+- **Exact arrays, 65,536 elements on a laptop and 4,096 on flo2.io** (`dec:v0-6-0-array-choices`). This one is not a
+  stop: past it an array is carried in float64 and labelled so, as `dec:idea-how-arrays-are-computed` has large grids
+  be. An exact element costs about 128 bytes and a float64 one 16, so flo2.io's lower value keeps a 256 x 256 grid's
+  workflow inside its array budget and its 128m cap. A computed record that holds an array keeps the value it was made
+  with (`max_exact_elements`), and re-running uses that value, not the host's, so the record re-runs to the same values
+  anywhere; a version 5 record (0.6.0) was made with a fixed 4,096 and re-runs with it.
 - **Arrays, 16 MiB on flo2.io.** A 256 x 256 grid's discretised integral and 2-D FFT hold about 7 MiB; the image's
-  measured peak with them is 94 MiB under the 128m cap (Measurements, below).
+  measured peak with them is 105 MiB under the 128m cap (Measurements, below).
 
 The image sets flo2.io's profile (`ENV` in the `Dockerfile`). Run elsewhere, pass your own, for example
 `docker run -e FLO2_CALC_MAX_DIGITS=20000 ...`. A workstation raises them all. A setting flo2-calc cannot use, such as
@@ -577,8 +584,8 @@ A function over an array (`sqrt`, `exp`, `ln`, `sin`, the distributions ...) wor
   reductions, and through the statistics that are rational: a mean, a variance, and a regression's slope and intercept.
   A standard deviation or a standard error is the square root of an exact number, so it is correctly rounded, the
   rounded class, as a single value's root is.
-- **float64.** An FFT, a function of the rounded class over an array, an array of more than 4,096 elements (a 64 x 64
-  grid), and anything that mixes such a value in (a rounded value such as `pi` mixed into an array too) are computed in
+- **float64.** An FFT, a function of the rounded class over an array, an array of more elements than the host's
+  `max_exact_elements` (65,536 on a laptop, 4,096 on flo2.io: Limits, above), and anything that mixes such a value in (a rounded value such as `pi` mixed into an array too) are computed in
   IEEE 754 double precision. Mixing exact and float64 gives float64. Every such value is labelled:
 
   ```json
@@ -680,8 +687,9 @@ flo2's helper contract fixes the split.
 ## The computation record
 
 One JSON object, defined by
-[`src/flo2_calc/schemas/calc-record-5.schema.json`](src/flo2_calc/schemas/calc-record-5.schema.json) (JSON Schema
-draft 2020-12). Version 5 (0.6.0) adds arrays: an inline array or a data file's path and sha256 as an input's value,
+[`src/flo2_calc/schemas/calc-record-6.schema.json`](src/flo2_calc/schemas/calc-record-6.schema.json) (JSON Schema
+draft 2020-12). Version 6 (0.6.1) adds `max_exact_elements` to a record that holds an array (the host's exact-array
+limit it was made with, which re-running uses), and to a host's limits. Version 5 (0.6.0) added arrays: an inline array or a data file's path and sha256 as an input's value,
 the `array` and `float64` labels on values, the array operators and `axis`, `numpy` in `produced_by`, and
 `max_array_bytes` among a host's limits. Versions 1 to 3 ([`calc-record-1.schema.json`](src/flo2_calc/schemas/calc-record-1.schema.json),
 made by flo2-calc 0.1.0, [`calc-record-2.schema.json`](src/flo2_calc/schemas/calc-record-2.schema.json), made by
@@ -700,7 +708,8 @@ version.
 
 | Field | Holds |
 |---|---|
-| `record_format`, `schema_version` | `"flo2-calc computation record"`, `5` |
+| `record_format`, `schema_version` | `"flo2-calc computation record"`, `6` |
+| `max_exact_elements` | a record that holds an array: the most elements an exact array had where it was made; re-running uses it |
 | `status` | `"computed"`, or `"not_computed"` (below) |
 | `name` | the record's name; its file is `<name>.calc.json` |
 | `supports` | optional: what it supports, as free text or `{"design_node": "dec:...", "design"?: "..."}` |
@@ -755,6 +764,16 @@ when `output_path` asks. So the equations travel, and the machine is chosen late
 - Where there is still not enough room, the reply is a new not-yet-computed record, with this host's limits.
 - Run locally with `output_path`, the completed record replaces the not-yet-computed file of the same calculation.
   That file must be intact and have the same name, supports, graph and inputs. Nothing else is ever written over.
+
+**An FFT on another processor.** An FFT's values are numpy's own, so their last bits can differ between processors
+(another architecture may fuse a multiply and an add). `rerun_record` accepts a float64 value that rests on an FFT (the
+FFT's result, and what was computed from it) when every element lies within the bound the record states for it, and
+says so as its own outcome, never as identical: `"reproduces": "within_bound"`, `"outcome": "reproduced_within_bound"`,
+each such value in `within_bound`, and `largest_difference` naming the node, the difference and its bound. Every exact
+value and every other float64 value must still reproduce byte for byte (`"reproduces": true`, `"outcome":
+"reproduced"`), and a difference beyond a bound, or anywhere else, is `"reproduces": false` with each difference and
+why. An FFT result of more than 1,024 elements is kept only as its sha256, so a difference in it cannot be weighed
+against its bound, and the answer says that.
 
 **Checking it.** `rerun_record` on a not-yet-computed record says plainly that it has no result yet (`"status":
 "not_computed"`, `"reproduces": null`). It checks the seal, says what the record needs (for example, "max_digits of
@@ -887,7 +906,7 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    per record. **0.5.0 also offers an MCP prompt and a resource** (the skill, `initialize` now lists `prompts` and
    `resources` beside `tools`). They are not tools, so the door's allow-list of four is untouched; the door may ignore
    them, since hosted on flo2.io the skill is served by flo2 itself. The image's size is unchanged (209 MB), and its
-   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements).
+   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.

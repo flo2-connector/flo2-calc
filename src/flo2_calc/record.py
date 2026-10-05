@@ -1,11 +1,11 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-5.schema.json; version 1 to
-4 records, schemas/calc-record-1.schema.json to calc-record-4.schema.json,
+A record is one JSON object (schemas/calc-record-6.schema.json; version 1 to
+5 records, schemas/calc-record-1.schema.json to calc-record-5.schema.json,
 still re-run):
 
     record_format   "flo2-calc computation record"
-    schema_version  5
+    schema_version  6
     status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
@@ -25,6 +25,9 @@ still re-run):
                     it (formula.py)
     working         every step, numbered, in evaluation order: its formula,
                     its value and its label (formula.py)
+    max_exact_elements  a record holding an array: the most elements an exact
+                    array had where it was made (the host's setting); re-running
+                    uses it, so the record re-runs to the same values anywhere
     produced_by     {"flo2_calc", "pint", "python_flint", "numpy": versions}
     content_hash    "sha256:<hex>" over the canonical JSON of all of the above
 
@@ -59,6 +62,16 @@ sha256: a changed file is a difference, and a file that is not there leaves
 the record neither confirmed nor contradicted. A large array's values are
 kept as the sha256 of every element's text, which re-running compares.
 
+AN FFT ON ANOTHER PROCESSOR (dec:v0-6-0-array-choices). An FFT's values are
+numpy's own, so its last bits are the processor's. Re-running a record accepts
+a float64 value resting on an FFT (the FFT's result, and what was computed from
+it) whose every element lies within the bound the record states for it, and
+says so as its own outcome, "reproduced_within_bound", naming the largest
+difference against its bound: never as identical. Every exact value and every
+other float64 value must still reproduce byte for byte. An FFT result of more
+than 1,024 elements is kept only as its sha256, so a difference in it cannot be
+weighed against its bound, and the answer says that.
+
 THE HASH IS A SEAL, NOT A SIGNATURE. It catches a record edited by hand or
 damaged in transit. It cannot stop someone from editing a record and then
 recomputing the hash; re-running the graph is what catches a result that does
@@ -79,6 +92,7 @@ import json
 import os
 import re
 import tempfile
+from dataclasses import replace
 from functools import cache
 from importlib import resources
 from pathlib import Path
@@ -110,13 +124,14 @@ from flo2_calc.evaluator import (
 from flo2_calc.numbers import ARITHMETIC_NOTE, ARRAYS_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 SCHEMA_FILES = {
     1: "calc-record-1.schema.json",
     2: "calc-record-2.schema.json",
     3: "calc-record-3.schema.json",
     4: "calc-record-4.schema.json",
     5: "calc-record-5.schema.json",
+    6: "calc-record-6.schema.json",
 }
 COMPUTED = "computed"
 NOT_COMPUTED = "not_computed"
@@ -183,6 +198,20 @@ def check_supports(supports: Any, path: str = "supports") -> str | dict[str, str
             out["design"] = d
         return out
     raise CallError(path, "supports is free text, or {\"design_node\": \"<id>\"} naming the decision in a reflow2 design.")
+
+
+def exact_limit_of(record: dict[str, Any]) -> int | None:
+    """The exact-array limit a record was made with: its own max_exact_elements
+    (version 6), or limits_in_force's for a not-yet-computed one, or flo2-calc
+    0.6.0's fixed 4,096 for version 5; None before arrays (version 4 and older)."""
+    if "max_exact_elements" in record:
+        return int(record["max_exact_elements"])
+    lif = record.get("limits_in_force") or {}
+    if "max_exact_elements" in lif:
+        return int(lif["max_exact_elements"])
+    if record.get("schema_version") == 5:
+        return A.EXACT_ELEMENTS_0_6_0
+    return None
 
 
 def style_of(version: int) -> Style:
@@ -254,6 +283,8 @@ def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | No
     graph = evaluation.graph
     check_sources(graph)
     record = _head(COMPUTED, name, graph, supports, version)
+    if version >= 6 and uses_arrays(graph):
+        record["max_exact_elements"] = evaluation.guard.limits.max_exact_elements
     values = values_json(evaluation, style_of(version))
     record["values"] = values
     record.update(results_json(evaluation, values))
@@ -297,7 +328,7 @@ def pending_problems(record: dict[str, Any], data_root: Path | None = None) -> l
     seal: its inputs must be the ones its graph gives, and the node it stopped
     at must be in its graph. (Its values cannot be checked: it has none.)"""
     try:
-        graph = read_graph(record["graph"], "record.graph", data_root)
+        graph = read_graph(record["graph"], "record.graph", data_root, exact_limit_of(record))
     except CallError as e:
         return [{"field": e.path, "recorded": "(as written)", "now": f"cannot be read: {e.problem}"}]
     out = []
@@ -362,7 +393,7 @@ def _replaceable_pending(target: Path, new: dict[str, Any]) -> bool:
         old = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return False
-    if not isinstance(old, dict) or old.get("schema_version") not in (2, 3, 4, 5) or old.get("status") != NOT_COMPUTED:
+    if not isinstance(old, dict) or old.get("schema_version") not in (2, 3, 4, 5, 6) or old.get("status") != NOT_COMPUTED:
         return False
     import jsonschema
 
@@ -478,6 +509,100 @@ def _differences(recorded: dict[str, Any], again: dict[str, Any]) -> list[dict[s
     return out
 
 
+FFT_BASES = ("fft of ", "ifft of ", "fft2 of ", "ifft2 of ")
+
+
+def _on_an_fft(entry: Any) -> bool:
+    """Whether a value is float64 and rests on an FFT (its label's basis names one)."""
+    label = entry.get("float64") if isinstance(entry, dict) else None
+    return bool(label) and any(h.startswith(FFT_BASES) for h in label.get("how", []))
+
+
+def _flat(values: Any) -> list[str]:
+    return [x for row in values for x in (row if isinstance(row, list) else [row])]
+
+
+def _shape_of(entry: dict[str, Any]) -> dict[str, Any]:
+    """An entry without what an FFT's last bits move: its numbers, its sha256
+    and the bound's last digits."""
+    out = {k: v for k, v in entry.items() if k not in ("value", "array", "float64")}
+    if "array" in entry:
+        out["array"] = {k: v for k, v in entry["array"].items() if k not in ("values", "sha256", "first", "least", "greatest")}
+        out["value"] = entry["value"]  # the description: shape, kind, unit
+    else:
+        out["unit"] = entry["value"].partition(" ")[2]
+    out["float64"] = {k: v for k, v in entry["float64"].items() if k != "error_at_most"}
+    return out
+
+
+def _weigh(recorded: Any, rerun: Any) -> dict[str, Any]:
+    """A recorded float64 value resting on an FFT against its re-run: "within"
+    with the largest difference and the recorded bound, or why not."""
+    if not (_on_an_fft(recorded) and _on_an_fft(rerun)):
+        return {"why": "not a float64 value resting on an FFT, so it must reproduce byte for byte"}
+    if _shape_of(recorded) != _shape_of(rerun):
+        return {"why": "its shape, kind, unit or label's basis differs, not only its last bits"}
+    bound = float(recorded["float64"]["error_at_most"].split(" ")[0])
+    if "array" in recorded:
+        if "values" not in recorded["array"] or "values" not in rerun["array"]:
+            return {"why": "the record keeps only this array's sha256 (it has more than 1,024 elements), so a "
+                           "difference in it cannot be weighed against its bound"}
+        a, b = _flat(recorded["array"]["values"]), _flat(rerun["array"]["values"])
+    else:
+        a, b = [recorded["value"].split(" ")[0]], [rerun["value"].split(" ")[0]]
+    diffs = [abs(complex(x) - complex(y)) for x, y in zip(a, b, strict=True)]
+    largest = max(diffs)
+    if largest > bound:
+        return {"why": f"it differs by {largest!r}, beyond the bound of {bound!r} the record states for it",
+                "largest_difference": largest, "bound": bound}
+    return {"within": True, "largest_difference": largest, "bound": bound, "elements_differing": sum(1 for d in diffs if d)}
+
+
+def _weigh_against_bounds(differences: list[dict[str, Any]], graph: Graph) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(the values accepted within their stated bounds, the differences that
+    remain). A value resting on an FFT is accepted when every element lies
+    within the bound the record states for it; then the formula's and the
+    working's lines that show it (or take it) differ by that alone. Anything
+    else that differs remains a difference."""
+    accepted: dict[str, dict[str, Any]] = {}
+    remaining: list[dict[str, Any]] = []
+    later: list[dict[str, Any]] = []
+    for d in differences:
+        field = d["field"]
+        if field.startswith("values[") and d["recorded"] is not None and d["rerun"] is not None:
+            w = _weigh(d["recorded"], d["rerun"])
+            if w.get("within"):
+                accepted[d["recorded"]["node"]] = w
+            else:
+                remaining.append({**d, **w})  # why, and beyond a bound by how much
+        elif field in ("result", "results", "formula", "working"):
+            later.append(d)
+        else:
+            remaining.append(d)
+    nodes = graph.by_id()
+
+    def shows_accepted(node_id: Any) -> bool:
+        n = nodes.get(node_id)
+        return node_id in accepted or any(a in accepted for a in getattr(n, "args", ()) or ())
+
+    for d in later:
+        rec, new = d["recorded"], d["rerun"]
+        if d["field"] == "result":
+            ok = isinstance(rec, dict) and isinstance(new, dict) and rec.get("node") in accepted and _weigh(rec, new).get("within")
+        elif isinstance(rec, list) and isinstance(new, list) and len(rec) == len(new):
+            if d["field"] == "results":
+                ok = all(x == y or (x.get("node") in accepted and _weigh(x, y).get("within")) for x, y in zip(rec, new))
+            else:  # formula, working
+                ok = all(x == y or (x.get("node") == y.get("node") and shows_accepted(x.get("node"))) for x, y in zip(rec, new))
+        else:
+            ok = False
+        if not ok:
+            remaining.append(d)
+    if remaining:
+        return [], remaining  # not reproduced: what remains is what differs beyond an FFT's last bits
+    return [{"node": n, **{k: v for k, v in w.items() if k != "within"}} for n, w in accepted.items()], []
+
+
 def needs_of(stopped: dict[str, Any]) -> str:
     """What a not-yet-computed record needs, in words."""
     limit = stopped["limit"]
@@ -568,10 +693,19 @@ def rerun(record: dict[str, Any], guard: L.Guard | None = None, data_root: Path 
         answer["note"] = f"recorded with flo2-calc {record['produced_by'].get('flo2_calc')}, re-run with {__version__}."
     if status_of(record) == NOT_COMPUTED:
         return _rerun_pending(record, answer, hash_ok, guard, data_root)
+    exact = exact_limit_of(record)
+    if exact is not None and exact != guard.limits.max_exact_elements:
+        # The record's arithmetic, not this host's: an array exact where it was made is exact here too.
+        answer["exact_arrays"] = (
+            f"re-run with the record's limit for an exact array, {exact:,} elements, not this host's "
+            f"({guard.limits.max_exact_elements:,}), so it is the same calculation"
+        )
+        guard.limits = replace(guard.limits, max_exact_elements=exact)
     differences: list[dict[str, Any]] = []
+    within: list[dict[str, Any]] = []
     stopped: dict[str, Any] | None = None
     try:
-        graph = read_graph(record["graph"], "record.graph", data_root)
+        graph = read_graph(record["graph"], "record.graph", data_root, exact)
         evaluation = evaluate(graph, guard)
         if evaluation.stopped:
             stopped = evaluation.refusal
@@ -581,6 +715,8 @@ def rerun(record: dict[str, Any], guard: L.Guard | None = None, data_root: Path 
         else:
             again = build(evaluation, record["name"], record.get("supports"), record["schema_version"])
             differences += _differences(record, again)
+            if differences and hash_ok:
+                within, differences = _weigh_against_bounds(differences, graph)
             if "results" in again:
                 answer["results"] = again["results"]
                 answer["result"] = None
@@ -615,6 +751,22 @@ def rerun(record: dict[str, Any], guard: L.Guard | None = None, data_root: Path 
     answer["reproduces"] = reproduces
     answer["differences"] = differences
     answer.setdefault("result", None)
+    if reproduces and within:
+        # Not identical: an FFT's last bits, each element within the bound the record states for it.
+        worst = max(within, key=lambda w: w["largest_difference"] / w["bound"] if w["bound"] else 0.0)
+        answer["reproduces"] = "within_bound"
+        answer["outcome"] = "reproduced_within_bound"
+        answer["within_bound"] = within
+        answer["largest_difference"] = {k: worst[k] for k in ("node", "largest_difference", "bound")}
+        answer["verdict"] = (
+            f"The record re-runs to its values WITHIN THEIR STATED BOUNDS, not byte for byte: {len(within)} float64 "
+            f"value(s) resting on an FFT ({', '.join(w['node'] for w in within)}) differ from the record, the largest "
+            f"by {worst['largest_difference']!r} against the bound of {worst['bound']!r} the record states for it "
+            f"(node {worst['node']}), as an FFT run on another processor may in its last bits. Every exact value and "
+            "every other value reproduces byte for byte, and the content hash matches."
+        )
+        return answer
+    answer["outcome"] = "reproduced" if reproduces else "not_reproduced"
     if reproduces:
         answer["verdict"] = "The record re-runs to exactly the values it holds, and its content hash matches."
     else:

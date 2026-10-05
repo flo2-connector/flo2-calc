@@ -85,10 +85,13 @@
 - **Generic math only:** no jewelry, building or other domain formula belongs here.
 - **Arrays** (`req:flo2-calc-computes-over-arrays`, `dec:idea-how-arrays-are-computed`, option (a)): one unit per
   array; an exact array stays exact through rational operations; an FFT, a rounded-class function over an array, an
-  array of more than 4,096 elements, or anything mixed with such a value is float64, labelled `float64` with a
+  array of more elements than the host's `max_exact_elements` (65,536 on a laptop, 4,096 in the image; a record keeps
+  the value it was made with and re-runs with it), or anything mixed with such a value is float64, labelled `float64` with a
   rigorous `error_at_most` and its basis (`how`). A float64 value must be the same on every machine: functions go
   through Arb and round once, sums through `math.fsum`, complex products one IEEE operation at a time. Only the FFT's
-  last bits are numpy's (pocketfft), which is why `produced_by` names numpy.
+  last bits are numpy's (pocketfft), which is why `produced_by` names numpy, and why `rerun_record` accepts a value
+  resting on an FFT within the bound its record states (`"reproduces": "within_bound"`), never as identical
+  (`dec:v0-6-0-array-choices`). Everything else reproduces byte for byte.
 - **The agent reasons, flo2-calc calculates** (`rule:the-agent-reasons-flo2-calc-calculates`): flo2-calc never
   chooses an equation or judges an approximation; it computes what it is given, or refuses with a reason.
 

@@ -64,14 +64,15 @@ def heavy_graph(n: int = 500) -> dict:
 
 def test_the_defaults_suit_a_laptop_and_flo2_io_has_a_lower_profile():
     assert L.from_settings(None, None, None) == L.LAPTOP == L.Limits(45_000, 20_000, 8 * 1024 * 1024)
-    assert L.FLO2_IO == L.Limits(20_000, 2_000, 2 * 1024 * 1024, 16 * 1024 * 1024)
+    assert L.FLO2_IO == L.Limits(20_000, 2_000, 2 * 1024 * 1024, 16 * 1024 * 1024, 4_096)
     assert L.LAPTOP.max_array_bytes == 512 * 1024 * 1024
     for field in ("deadline_ms", "max_digits", "max_reply_bytes", "max_array_bytes"):
         assert getattr(L.FLO2_IO, field) < getattr(L.LAPTOP, field), field
     # flo2's gateway stops a helper call at 60 s (CAD_CALL_MS, DEFAULT_CALL_MS), and the MCP
     # TypeScript SDK's clients at 60 s too: both deadlines answer well before either gives up.
     assert L.LAPTOP.deadline_ms < 60_000 and L.FLO2_IO.deadline_ms <= 60_000 // 3
-    assert L.FLO2_IO.describe() == {"deadline": "20 s", "max_digits": 2000, "max_reply_bytes": 2097152, "max_array_bytes": 16777216}
+    assert L.FLO2_IO.describe() == {"deadline": "20 s", "max_digits": 2000, "max_reply_bytes": 2097152, "max_array_bytes": 16777216,
+                                    "max_exact_elements": 4096}
 
 
 @pytest.mark.parametrize("text, ms", [("20", 20_000), ("0.5", 500), ("20 s", 20_000), ("0.001", 1), ("86400", 86_400_000)])
@@ -115,7 +116,8 @@ def test_a_value_past_the_digits_budget_is_stopped_naming_the_node_the_limit_and
     assert r["limit"] == {"name": "max_digits", "value": 200, "needed_at_least": 233, "setting": "--max-digits or FLO2_CALC_MAX_DIGITS"}
     assert r["reached"]["nodes_done"] == 3 and r["reached"]["nodes"] == 7
     assert r["reached"]["largest_digits"] == 233
-    assert r["limits"] == {"deadline": "45 s", "max_digits": 200, "max_reply_bytes": 8388608, "max_array_bytes": 536870912}
+    assert r["limits"] == {"deadline": "45 s", "max_digits": 200, "max_reply_bytes": 8388608, "max_array_bytes": 536870912,
+                           "max_exact_elements": 65536}
     assert 'mul at node "x3": the product has a numerator of 233 digits' in r["reason"]
     assert "budget of 200 digits" in r["reason"] and "stopped cleanly" in r["reason"]
 
