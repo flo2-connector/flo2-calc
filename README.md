@@ -797,7 +797,7 @@ flo2-tool-sandbox's flags:
 
 | What | Measured |
 |---|---|
-| Peak memory of one session (the cgroup's `memory.peak`) | 102.5 MiB under a 128 MiB cap, 99.8 MiB under 256 MiB |
+| Peak memory of one session (the cgroup's `memory.peak`) | 105.4 MiB under a 128 MiB cap, 98.2 MiB under 256 MiB (a rehearsal of the same code measured 102.5 and 99.8: runs differ by a few MiB) |
 | The session | 34 calls: three each of a 500-node graph, its record, the record's re-run, and a refused mixed-unit sum; three each of a 484-node graph of rounded operators at 1,000 digits each (sqrt, exp, ln, sin, atan, deg-rad, normal_quantile, chi2_sf, t_quantile), its record and the record's re-run; arrays (below); then the runaway calls below, and one more call that answers |
 | Arrays, one call each, under 128m | a 256 x 256 grid built from two axes, its Gaussian field (`exp` over 65,536 elements), discretised integral, 2-D FFT, modulus (`abs`) and peak: 1.5 s; the same recorded and re-run: 3.0 s; a 250 x 250 grid (its FFT checked against Arb's rigorous DFT): 2.7 s; a fit with standard errors over 4,000 exact points: 0.3 s, and over 20,000 points (float64): 0.9 s |
 | Runaway calls, under the image's own limits (flo2.io's profile) | a 20,000-digit power to the 1000th, 30 squarings, `exp(1e5)` and `normal_sf(1e6)`: each stopped at `max_digits`. A 100,000 x 100,000 grid: stopped at `max_array_bytes` before it was made. The heaviest graph the profile allows (500 nodes of about 1,900 digits each), sent whole: answered; recorded: stopped at `max_reply_bytes` with a not-yet-computed record, since its record, with the formula and all 500 working steps beside two copies of every value, passes 2 MiB (0.4.0's fitted) |
@@ -805,7 +805,7 @@ flo2-tool-sandbox's flags:
 | Image size | 278 MB (`python:3.12-slim` and the venv; python-flint adds about 26 MB, numpy about 69 MB) |
 
 Measured on 2026-10-04 with flo2-calc 0.6.0. 0.5.0 peaked at 91.3 MiB and 0.4.0 at 78.2 MiB in their 27-call sessions; numpy, loaded and
-working on the arrays above, costs about 11 MiB more than 0.5.0. A cap of **128m** is still above the peak, with 25 MiB to spare,
+working on the arrays above, costs about 14 MiB more than 0.5.0. A cap of **128m** is still above the peak, with 22 MiB to spare,
 and the array budget (16 MiB in the image) keeps a call's arrays inside it. CI runs the image under 128m, and asks it
 every limit's questions there (`tests/test_limits.py`, `tests/test_pending_record.py`) and the arrays' questions
 (`tests/test_arrays_server.py`).
