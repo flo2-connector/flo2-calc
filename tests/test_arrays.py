@@ -42,7 +42,8 @@ def arr(values, unit=None):
 
 
 def ev(*nodes, limits=L.LAPTOP, result=None, root=None):
-    return evaluate(read_graph(graph(*nodes, result=result), data_root=root), L.Guard(limits))
+    g = read_graph(graph(*nodes, result=result), data_root=root, exact_limit=limits.max_exact_elements)
+    return evaluate(g, L.Guard(limits))
 
 
 def value(*nodes, **kw):
@@ -125,16 +126,36 @@ def test_an_exchange_rate_array_needs_its_source_too():
     assert caught.value.path == "graph.nodes[0].source"
 
 
+FLO2_IO_EXACT = L.Limits(max_exact_elements=4_096)  # flo2.io's exact limit, the image's ENV
+
+
 def test_a_large_array_is_carried_in_float64_and_labelled_so():
-    n = A.EXACT_MAX_ELEMENTS + 1
-    x = value(inp("x", arr([str(i) for i in range(n - 1)] + ["0.1"])))
+    n = FLO2_IO_EXACT.max_exact_elements + 1
+    x = value(inp("x", arr([str(i) for i in range(n - 1)] + ["0.1"])), limits=FLO2_IO_EXACT)
     assert x.kind == A.FLOAT64 and x.size == n
-    assert A.HOW_LARGE in x.label.how
+    assert A.how_large(4_096) in x.label.how
     assert x.error[:-1].max() == 0.0, "whole numbers are exact in float64"
     assert 0 < x.error[-1] <= 0.1 * 2**-53 and abs(Fraction(float(x.data[-1])) - Fraction(1, 10)) <= Fraction(float(x.error[-1]))
-    shown = answer(inp("x", arr([str(i) for i in range(n)])))["result"]
+    shown = answer(inp("x", arr([str(i) for i in range(n)])), limits=FLO2_IO_EXACT)["result"]
     assert "values" not in shown["array"] and shown["array"]["first"][:3] == ["0.0", "1.0", "2.0"]
     assert shown["float64"]["error_at_most"] == "0"
+
+
+def test_the_exact_limit_is_the_hosts_setting():
+    """dec:v0-6-0-array-choices: 65,536 on a laptop, 4,096 in the image; past it, float64 and labelled."""
+    assert L.LAPTOP.max_exact_elements == 65_536 and L.FLO2_IO.max_exact_elements == 4_096
+    assert L.from_settings(None, None, None, None, "100").max_exact_elements == 100
+    with pytest.raises(ValueError) as caught:
+        L.from_settings(None, None, None, None, "0")
+    assert "--max-exact-elements (or FLO2_CALC_MAX_EXACT_ELEMENTS)" in str(caught.value)
+    data = [str(i) for i in range(5_000)]
+    on_a_laptop = value(inp("x", arr(data)), inp("k", "3"), op("y", "mul", "x", "k"))
+    assert on_a_laptop.kind == A.EXACT, "5,000 elements stay exact under a laptop's 65,536"
+    hosted = value(inp("x", arr(data)), inp("k", "3"), op("y", "mul", "x", "k"), limits=FLO2_IO_EXACT)
+    assert hosted.kind == A.FLOAT64 and A.how_large(4_096) in hosted.label.how
+    grid = [inp("a", "0"), inp("b", "1"), inp("n", "100"), op("x", "linspace", "a", "b", "n"), op("c", "column", "x"), op("g", "mul", "c", "x")]
+    assert value(*grid).kind == A.EXACT and value(*grid, limits=FLO2_IO_EXACT).kind == A.FLOAT64  # 10,000 elements
+    assert value(*grid, limits=L.Limits(max_exact_elements=10_000)).kind == A.EXACT
 
 
 # ---------------------------------------------------------------- arrays from files (local, under --root)
@@ -685,8 +706,8 @@ def make(g=REGRESSION, root=None, name="arrays"):
 
 def test_a_record_with_arrays_fits_its_schema_and_re_runs():
     rec = make()
-    assert rec["schema_version"] == 5 and rec["produced_by"]["numpy"] == np.__version__
-    jsonschema.validate(rec, R.schema(5))
+    assert rec["schema_version"] == 6 and rec["produced_by"]["numpy"] == np.__version__
+    jsonschema.validate(rec, R.schema(6))
     assert "ARRAY" in rec["arithmetic"]
     t_input = next(i for i in rec["inputs"] if i["id"] == "t")
     assert t_input["array"]["shape"] == [6] and "values" not in t_input["array"] and t_input["unit"] == "s"
@@ -728,7 +749,7 @@ def test_a_file_arrays_record_re_runs_where_the_file_is_and_says_so_where_it_is_
     g = graph(inp("t", arr(q063_style()[0], "s"), "frame times"), inp("y", {"file": "y.csv", "unit": "deg"}, "measurements"),
               op("b", "fit_slope", "t", "y"))
     rec = make(g, root=tmp_path)
-    jsonschema.validate(rec, R.schema(5))
+    jsonschema.validate(rec, R.schema(6))
     assert rec["result"]["exact"] == "316/21875 deg/s"
     assert R.rerun(rec, data_root=tmp_path)["reproduces"] is True
     elsewhere = R.rerun(rec)
@@ -746,7 +767,7 @@ def test_a_not_yet_computed_record_with_arrays_completes_to_the_direct_record():
     e = evaluate(read_graph(g), L.Guard(small))
     assert e.stopped and e.refusal["limit"]["name"] == "max_array_bytes"
     pending = R.build_pending(e.graph, "big", None, e.refusal, small)
-    jsonschema.validate(pending, R.schema(5))
+    jsonschema.validate(pending, R.schema(6))
     done = evaluate(read_graph(pending["graph"]), L.Guard())
     direct = evaluate(read_graph(g), L.Guard())
     assert R.file_bytes(R.build(done, "big", None)) == R.file_bytes(R.build(direct, "big", None))
@@ -808,7 +829,7 @@ def test_several_results_carry_arrays_and_the_record_re_runs():
               op("slope", "fit_slope", "t", "y"), op("se", "fit_slope_se", "t", "y"), op("f", "fft", "y"),
               result=["slope", "se", "f"])
     rec = make(g)
-    jsonschema.validate(rec, R.schema(5))
+    jsonschema.validate(rec, R.schema(6))
     assert [r["node"] for r in rec["results"]] == ["slope", "se", "f"]
     assert rec["results"][2]["array"]["kind"] == "complex" and "float64" in rec["results"][2]
     assert R.rerun(rec)["reproduces"] is True
@@ -824,3 +845,117 @@ def test_a_computed_array_is_shown_in_a_simpler_unit_and_whole_numbers_in_full()
     assert f["status"] == "refused" and f["refused"]["kind"] == "unit_mismatch"  # exp of volts: a unit is never dropped
     g = answer(inp("v", arr(["4", "9"], "V")), inp("i", "1 mA"), op("r", "div", "v", "i"), inp("one", "1"), op("x", "pow", "r", "one"))
     assert g["result"]["array"]["unit"] == "kohm"
+
+
+# ---------------------------------------------------------------- dec:v0-6-0-array-choices (flo2-calc 0.6.1)
+
+
+def _record(g, limits=L.LAPTOP, name="choices", version=R.SCHEMA_VERSION):
+    e = evaluate(read_graph(g, exact_limit=limits.max_exact_elements), L.Guard(limits))
+    assert e.ok, e.refusal
+    return R.build(e, name, None, version)
+
+
+FIVE_THOUSAND = graph(inp("x", arr([str(i) for i in range(5_000)], "mm"), "data"), inp("k", "1/3", "scale"), op("y", "mul", "x", "k"),
+                      op("s", "sum", "y"), result="s")
+
+
+def test_a_record_keeps_its_exact_limit_and_re_runs_with_it_on_any_host():
+    laptop = _record(FIVE_THOUSAND)
+    jsonschema.validate(laptop, R.schema(6))
+    assert laptop["max_exact_elements"] == 65_536 and laptop["result"]["value"].endswith(" mm") and "float64" not in laptop["result"]
+    on_flo2 = R.rerun(laptop, L.Guard(L.FLO2_IO))
+    assert on_flo2["reproduces"] is True and on_flo2["outcome"] == "reproduced"
+    assert "the record's limit for an exact array, 65,536 elements" in on_flo2["exact_arrays"]
+    hosted = _record(FIVE_THOUSAND, L.FLO2_IO)
+    assert hosted["max_exact_elements"] == 4_096 and "float64" in hosted["result"]
+    back_home = R.rerun(hosted)
+    assert back_home["reproduces"] is True, back_home["differences"]
+    no_arrays = _record(graph(inp("a", "1", "t"), inp("b", "2", "t"), op("s", "add", "a", "b")))
+    assert "max_exact_elements" not in no_arrays, "a record with no array is as it was"
+
+
+def test_a_version_5_record_re_runs_with_0_6_0s_fixed_limit():
+    v5 = _record(FIVE_THOUSAND, L.Limits(max_exact_elements=4_096), version=5)
+    jsonschema.validate(v5, R.schema(5))
+    assert v5["schema_version"] == 5 and "max_exact_elements" not in v5 and "float64" in v5["result"]
+    again = R.rerun(v5)  # a laptop now keeps 5,000 elements exact, but this record was made with 4,096
+    assert again["reproduces"] is True, again["differences"]
+
+
+def test_the_exact_limit_reaches_the_server_as_a_setting():
+    import anyio
+    from conftest import session
+
+    g = graph(inp("x", arr([str(i) for i in range(20)])), inp("k", "3"), op("y", "mul", "x", "k"))
+
+    async def ask(*extra):
+        async with session(*extra) as s:
+            return json.loads((await s.call_tool("evaluate_graph", {"graph": g})).content[0].text)
+
+    assert anyio.run(ask, "--max-exact-elements", "10")["result"]["array"]["kind"] == "float64"
+    assert anyio.run(ask, "--max-exact-elements", "20")["result"]["array"]["kind"] == "exact"
+
+
+SPECTRUM = graph(inp("x", arr([str(i) for i in range(1, 9)], "V"), "samples"), op("f", "fft", "x"), op("m", "abs", "f"),
+                 op("peak", "max", "m"), inp("p", arr(["0", "1", "2"]), "exponents"), op("e", "exp", "p"),
+                 op("tot", "sum", "x"), result=["peak", "tot"])
+
+
+def _another_processor(monkeypatch, factor):
+    """numpy's FFT as another processor might compute it: every element moved by a relative `factor`."""
+    real = np.fft.fft
+    monkeypatch.setattr(np.fft, "fft", lambda x: real(x) * (1 + factor))
+    return real
+
+
+def test_an_fft_result_from_another_processor_re_runs_within_its_bound(monkeypatch):
+    real = _another_processor(monkeypatch, 2.0**-50)
+    rec = _record(SPECTRUM)
+    monkeypatch.setattr(np.fft, "fft", real)
+    again = R.rerun(rec)
+    assert again["reproduces"] == "within_bound" and again["outcome"] == "reproduced_within_bound"
+    assert again["reproduces"] is not True and again["differences"] == []
+    nodes = {w["node"] for w in again["within_bound"]}
+    assert {"f", "m", "peak"} <= nodes and "e" not in nodes and "tot" not in nodes, "only what rests on the FFT"
+    worst = again["largest_difference"]
+    assert 0 < worst["largest_difference"] <= worst["bound"] and worst["node"] in nodes
+    assert "WITHIN THEIR STATED BOUNDS, not byte for byte" in again["verdict"]
+    assert R.rerun(_record(SPECTRUM))["reproduces"] is True, "on the same processor, byte for byte"
+
+
+def test_an_fft_result_beyond_its_bound_is_caught(monkeypatch):
+    real = _another_processor(monkeypatch, 1e-9)
+    rec = _record(SPECTRUM)
+    monkeypatch.setattr(np.fft, "fft", real)
+    again = R.rerun(rec)
+    assert again["reproduces"] is False and again["outcome"] == "not_reproduced"
+    f = next(d for d in again["differences"] if d["field"] == "values[f]")
+    assert "beyond the bound" in f["why"] and f["largest_difference"] > f["bound"]
+
+
+def test_every_other_value_must_still_reproduce_byte_for_byte():
+    rec = _record(SPECTRUM)
+    for node, old, new in (("e", None, None), ("tot", "36 V", "36.000000000000001 V")):
+        bad = json.loads(json.dumps(rec))
+        entry = next(v for v in bad["values"] if v["node"] == node)
+        if node == "e":  # a float64 value with no FFT in it: one unit in the last place
+            v = entry["array"]["values"]
+            v[0] = repr(math.nextafter(float(v[0]), math.inf))
+        else:  # an exact value
+            entry["value"] = new
+        bad["content_hash"] = R.content_hash(bad)
+        again = R.rerun(bad)
+        assert again["reproduces"] is False and again["outcome"] == "not_reproduced", node
+        d = next(d for d in again["differences"] if d["field"] == f"values[{node}]")
+        assert "byte for byte" in d["why"] or "not a float64 value resting on an FFT" in d["why"]
+
+
+def test_a_large_fft_result_kept_only_as_its_sha256_cannot_be_weighed(monkeypatch):
+    g = graph(inp("a", "0", "t"), inp("b", "1", "t"), inp("n", "2048", "t"), op("x", "linspace", "a", "b", "n"), op("f", "fft", "x"))
+    real = _another_processor(monkeypatch, 2.0**-50)
+    rec = _record(g)
+    monkeypatch.setattr(np.fft, "fft", real)
+    again = R.rerun(rec)
+    assert again["reproduces"] is False
+    assert any("keeps only this array's sha256" in d.get("why", "") for d in again["differences"])

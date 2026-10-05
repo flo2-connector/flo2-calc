@@ -63,7 +63,7 @@ def direct_of(g=GROWING, name="stage-gain", supports=SUPPORTS):
 def test_a_pending_record_holds_the_graph_the_inputs_and_the_limit_and_no_result():
     rec = pending_of()
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 5 and rec["status"] == "not_computed"
+    assert rec["schema_version"] == 6 and rec["status"] == "not_computed"
     assert rec["graph"] == GROWING
     assert rec["supports"] == SUPPORTS
     assert "values" not in rec and "result" not in rec, "no values and no result"
@@ -76,7 +76,8 @@ def test_a_pending_record_holds_the_graph_the_inputs_and_the_limit_and_no_result
     assert (stopped["node"], stopped["op"]) == ("r32", "mul")
     assert stopped["reached"] == {"nodes_done": 5, "nodes": 9, "largest_digits": 195}
     assert "budget of 100 digits" in stopped["reason"]
-    assert rec["limits_in_force"] == {"deadline": "45 s", "max_digits": 100, "max_reply_bytes": 8388608, "max_array_bytes": 536870912}
+    assert rec["limits_in_force"] == {"deadline": "45 s", "max_digits": 100, "max_reply_bytes": 8388608, "max_array_bytes": 536870912,
+                                     "max_exact_elements": 65536}
     assert rec["produced_by"]["flo2_calc"] == __version__
     assert rec["content_hash"] == R.content_hash(rec)
     jsonschema.Draft202012Validator(R.schema()).validate(rec)
@@ -295,7 +296,7 @@ def test_a_version_2_not_yet_computed_record_completes_to_this_versions_direct_r
     assert answer_of(completed)["status"] == "ok"
     direct = one("record_computation", {"graph": GROWING, "name": "stage-gain", "supports": SUPPORTS})
     assert completed.content[1].resource.text == direct.content[1].resource.text
-    assert json.loads(completed.content[1].resource.text)["schema_version"] == 5
+    assert json.loads(completed.content[1].resource.text)["schema_version"] == 6
 
 
 def test_a_tampered_version_1_record_is_still_caught():
@@ -328,7 +329,7 @@ def test_a_version_3_pending_file_is_replaced_by_its_current_completion_even_whe
     v3 = {k: v for k, v in v4.items() if k not in ("formula", "working", "content_hash")}
     v3["schema_version"] = 3
     v3["inputs"] = R.inputs_of(ev.graph, R.style_of(3))
-    v3["limits_in_force"] = {k: v for k, v in v3["limits_in_force"].items() if k != "max_array_bytes"}  # version 5's
+    v3["limits_in_force"] = {k: v for k, v in v3["limits_in_force"].items() if k not in ("max_array_bytes", "max_exact_elements")}  # later versions
     v3["produced_by"] = {k: v for k, v in v3["produced_by"].items() if k != "numpy"}  # version 5's
     v3["content_hash"] = R.content_hash(v3)
     jsonschema.Draft202012Validator(R.schema(3)).validate(v3)
@@ -337,4 +338,4 @@ def test_a_version_3_pending_file_is_replaced_by_its_current_completion_even_whe
     done = R.build(evaluate(read_graph(g)), "big", None)
     saved = R.write(tmp_path, "big.calc.json", R.file_bytes(done))
     assert saved["written"] is True and "replaced" in saved
-    assert json.loads((tmp_path / "big.calc.json").read_text())["schema_version"] == 5
+    assert json.loads((tmp_path / "big.calc.json").read_text())["schema_version"] == 6

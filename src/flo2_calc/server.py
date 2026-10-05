@@ -241,7 +241,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
     @_guarded
     def evaluate_graph(graph: Graph) -> CallToolResult:
         guard = L.Guard(limits)
-        return _reply(evaluation_json(evaluate(read_graph(graph, data_root=root), guard)), guard=guard)
+        return _reply(evaluation_json(evaluate(read_graph(graph, data_root=root, exact_limit=limits.max_exact_elements), guard)), guard=guard)
 
     @server.tool(
         name="add_node",
@@ -271,7 +271,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
             before = graph["nodes"]
         guard = L.Guard(limits)
         items = [(n, f"graph.nodes[{i}]") for i, n in enumerate(before)] + [(node, "node")]
-        grown = read_nodes(items, data_root=root)
+        grown = read_nodes(items, data_root=root, exact_limit=limits.max_exact_elements)
         ev = evaluate(grown, guard)
         answer = evaluation_json(ev)
         if answer["status"] == "ok":
@@ -367,7 +367,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                     guard=guard,
                 )
             name_, supports_ = pending["name"], pending.get("supports")
-            g = read_graph(pending["graph"], "record.graph", root)
+            g = read_graph(pending["graph"], "record.graph", root, limits.max_exact_elements)
         else:
             if graph is None:
                 raise CallError("graph", "pass the graph to compute (or, to complete one, a not-yet-computed `record`).")
@@ -375,7 +375,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                 raise CallError("name", 'give the record a name, e.g. "fiber-bend-margin"; its file is <name>.calc.json.')
             name_ = R.check_name(name)
             supports_ = R.check_supports(supports)
-            g = read_graph(graph, data_root=root)
+            g = read_graph(graph, data_root=root, exact_limit=limits.max_exact_elements)
         if output_path is not None:
             R.place(root, output_path, "output_path")  # refuse before computing, not after
         R.check_sources(g)

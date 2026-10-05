@@ -131,7 +131,7 @@ with that helper as its source.
      `{"file": "data/readings.csv", "unit": "mm"}`. The record keeps the file's sha256, so keep the file with it. On
      flo2.io, give the array inline.
    - An exact array stays exact. An FFT, a function over an array (`exp`, `sqrt`, `sin` ...), an array of more than
-     4,096 elements, or anything mixed with one, comes back labelled `"float64"`, with `error_at_most` (a rigorous
+     the host's exact limit (65,536 elements on a laptop, 4,096 on flo2.io), or anything mixed with one, comes back labelled `"float64"`, with `error_at_most` (a rigorous
      bound on every element) and `how` (what that bound rests on). Arrays of more than 1,024 elements come back as
      their first values, least, greatest and sha256: reduce them, or pick an element with `element`, rather than ask
      for every value.
@@ -164,6 +164,10 @@ with that helper as its source.
    Linking is your step, done with the design tool's own tools.
 9. **Check it later** with `rerun_record`. Pass the record itself, or its `path` when it was saved.
    - `reproduces: true` means the record is intact and its graph still gives every value it holds.
+   - `reproduces: "within_bound"` (`outcome: "reproduced_within_bound"`) means it was re-run on another processor and an
+     FFT's values (and what was computed from them) moved in their last bits, each within the bound the record states;
+     everything else reproduced byte for byte. The number stands; say it was confirmed within its stated bound, not
+     identically, and quote `largest_difference` if asked.
    - Anything else names each difference. Say so before relying on the number.
 10. **When a calculation passes the host's limits**, the reply is `"status": "refused"` with
    `"kind": "exceeds_limits"`.

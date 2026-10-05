@@ -457,11 +457,11 @@ def value_text(v: Value) -> str:
     return value_json(v)["value"]
 
 
-def parse_value(raw: Any, path: str, data_root: Any = None) -> tuple[Any, Value]:
+def parse_value(raw: Any, path: str, data_root: Any = None, exact_limit: int | None = None) -> tuple[Any, Value]:
     """(the value's text, the value) from what a call gave; an array's object
     (arrays.py) comes back as the object a record keeps, and the array."""
     if isinstance(raw, dict):
-        return A.parse_input(raw, path, data_root)
+        return A.parse_input(raw, path, data_root, exact_limit)
     if isinstance(raw, list):
         raise CallError(path, 'an array is written {"array": [...], "unit": "<unit>"}, so its one unit is given once.')
     if isinstance(raw, bool):
@@ -561,7 +561,7 @@ def _known_ops() -> str:
     return "; ".join(f"{family} ({', '.join(names)})" for family, names in families.items())
 
 
-def _node(obj: Any, path: str, data_root: Any = None) -> Node:
+def _node(obj: Any, path: str, data_root: Any = None, exact_limit: int | None = None) -> Node:
     if not isinstance(obj, dict):
         raise CallError(path, 'a node is an object: {"id", "value"} for an input, or {"id", "op", "args"} for an operation.')
     nid = obj.get("id")
@@ -576,7 +576,7 @@ def _node(obj: Any, path: str, data_root: Any = None) -> Node:
         unknown = [k for k in obj if k not in INPUT_KEYS]
         if unknown:
             raise CallError(at(path, unknown[0]), f"an input node has only {', '.join(INPUT_KEYS)}.")
-        raw, value = parse_value(obj["value"], at(path, "value"), data_root)
+        raw, value = parse_value(obj["value"], at(path, "value"), data_root, exact_limit)
         source = _source(obj, path)
         if source is None and not isinstance(value, bool) and len(U.currencies_in(value.unit)) > 1:
             raise CallError(
@@ -682,8 +682,16 @@ def _node(obj: Any, path: str, data_root: Any = None) -> Node:
     return OpNode(nid, op, tuple(args), unit, unit_text, _note(obj, path), digits_, places, mode, kind, source, axis)
 
 
-def read_nodes(items: list[tuple[Any, str]], result: Any = None, result_path: str = "graph.result", data_root: Any = None) -> Graph:
-    """A graph from (node, field path) pairs. Raises CallError. `data_root` is
+def read_nodes(
+    items: list[tuple[Any, str]],
+    result: Any = None,
+    result_path: str = "graph.result",
+    data_root: Any = None,
+    exact_limit: int | None = None,
+) -> Graph:
+    """A graph from (node, field path) pairs. Raises CallError. `exact_limit`
+    is the most elements an input array may have and stay exact (the host's
+    max_exact_elements; a laptop's when not given). `data_root` is
     the folder an array's data file may be read from (None: none)."""
     if not items:
         raise CallError("graph.nodes", "a graph needs at least one node.")
@@ -692,7 +700,7 @@ def read_nodes(items: list[tuple[Any, str]], result: Any = None, result_path: st
     nodes: list[Node] = []
     seen: dict[str, str] = {}
     for obj, path in items:
-        node = _node(obj, path, data_root)
+        node = _node(obj, path, data_root, exact_limit)
         if node.id in seen:
             raise CallError(at(path, "id"), f'"{node.id}" is already the id of {seen[node.id]}; every id names one node.')
         seen[node.id] = path
@@ -728,7 +736,7 @@ def read_nodes(items: list[tuple[Any, str]], result: Any = None, result_path: st
     return graph
 
 
-def read_graph(obj: Any, path: str = "graph", data_root: Any = None) -> Graph:
+def read_graph(obj: Any, path: str = "graph", data_root: Any = None, exact_limit: int | None = None) -> Graph:
     if not isinstance(obj, dict):
         raise CallError(path, 'a graph is an object: {"nodes": [...], "result": "<id>"}.')
     unknown = [k for k in obj if k not in GRAPH_KEYS]
@@ -737,7 +745,7 @@ def read_graph(obj: Any, path: str = "graph", data_root: Any = None) -> Graph:
     nodes = obj.get("nodes")
     if not isinstance(nodes, list):
         raise CallError(at(path, "nodes"), "a graph's nodes are a list.")
-    return read_nodes([(n, at(at(path, "nodes"), i)) for i, n in enumerate(nodes)], obj.get("result"), at(path, "result"), data_root)
+    return read_nodes([(n, at(at(path, "nodes"), i)) for i, n in enumerate(nodes)], obj.get("result"), at(path, "result"), data_root, exact_limit)
 
 
 def evaluation_order(graph: Graph) -> list[str]:
