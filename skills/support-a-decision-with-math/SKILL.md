@@ -1,6 +1,6 @@
 ---
 name: support-a-decision-with-math
-description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison against a limit, a root, a logarithm, a gain in dB or a power in dBm, an angle, a p-value or a critical value, a count of true conditions or a k-of-n vote, an empirical formula with stated units - especially one with units. It covers composing the computation, units, rounded results, refusals, checking the formula and working it shows back, making the computation record, saving it, linking it to the decision, and checking it later.
+description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison against a limit, a root, a logarithm, a gain in dB or a power in dBm, an angle, a p-value or a critical value, a count of true conditions or a k-of-n vote, an empirical formula with stated units, or a computation over data or a grid (a sum, a mean, a standard deviation, a fitted slope, an FFT) - especially one with units. It covers composing the computation, units, arrays, rounded and float64 results, refusals, checking the formula and working it shows back, making the computation record, saving it, linking it to the decision, and checking it later.
 compatibility: Needs the flo2-calc MCP server (evaluate_graph, add_node, record_computation, rerun_record), which also serves this skill as the MCP prompt support-a-decision-with-math and the resource skill://flo2-calc/support-a-decision-with-math/SKILL.md. Nothing else has to be running. Linking a record to a design uses the design tool's own tools (reflow2), when there is one.
 ---
 
@@ -25,6 +25,8 @@ Use flo2-calc when a decision, a trade or a limit turns on something computed:
 - **a yes/no built from several conditions:** it fits AND it lasts the night AND it is under budget;
 - **a root, a logarithm, an angle or a statistic:** a standard deviation, a loss in dB, a great-circle angle, a normal
   tail probability, a chi-square p-value, a Student-t critical value;
+- **data or a grid:** the mean and spread of measurements, a fitted rate with its standard error, how many readings are
+  out of range, a discretised integral over a grid, the spectrum of a signal or an aperture (an FFT).
 - **a count or a vote:** how many of eight conditions hold, whether two of three sensors agree.
 
 You reason; flo2-calc calculates. Choosing which equation applies, whether an approximation holds, or which events
@@ -87,7 +89,53 @@ with that helper as its source.
    - Their results come back labelled `"rounded"`: correctly rounded to 30 significant digits (ask for more with
      `"digits"`, up to 1000), with `error_at_most`, and never with an `exact` fraction. Anything computed from a rounded
      value is labelled rounded too, with its bound. Where the result is rational it stays exact (`sqrt(9/4)` is `1.5`).
-5. **Read a refusal and fix the cause; never work around it.**
+5. **Give data as an array, not as one node per number.**
+   - An array is an input whose value is `{"array": [...], "unit": "..."}`: a list of numbers as text, or a list of
+     rows for a grid, with ONE unit given once. `{"id": "t", "value": {"array": ["0", "2", "4"], "unit": "s"},
+     "source": "frame times"}`.
+   - Every operator works element by element on arrays, and a single value meets every element: `sub` of an array and
+     its mean is every deviation. A column (`column`) meets a row as a grid.
+   - Reduce with `sum`, `mean`, `min`, `max`, `product`, `count_true`, `any`, `all` (add `"axis": 0` or `1` for each
+     column or row of a grid). Compare and combine for "how many are out of range": `lt`, `gt`, `or`, `count_true`.
+   - Statistics over data are named, with no default: `variance_sample` or `variance_population`, `sd_sample` or
+     `sd_population`. Choose the one the question means (n - 1 for a sample, n for a whole population).
+   - A straight-line fit is `fit_slope`, `fit_intercept`, `fit_slope_se`, `fit_intercept_se` and `fit_residual_se`,
+     each with args `[x, y]`. For example, a rate with its standard error, in four nodes:
+
+     ```json
+     {"nodes": [
+       {"id": "t", "value": {"array": ["0", "2", "4", "6", "8", "10"], "unit": "s"}, "source": "frame times"},
+       {"id": "y", "value": {"array": ["0.0000", "0.0291", "0.0574", "0.0868", "0.1152", "0.1447"], "unit": "deg"},
+        "source": "along-track angle, frames 1 to 6"},
+       {"id": "slope", "op": "fit_slope", "args": ["t", "y"]},
+       {"id": "slope_se", "op": "fit_slope_se", "args": ["t", "y"]}]}
+     ```
+
+     The slope comes back exact (`316/21875 deg/s`, 0.014446 deg/s) and its standard error correctly rounded
+     (0.0000374983 deg/s).
+   - The FFT is `fft` and `ifft` (1-D), `fft2` and `ifft2` (a grid), numpy's convention. Take a spectrum apart with
+     `abs` (the modulus), `phase` (with `"unit": "deg"` or `"rad"`), `real`, `imag`. A small 2-D example:
+
+     ```json
+     {"nodes": [
+       {"id": "g", "value": {"array": [["1", "2", "1", "0"], ["2", "4", "2", "0"], ["1", "2", "1", "0"],
+         ["0", "0", "0", "0"]], "unit": "V"}, "source": "a 4 x 4 aperture"},
+       {"id": "spectrum", "op": "fft2", "args": ["g"]},
+       {"id": "power", "op": "abs", "args": ["spectrum"]},
+       {"id": "dc", "op": "max", "args": ["power"]}]}
+     ```
+
+   - A grid over two axes is `linspace` on each, `column` on one, and their element-wise product or sum: the
+     discretised integral of f(x, y) exp(...) is a few nodes ending in one `sum`.
+   - Large data, run locally, can come from a file inside the folder flo2-calc was started in:
+     `{"file": "data/readings.csv", "unit": "mm"}`. The record keeps the file's sha256, so keep the file with it. On
+     flo2.io, give the array inline.
+   - An exact array stays exact. An FFT, a function over an array (`exp`, `sqrt`, `sin` ...), an array of more than
+     4,096 elements, or anything mixed with one, comes back labelled `"float64"`, with `error_at_most` (a rigorous
+     bound on every element) and `how` (what that bound rests on). Arrays of more than 1,024 elements come back as
+     their first values, least, greatest and sha256: reduce them, or pick an element with `element`, rather than ask
+     for every value.
+6. **Read a refusal and fix the cause; never work around it.**
    - A `"status": "refused"` reply names the node, the operation and why. For example, `add cannot combine mm and g`
      means the computation is wrong, not the calculator. Tell the person what did not add up.
    - A "Malformed call" error names the field to fix: an unknown unit, a missing node, a cycle.
@@ -100,23 +148,26 @@ with that helper as its source.
      told. Ask for more `digits`, or compute it another way (compare the exact squares instead). Never decide it
      yourself.
    - `"kind": "out_of_domain"` or `"undefined"`: the argument is outside what the function takes (`sqrt(-1)`, a
-     probability of 1, `tan(90 deg)`). The computation, not the calculator, needs fixing.
-6. **Make the record** with `record_computation` once the computation is right. Give it a `name` such as
+     probability of 1, `tan(90 deg)`). The computation, not the calculator, needs fixing. For an array, the reason
+     names the element (`at element [3]`).
+   - `"kind": "shape_mismatch"`: two arrays whose shapes do not combine. Say which way they meet (`column`,
+     `transpose`), or fix the data.
+7. **Make the record** with `record_computation` once the computation is right. Give it a `name` such as
    `fiber-bend-margin`, and `supports`: the decision it backs, as `{"design_node": "dec:..."}` or in words.
    - It returns the result and the record as a file: `calcfile:///<name>.calc.json`.
    - To save the record beside the work, add `output_path` (for example `decisions/fiber-bend-margin.calc.json`). The
      path is inside the folder flo2-calc was started in. It never writes outside that folder, and never over a
      different file.
-7. **Link the record to the decision, and quote the result there.** In a reflow2 design, register the file as an
+8. **Link the record to the decision, and quote the result there.** In a reflow2 design, register the file as an
    Artifact that documents the decision, with its sha256 as the checksum, and put the result into the decision's
    text: "margin 0.6 mm, needed 0.5 mm: fits (fiber-bend-margin.calc.json)". flo2-calc never writes to the design.
    Linking is your step, done with the design tool's own tools.
-8. **Check it later** with `rerun_record`. Pass the record itself, or its `path` when it was saved.
+9. **Check it later** with `rerun_record`. Pass the record itself, or its `path` when it was saved.
    - `reproduces: true` means the record is intact and its graph still gives every value it holds.
    - Anything else names each difference. Say so before relying on the number.
-9. **When a calculation passes the host's limits**, the reply is `"status": "refused"` with
+10. **When a calculation passes the host's limits**, the reply is `"status": "refused"` with
    `"kind": "exceeds_limits"`.
-   - The refusal names the limit (a deadline, `max_digits` or `max_reply_bytes`), its value, the node reached and how
+   - The refusal names the limit (a deadline, `max_digits`, `max_reply_bytes` or `max_array_bytes`), its value, the node reached and how
      large the numbers grew. It is the machine's limit, not a fault in the math. Never shrink the inputs, round them
      or split the computation to slip under it.
    - From `record_computation` the record still comes back, marked `"status": "not_computed"`. It holds the graph,
@@ -135,11 +186,12 @@ When flo2-calc is reached through flo2's `use_helper_tool`, the steps are the sa
 
 - There is no folder to write in, so leave `output_path` out. flo2 keeps the record that `record_computation` returns
   as a file in the person's design, every version, and hands you its name and a link. Give the person the link.
-- Link that kept file to the decision with the design tools (`use_design_tool`), as in step 6.
+- Link that kept file to the decision with the design tools (`use_design_tool`), as in step 8.
 - To re-check a record, pass its content to `rerun_record`.
-- flo2.io's limits are lower than a laptop's: 20 s a call, 2,000 digits, 2 MiB a reply. A calculation past them
+- flo2.io's limits are lower than a laptop's: 20 s a call, 2,000 digits, 2 MiB a reply, 16 MiB of arrays a call (a
+  256 x 256 grid's FFT fits). Arrays come inline there: no data files. A calculation past them
   comes back as a not-yet-computed record, kept in the design like any other. The person, or an agent on their
-  machine, completes it there with the standalone flo2-calc (step 9). Then link the completed record to the decision
+  machine, completes it there with the standalone flo2-calc (step 10). Then link the completed record to the decision
   in its place.
 
 ## Talking about it
@@ -158,3 +210,5 @@ Say what was computed in the person's terms: "the fiber needs 1.4 mm to bend, th
   says so. The value is the same. A whole number is written in full.
 - Show the person the formula when it helps them check the reasoning: "run time t = C / I = 450 mAh / 13 mA, about
   34.6 h". The LaTeX form renders where their client renders math.
+- A value labelled `"float64"` was computed in double precision. Say so with its bound: "the peak of the spectrum is
+  16.0 V (float64, within 3e-13 V)". Quote no more digits than its bound supports.

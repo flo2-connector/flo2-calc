@@ -7,8 +7,10 @@ Starts ONE container of the image under flo2-tool-sandbox's flags (no network,
 a read-only root, a 64 MB /tmp, user 65534, no capabilities, one CPU, 64
 processes, the memory cap with no swap), drives a session over stdio that is
 heavier than a decision needs (a 500-node graph, records, re-runs, refusals,
-and a 484-node graph of rounded operators at 1,000 digits each, recorded and
-re-run),
+a 484-node graph of rounded operators at 1,000 digits each, recorded and
+re-run, and arrays: a 256 x 256 grid's discretised integral and 2-D FFT, a
+250 x 250 FFT checked against Arb's rigorous DFT, exact and float64
+regressions over thousands of points),
 then RUNAWAY calculations that only the image's limits stop (a huge power, a
 chain of squarings, the heaviest graph its digits budget allows, sent whole and
 recorded), then reads the container's cgroup memory.peak before closing it.
@@ -67,6 +69,32 @@ def rounded_graph(n: int = 480, digits: int = 1000) -> dict:
     return {"nodes": nodes}
 
 
+def grid_graph(n: int = 256) -> dict:
+    """A Gaussian field on an n x n grid built from two axes: its discretised
+    integral, its 2-D FFT, the spectrum's magnitude and peak."""
+    return {"nodes": [
+        {"id": "lo", "value": "-4 mm", "source": "measure.py"}, {"id": "hi", "value": "4 mm", "source": "measure.py"},
+        {"id": "n", "value": str(n), "source": "measure.py"}, {"id": "w", "value": "2 mm^2", "source": "measure.py"},
+        {"id": "x", "op": "linspace", "args": ["lo", "hi", "n"]}, {"id": "y0", "op": "linspace", "args": ["lo", "hi", "n"]},
+        {"id": "y", "op": "column", "args": ["y0"]}, {"id": "x2", "op": "mul", "args": ["x", "x"]},
+        {"id": "y2", "op": "mul", "args": ["y", "y"]}, {"id": "r2", "op": "add", "args": ["x2", "y2"]},
+        {"id": "q", "op": "div", "args": ["r2", "w"]}, {"id": "mq", "op": "neg", "args": ["q"]},
+        {"id": "field", "op": "exp", "args": ["mq"]}, {"id": "total", "op": "sum", "args": ["field"]},
+        {"id": "spectrum", "op": "fft2", "args": ["field"]}, {"id": "power", "op": "abs", "args": ["spectrum"]},
+        {"id": "peak", "op": "max", "args": ["power"]}], "result": "peak"}
+
+
+def regression_graph(n: int) -> dict:
+    """A straight-line fit over n points: exact up to 4,096 of them, float64 past that."""
+    xs = [str(k) for k in range(n)]
+    ys = [f"{3 * k + (k * 7919) % 13}/10" for k in range(n)]
+    return {"nodes": [
+        {"id": "x", "value": {"array": xs, "unit": "s"}, "source": "measure.py"},
+        {"id": "y", "value": {"array": ys, "unit": "mm"}, "source": "measure.py"},
+        {"id": "b", "op": "fit_slope", "args": ["x", "y"]}, {"id": "se", "op": "fit_slope_se", "args": ["x", "y"]},
+        {"id": "sd", "op": "sd_sample", "args": ["y"]}], "result": "se"}
+
+
 def runaway_graphs() -> dict[str, dict]:
     """Calculations past any sensible limit: each must be STOPPED, with its reason."""
     nines = "9" * 80
@@ -81,6 +109,9 @@ def runaway_graphs() -> dict[str, dict]:
         "squarings": {"nodes": squarings},
         "huge_exp": {"nodes": [{"id": "x", "value": "1e5"}, {"id": "y", "op": "exp", "args": ["x"]}]},
         "far_tail": {"nodes": [{"id": "x", "value": "1e6"}, {"id": "q", "op": "normal_sf", "args": ["x"]}]},
+        "huge_grid": {"nodes": [{"id": "a", "value": "0"}, {"id": "b", "value": "1"}, {"id": "n", "value": "100000"},
+                                {"id": "x", "op": "linspace", "args": ["a", "b", "n"]}, {"id": "c", "op": "column", "args": ["x"]},
+                                {"id": "g", "op": "mul", "args": ["c", "x"]}]},
         "heaviest_allowed": {"nodes": heaviest},
     }
 
@@ -116,6 +147,22 @@ async def drive(command: list[str], name: str) -> dict:
                 again = json.loads((await s.call_tool("rerun_record", {"record": record})).content[0].text)
                 assert again["reproduces"] is True, again.get("differences")
                 calls += 1
+        array_seconds: dict[str, float] = {}
+        for label, g, tool in (("grid_256", grid_graph(256), "evaluate_graph"), ("grid_256_record", grid_graph(256), "record_computation"),
+                               ("grid_250_arb", grid_graph(250), "evaluate_graph"), ("fit_4000_exact", regression_graph(4000), "evaluate_graph"),
+                               ("fit_20000_float64", regression_graph(20000), "evaluate_graph")):
+            t0 = time.perf_counter()
+            args = {"graph": g} if tool == "evaluate_graph" else {"graph": g, "name": label}
+            r = await s.call_tool(tool, args)
+            calls += 1
+            answer = json.loads(r.content[0].text)
+            assert answer["status"] == "ok", (label, answer.get("refused"))
+            if tool == "record_computation":
+                record = json.loads(r.content[1].resource.text)
+                again = json.loads((await s.call_tool("rerun_record", {"record": record})).content[0].text)
+                calls += 1
+                assert again["reproduces"] is True, again.get("differences")
+            array_seconds[label] = round(time.perf_counter() - t0, 2)
         seconds = time.perf_counter() - started
         runaway: dict[str, str] = {}
         for label, g in runaway_graphs().items():
@@ -137,7 +184,8 @@ async def drive(command: list[str], name: str) -> dict:
         cid = subprocess.run(["docker", "ps", "-q", "--no-trunc", "--filter", f"name={name}"], capture_output=True, text=True).stdout.strip()
         peak_file = Path(f"/sys/fs/cgroup/system.slice/docker-{cid}.scope/memory.peak")
         peak = int(peak_file.read_text()) if cid and peak_file.exists() else None
-        return {"calls": calls, "seconds": round(seconds, 2), "runaway": runaway, "alive_after": True, "container": cid[:12], "peak_bytes": peak}
+        return {"calls": calls, "seconds": round(seconds, 2), "array_seconds": array_seconds, "runaway": runaway, "alive_after": True,
+                "container": cid[:12], "peak_bytes": peak}
 
 
 def main() -> None:

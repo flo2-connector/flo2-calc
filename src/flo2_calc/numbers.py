@@ -67,6 +67,16 @@ ARITHMETIC_NOTE = (
     "error bound decides it, and refused otherwise."
 )
 
+ARRAYS_NOTE = (
+    "An ARRAY of exact numbers stays exact through rational "
+    "operations, reductions and the statistics that are rational; a value marked \"float64\" is NOT exact: an FFT, "
+    "a rounded-class function over an array, an array of more than 4,096 elements, or anything mixed with such a "
+    "value, computed in IEEE 754 double precision. Every element of a float64 value lies within its "
+    "\"error_at_most\" of the true value, a rigorous bound whose basis \"how\" names (the FFT's: Higham 2002, "
+    "Theorem 24.2, for a power-of-two length; Arb's rigorous DFT for any other). An array of more than 1,024 "
+    "elements is written as its sha256 over every element's text, which re-running compares."
+)
+
 EXACT_FOR_THESE_INPUTS = (
     "Exact for these inputs: every value follows exactly from the inputs as written, and is no more accurate than "
     "they are. A decimal typed for pi, e or another irrational number is taken as exactly that decimal, so a value "
@@ -79,6 +89,22 @@ EXACT_BUT_ROUNDED = (
     "value is NOT exact: it is written to its \"digits\" significant digits and lies within its \"error_at_most\" of "
     "the true value; where it says \"correctly_rounded\", it is the true value rounded half-even. A result computed "
     "from a rounded value is labelled rounded too."
+)
+
+EXACT_BUT_FLOAT64 = (
+    "Exact for these inputs, EXCEPT the values labelled \"float64\". Every other value follows exactly from the "
+    "inputs as written, and is no more accurate than they are. A float64 value (an FFT, a function over an array, a "
+    "large array, or anything computed from one) is NOT exact: it was computed in IEEE 754 double precision, every "
+    "element lies within its \"error_at_most\" of the true value, and \"how\" says what that bound rests on. A "
+    "result computed from a float64 value is labelled float64 too."
+)
+
+EXACT_BUT_ROUNDED_AND_FLOAT64 = (
+    "Exact for these inputs, EXCEPT the values labelled \"rounded\" or \"float64\". Every other value follows "
+    "exactly from the inputs as written, and is no more accurate than they are. A rounded value is written to its "
+    "\"digits\" and lies within its \"error_at_most\" of the true value (where it says \"correctly_rounded\", it "
+    "is the true value rounded half-even). A float64 value was computed in IEEE 754 double precision, and every "
+    "element lies within its \"error_at_most\" of the true value, on the basis \"how\" gives."
 )
 
 _DECIMAL = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"

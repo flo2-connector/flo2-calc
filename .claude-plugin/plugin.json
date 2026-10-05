@@ -1,7 +1,7 @@
 {
   "name": "flo2-calc",
-  "version": "0.5.0",
-  "description": "Exact math and logic for the decisions in a design: compose a computation graph of arithmetic, logic, comparisons, roots and logarithms, trigonometry and statistics with units checked, get every value exactly or correctly rounded and labelled so, and keep a re-runnable computation record a decision can cite. Stands alone; no other server needed.",
+  "version": "0.6.0",
+  "description": "Exact math and logic for the decisions in a design: compose a computation graph of arithmetic, logic, comparisons, roots and logarithms, trigonometry and statistics with units checked, over single values or arrays (element-wise operations, sums and other reductions, statistics over data, the FFT), get every value exactly, correctly rounded or in float64 and labelled so, and keep a re-runnable computation record a decision can cite. Stands alone; no other server needed.",
   "author": {
     "name": "Anthony Sligar"
   },
@@ -12,6 +12,8 @@
     "calculator",
     "units",
     "exact-arithmetic",
+    "arrays",
+    "fft",
     "design-decisions",
     "mcp",
     "reflow2"

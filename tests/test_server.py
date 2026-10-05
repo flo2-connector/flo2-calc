@@ -243,7 +243,7 @@ def test_rounded_values_reach_the_agent_labelled_and_a_decided_comparison_is_ans
 def test_a_record_with_rounded_values_is_made_and_re_runs_over_the_client():
     made, = anyio.run(calls, [("record_computation", {"graph": ROUNDED, "name": "ci-half-width"})])
     rec = json.loads(made.content[1].resource.text)
-    assert rec["schema_version"] == 4 and rec["produced_by"]["python_flint"]
+    assert rec["schema_version"] == 5 and rec["produced_by"]["python_flint"] and rec["produced_by"]["numpy"]
     assert {v["node"] for v in rec["values"] if "rounded" in v} == {"sd", "t", "half", "rad", "s", "pi"}
     again, = anyio.run(calls, [("rerun_record", {"record": made.content[1].resource.text})])
     assert json.loads(text_of(again))["reproduces"] is True

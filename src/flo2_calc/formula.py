@@ -29,7 +29,13 @@ and past VIEW_STEPS entries the middle is left out, saying how many steps and
 where they are.
 
 A value longer than SHOW_VALUE_AT characters is not repeated in a line: the
-line says how long it is, and "values" holds it.
+line says how long it is, and "values" holds it. An ARRAY (arrays.py) is named
+in a line by its description ("array 6 (exact, s)"), never written in element
+by element, and a step that takes one shows its arguments by name only; its
+elements are in "values". A float64 value ends its line with "≈" and its label
+says "float64" with its bound. The array operators have renderings of their
+own: sum and product as sigma and pi, mean as a bar, fft as script F, an
+element as a subscript, and the rest as named functions.
 
 The renderings are part of the record's format (schema version 4): a change
 to them is a change of schema version, because a record re-runs to exactly the
@@ -61,6 +67,8 @@ class Shown:
     text: str  # with its unit
     exact: str | None = None  # its exact fraction, where its text is rounded
     rounded: dict[str, Any] | None = None  # its rounded label
+    float64: dict[str, Any] | None = None  # its float64 label (arrays.py)
+    array: bool = False  # an array: named by its description, never written in
 
 
 @dataclass(frozen=True)
@@ -148,9 +156,60 @@ def _joined(op: str, args: list[Expr]) -> Expr:
     return Expr(f" {word} ".join(_pt(a, prec) for a in args), prec, f" {tex} ".join(_pl(a, prec) for a in args), prec)
 
 
+def _with_axis(node: Any, text: str, latex: str) -> tuple[str, str]:
+    axis = getattr(node, "axis", None)
+    if axis is None:
+        return text, latex
+    return text + f", axis={axis}", latex + r";\ \text{axis } " + str(axis)
+
+
+_FFT_TEX = {"fft": r"\mathcal{F}", "ifft": r"\mathcal{F}^{-1}", "fft2": r"\mathcal{F}_{2}", "ifft2": r"\mathcal{F}_{2}^{-1}"}
+
+
+def array_expression(node: Any, args: list[Expr]) -> Expr | None:
+    """An array operator's rendering (arrays.py), or None for the others."""
+    op = node.op
+    if op in ("sum", "product") or (op == "count_true" and getattr(node, "axis", None) is not None and len(args) == 1):
+        sym = {"sum": r"\sum", "product": r"\prod", "count_true": r"\#_{\text{true}}"}[op]
+        text, sub = _with_axis(node, args[0].text, "")
+        latex = sym + ("_{" + sub.lstrip(r";\ ") + "}" if sub else "") + " " + _pl(args[0], CALL)
+        return Expr(f"{op}({text})", CALL, latex, MUL)
+    if op == "mean":
+        if getattr(node, "axis", None) is None:
+            return Expr(f"mean({args[0].text})", CALL, r"\overline{" + args[0].latex + "}", ATOM)
+        text, tex = _with_axis(node, args[0].text, args[0].latex)
+        return Expr(f"mean({text})", CALL, _op_tex("mean") + r"\left(" + tex + r"\right)", CALL)
+    if op in ("min", "max", "any", "all") and len(args) == 1:
+        text, tex = _with_axis(node, args[0].text, args[0].latex)
+        fn = {"min": r"\min", "max": r"\max"}.get(op, _op_tex(op))
+        return Expr(f"{op}({text})", CALL, fn + r"\left(" + tex + r"\right)", CALL)
+    if op in _FFT_TEX:
+        return Expr(f"{op}({args[0].text})", CALL, _FFT_TEX[op] + r"\left\{" + args[0].latex + r"\right\}", CALL)
+    if op == "phase":
+        unit = node.unit_text or "rad"
+        return Expr(f"phase({args[0].text}, {unit})", CALL, r"\arg\left(" + args[0].latex + r"\right)_{" + unit_latex(unit) + "}", CALL)
+    if op == "conj":
+        return Expr(f"conj({args[0].text})", CALL, r"\overline{" + args[0].latex + "}", ATOM)
+    if op in ("real", "imag"):
+        return Expr(f"{op}({args[0].text})", CALL, (r"\operatorname{Re}" if op == "real" else r"\operatorname{Im}") + r"\left(" + args[0].latex + r"\right)", CALL)
+    if op == "element":
+        idx = ", ".join(a.text for a in args[1:])
+        return Expr(f"{_pt(args[0], ATOM)}[{idx}]", ATOM, _pl(args[0], ATOM) + "_{" + ",".join(a.latex for a in args[1:]) + "}", ATOM)
+    if op == "transpose":
+        return Expr(f"transpose({args[0].text})", CALL, _pl(args[0], ATOM) + r"^{\mathsf{T}}", POW)
+    if op in ("variance_sample", "variance_population", "sd_sample", "sd_population"):
+        what, kind = op.split("_")
+        fn = r"\operatorname{Var}" if what == "variance" else r"\operatorname{sd}"
+        return Expr(f"{op}({args[0].text})", CALL, fn + r"_{\text{" + kind + r"}}\left(" + args[0].latex + r"\right)", CALL)
+    return None
+
+
 def expression(node: Any, args: list[Expr]) -> Expr:
     """One operation over its arguments' expressions."""
     op = node.op
+    shaped = array_expression(node, args)
+    if shaped is not None:
+        return shaped
     if op in ("add", "sub"):
         if op == "sub":
             a, b = args
@@ -233,7 +292,9 @@ def _value_part(shown: Shown) -> tuple[str, str, str]:
     fraction where it has one, "≈" for a rounded value, and a long value named
     by its length instead of repeated."""
     text = shown.exact if shown.exact is not None else shown.text
-    sign, tex_sign = (" ≈ ", r" \approx ") if shown.rounded is not None else (" = ", " = ")
+    sign, tex_sign = (" ≈ ", r" \approx ") if (shown.rounded is not None or shown.float64 is not None) else (" = ", " = ")
+    if shown.array:
+        return sign, text, tex_sign + r"\text{" + text.replace("_", r"\_") + "}"
     if len(text) > SHOW_VALUE_AT:
         said = f'(a {len(text):,}-character value: see "values")'
         return sign, said, tex_sign + r"\text{" + said.replace('"', "") + "}"
@@ -263,6 +324,8 @@ def _label(shown: Shown | None, is_input: bool) -> str:
         return "not computed"
     if is_input:
         return "given"
+    if shown.float64 is not None:
+        return f"float64: error at most {shown.float64['error_at_most']}"
     r = shown.rounded
     if r is None:
         return "exact"
@@ -331,7 +394,7 @@ def render(
                 text += " = " + step.text
                 tex += " = " + step.latex
             given = [shown.get(a) for a in n.args]
-            if n.args and all(g is not None for g in given):
+            if n.args and all(g is not None and not g.array for g in given):
                 parts = [g.exact if g.exact is not None else g.text for g in given]  # type: ignore[union-attr]
                 if all(len(p) <= SUBSTITUTE_AT for p in parts):
                     sub = expression(n, [value_expr(p) for p in parts])

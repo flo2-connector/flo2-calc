@@ -9,11 +9,18 @@ deadline) a runaway calculation would be killed, which reads as a crash. So
 the HOST sets limits at start-up, and flo2-calc stops itself cleanly, with its
 reason, before anything else has to.
 
-THE THREE LIMITS (cli.py reads them, like --root, from a flag or the environment):
+THE FOUR LIMITS (cli.py reads them, like --root, from a flag or the environment):
 
   deadline         --deadline SECONDS        FLO2_CALC_DEADLINE         per call
   max_digits       --max-digits N            FLO2_CALC_MAX_DIGITS       any exact numerator or denominator
   max_reply_bytes  --max-reply-bytes N       FLO2_CALC_MAX_REPLY_BYTES  a reply, its record included
+  max_array_bytes  --max-array-bytes N       FLO2_CALC_MAX_ARRAY_BYTES  the arrays one call holds (arrays.py)
+
+max_array_bytes caps how many array elements a call may hold, in all: a
+float64 element and its bound are 16 bytes, a complex one 24, a true/false 1,
+and an exact one its object and its digits (about 128 bytes for a short
+number). It is checked BEFORE an array is made (from its shape), so an array
+too large for the host's memory is never allocated, and again after.
 
 Their defaults suit a laptop (LAPTOP). FLO2_IO is the lower profile for
 flo2.io's sandbox, which the image sets (Dockerfile). README.md, "Limits",
@@ -53,10 +60,12 @@ SETTINGS: dict[str, tuple[str, str]] = {
     "deadline": ("--deadline", "FLO2_CALC_DEADLINE"),
     "max_digits": ("--max-digits", "FLO2_CALC_MAX_DIGITS"),
     "max_reply_bytes": ("--max-reply-bytes", "FLO2_CALC_MAX_REPLY_BYTES"),
+    "max_array_bytes": ("--max-array-bytes", "FLO2_CALC_MAX_ARRAY_BYTES"),
 }
 DEADLINE_MS_RANGE = (1, 86_400_000)  # 0.001 s to a day
 MAX_DIGITS_RANGE = (10, 100_000)  # past 100,000 digits, one step on two such numbers takes most of a second
 MAX_REPLY_BYTES_RANGE = (1024, 256 * MIB)
+MAX_ARRAY_BYTES_RANGE = (64 * 1024, 64 * 1024 * MIB)
 
 
 @dataclass(frozen=True)
@@ -66,11 +75,17 @@ class Limits:
     deadline_ms: int = 45_000
     max_digits: int = 20_000
     max_reply_bytes: int = 8 * MIB
+    max_array_bytes: int = 512 * MIB
 
     def describe(self) -> dict[str, Any]:
         """As replies and not-yet-computed records write them: the deadline in
-        seconds, spelled "s" as reflow2 spells it; the two budgets as counts."""
-        return {"deadline": seconds_text(self.deadline_ms), "max_digits": self.max_digits, "max_reply_bytes": self.max_reply_bytes}
+        seconds, spelled "s" as reflow2 spells it; the budgets as counts."""
+        return {
+            "deadline": seconds_text(self.deadline_ms),
+            "max_digits": self.max_digits,
+            "max_reply_bytes": self.max_reply_bytes,
+            "max_array_bytes": self.max_array_bytes,
+        }
 
     def value_of(self, name: str) -> Any:
         return self.describe()[name]
@@ -78,14 +93,15 @@ class Limits:
     def in_words(self) -> str:
         return (
             f"a deadline of {seconds_text(self.deadline_ms)} per call, at most {self.max_digits:,} digits in any exact "
-            f"numerator or denominator, and a reply of at most {self.max_reply_bytes:,} bytes"
+            f"numerator or denominator, a reply of at most {self.max_reply_bytes:,} bytes, and at most "
+            f"{self.max_array_bytes:,} bytes of arrays in one call"
         )
 
 
 # A laptop: the defaults. A workstation raises them; flo2.io lowers them.
 LAPTOP = Limits()
 # flo2.io's sandbox: a 128m memory cap, one CPU, and a gateway that stops a helper call at 60 s.
-FLO2_IO = Limits(deadline_ms=20_000, max_digits=2_000, max_reply_bytes=2 * MIB)
+FLO2_IO = Limits(deadline_ms=20_000, max_digits=2_000, max_reply_bytes=2 * MIB, max_array_bytes=16 * MIB)
 
 
 def seconds_text(ms: int) -> str:
@@ -121,11 +137,11 @@ def parse_count(text: str, name: str, bounds: tuple[int, int]) -> int:
     return int(t)
 
 
-def from_settings(deadline: str | None, max_digits: str | None, max_reply_bytes: str | None) -> Limits:
+def from_settings(deadline: str | None, max_digits: str | None, max_reply_bytes: str | None, max_array_bytes: str | None = None) -> Limits:
     """The limits from start-up settings (None or "" keeps the laptop default).
     Raises ValueError naming the setting and why."""
     out = {}
-    for name, raw in (("deadline", deadline), ("max_digits", max_digits), ("max_reply_bytes", max_reply_bytes)):
+    for name, raw in (("deadline", deadline), ("max_digits", max_digits), ("max_reply_bytes", max_reply_bytes), ("max_array_bytes", max_array_bytes)):
         if raw is None or raw.strip() == "":
             continue
         flag, env = SETTINGS[name]
@@ -134,8 +150,10 @@ def from_settings(deadline: str | None, max_digits: str | None, max_reply_bytes:
                 out["deadline_ms"] = parse_deadline(raw)
             elif name == "max_digits":
                 out["max_digits"] = parse_count(raw, "digits budget", MAX_DIGITS_RANGE)
-            else:
+            elif name == "max_reply_bytes":
                 out["max_reply_bytes"] = parse_count(raw, "reply budget in bytes", MAX_REPLY_BYTES_RANGE)
+            else:
+                out["max_array_bytes"] = parse_count(raw, "budget for arrays in bytes", MAX_ARRAY_BYTES_RANGE)
         except ValueError as e:
             raise ValueError(f"{flag} (or {env}): {e}.") from None
     return Limits(**out)
@@ -201,6 +219,7 @@ class Guard:
         self.done = 0
         self.total = 0
         self.reply_bytes = 0
+        self.array_bytes = 0  # what the arrays made so far in this call hold
         allow_int_text(limits.max_digits)
 
     # -- where the evaluation is
@@ -289,6 +308,32 @@ class Guard:
                 f"digits of working precision (it was about to work at {working:,}), so nothing was guessed.",
                 needed=working,
             )
+
+    def check_array_room(self, nbytes: int, elements: int, what: str = "result") -> None:
+        """BEFORE an array is made, from its shape: refuse one that would pass
+        the call's budget for arrays, so it is never allocated."""
+        self.check_time()
+        if self.array_bytes + nbytes > self.limits.max_array_bytes:
+            self._stop(
+                "max_array_bytes",
+                f"{self._here()}the {what} would be an array of {elements:,} elements (about {nbytes:,} bytes), and "
+                f"with the {self.array_bytes:,} bytes of arrays this call already holds that passes this host's budget "
+                f"of {self.limits.max_array_bytes:,} bytes for arrays in one call, so it was not made.",
+                needed=self.array_bytes + nbytes,
+            )
+
+    def spend_array(self, nbytes: int, elements: int, what: str = "result") -> None:
+        """After an array is made: count what it holds against the call's budget."""
+        self.array_bytes += nbytes
+        if self.array_bytes > self.limits.max_array_bytes:
+            self._stop(
+                "max_array_bytes",
+                f"{self._here()}the {what}, an array of {elements:,} elements (about {nbytes:,} bytes), brings the "
+                f"arrays this call holds to about {self.array_bytes:,} bytes, past this host's budget of "
+                f"{self.limits.max_array_bytes:,} bytes for arrays in one call.",
+                needed=self.array_bytes,
+            )
+        self.check_time()
 
     def spend_reply(self, nbytes: int) -> None:
         """Count bytes written into the reply as they are written, so a reply

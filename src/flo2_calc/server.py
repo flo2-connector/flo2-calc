@@ -91,14 +91,19 @@ INSTRUCTIONS = (
     'significant digits (or a node\'s "digits"), labelled "rounded" with "error_at_most", never called exact, and '
     "exact wherever the result is rational. A comparison, ceil, floor or round of a rounded value is answered only "
     "when its error bound decides it. dB is its own kind of value: a dB-to-ratio conversion must be told \"power\" "
-    "or \"amplitude\". Every reply shows the computation back as a formula and as numbered steps (plain text, with "
-    "LaTeX beside it), so you can check it is the computation you meant. evaluate_graph takes a whole graph; "
-    "add_node builds one node at a time; record_computation returns a computation record, a .calc.json file to link "
-    "to the decision it supports; rerun_record checks that a record still reproduces. flo2-calc calculates and you "
-    "reason: it never decides which equation applies, and a domain's own formulas (ring sizes, metal weight, a "
-    "building's areas) belong to the helper that owns the domain. READ THE SKILL before using it: the prompt "
-    f"\"{SK.NAME}\", or the resource {SK.RESOURCE_URI}. flo2-calc stands alone: it never calls reflow2 or anything "
-    "else. Linking a record to a design is the agent's job, with the design tool's own tools."
+    "or \"amplitude\". ARRAYS (vectors and grids, one unit each, written {\"array\": [...], \"unit\": \"mm\"}) work "
+    "element by element with every operator, with numpy's broadcasting; they reduce (sum, mean, min, max, count_true, "
+    "any, all, with an axis for a grid), give statistics over data (variance and sd, sample or population, named; a "
+    "least-squares fit with standard errors) and the FFT. An exact array stays exact through rational operations; an "
+    "FFT, a function over an array, or a large array is float64, labelled \"float64\" with a rigorous "
+    "\"error_at_most\" and how it was found. Every reply shows the computation back as a formula and as numbered "
+    "steps (plain text, with LaTeX beside it), so you can check it is the computation you meant. evaluate_graph takes "
+    "a whole graph; add_node builds one node at a time; record_computation returns a computation record, a .calc.json "
+    "file to link to the decision it supports; rerun_record checks that a record still reproduces. flo2-calc "
+    "calculates and you reason: it never decides which equation applies, and a domain's own formulas (ring sizes, "
+    "metal weight, a building's areas) belong to the helper that owns the domain. READ THE SKILL before using it: the "
+    f"prompt \"{SK.NAME}\", or the resource {SK.RESOURCE_URI}. flo2-calc stands alone: it never calls reflow2 or "
+    "anything else. Linking a record to a design is the agent's job, with the design tool's own tools."
 )
 
 GRAPH_HELP = (
@@ -113,12 +118,20 @@ GRAPH_HELP = (
     'and a power level in dBm or dBW ("-30 dBm"); convert turns a level into mW or W and back. '
     'The source is free text or {"design_node": "con:..."} naming a node in a reflow2 design (recorded, never '
     'resolved). An operation node is {"id": "margin", "op": "sub", "args": ["cavity", "bend"]}; "convert" also '
-    'takes "unit", as do asin, acos, atan and atan2 ("deg" or "rad", the unit of the angle they give), magnitude '
-    '(the unit to take a quantity\'s number in) and with_unit (the unit it states, with a "source" saying where '
-    'that unit comes from). db_to_ratio and ratio_to_db need "kind": "power" or "amplitude", never defaulted. A '
-    'rounded operator may take "digits" (1 to 1000 significant digits; 30 when left out). ceil, floor and round may '
-    'take "places" (decimal places; 0 when left out), and round a "mode". A rounded value comes back with '
-    '"rounded": {"digits", "correctly_rounded", "error_at_most", "from"}, never with "exact". Operators: '
+    'takes "unit", as do asin, acos, atan and atan2 ("deg" or "rad", the unit of the angle they give), phase (the '
+    'same, for the angle of a complex value), magnitude (the unit to take a quantity\'s number in) and with_unit (the '
+    'unit it states, with a "source" saying where that unit comes from). db_to_ratio and ratio_to_db need "kind": '
+    '"power" or "amplitude", never defaulted. A rounded operator may take "digits" (1 to 1000 significant digits; 30 '
+    'when left out). ceil, floor and round may take "places" (decimal places; 0 when left out), and round a "mode". '
+    'A rounded value comes back with "rounded": {"digits", "correctly_rounded", "error_at_most", "from"}, never with '
+    '"exact". An ARRAY input is {"id": "t", "value": {"array": ["0", "2", "4.5"], "unit": "s"}, "source": "..."}: one '
+    'or two dimensions (a list of rows for a grid), ONE unit for the whole array, each element a number as text or '
+    'all true/false; or, run locally, {"file": "data/x.csv", "unit": "mm"} inside the folder flo2-calc was started '
+    'with (the record keeps the file\'s sha256). Every operator works element by element on arrays (shapes equal, or '
+    'a single value, a row against a grid, a column against a row); sum, product, mean, min, max, count_true, any and '
+    'all take one array and an optional "axis" (0: each column, 1: each row); abs of an FFT\'s complex values is '
+    'their modulus. An array comes back as {"array": {"shape", "kind", "unit", "sha256", "values"}} (values only up '
+    'to 1,024 elements); a float64 value carries "float64": {"error_at_most", "how", "from"}. Operators: '
     + "; ".join(f"{k} ({v[3]})" for k, v in OPS.items())
     + ". Units: one '/', '*' between units, '^n' for powers, e.g. \"mm^2\", \"m/s^2\", \"kg/(m*s^2)\". Units "
     "flo2-calc knows: " + ", ".join(sorted(U_VOCABULARY, key=str.lower)) + "."
@@ -228,7 +241,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
     @_guarded
     def evaluate_graph(graph: Graph) -> CallToolResult:
         guard = L.Guard(limits)
-        return _reply(evaluation_json(evaluate(read_graph(graph), guard)), guard=guard)
+        return _reply(evaluation_json(evaluate(read_graph(graph, data_root=root), guard)), guard=guard)
 
     @server.tool(
         name="add_node",
@@ -258,7 +271,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
             before = graph["nodes"]
         guard = L.Guard(limits)
         items = [(n, f"graph.nodes[{i}]") for i, n in enumerate(before)] + [(node, "node")]
-        grown = read_nodes(items)
+        grown = read_nodes(items, data_root=root)
         ev = evaluate(grown, guard)
         answer = evaluation_json(ev)
         if answer["status"] == "ok":
@@ -331,7 +344,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                 if given is not None and given != pending.get(key):
                     raise CallError(key, f"a not-yet-computed record is completed with its own {key}; leave {key} out, or give the record's.")
             hash_ok = pending["content_hash"] == R.content_hash(pending)
-            problems = R.pending_problems(pending)
+            problems = R.pending_problems(pending, root)
             if not hash_ok or problems:
                 why = (["its content hash does not match its content"] if not hash_ok else []) + (
                     [f"{len(problems)} field(s) do not follow from its graph"] if problems else []
@@ -354,7 +367,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                     guard=guard,
                 )
             name_, supports_ = pending["name"], pending.get("supports")
-            g = read_graph(pending["graph"], "record.graph")
+            g = read_graph(pending["graph"], "record.graph", root)
         else:
             if graph is None:
                 raise CallError("graph", "pass the graph to compute (or, to complete one, a not-yet-computed `record`).")
@@ -362,7 +375,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                 raise CallError("name", 'give the record a name, e.g. "fiber-bend-margin"; its file is <name>.calc.json.')
             name_ = R.check_name(name)
             supports_ = R.check_supports(supports)
-            g = read_graph(graph)
+            g = read_graph(graph, data_root=root)
         if output_path is not None:
             R.place(root, output_path, "output_path")  # refuse before computing, not after
         R.check_sources(g)
@@ -465,7 +478,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
             loaded = R.load(R.read_file(root, path, guard, "path"), "path", guard)
         else:
             loaded = R.load(record, "record", guard)
-        return _reply(R.rerun(loaded, guard), guard=guard)
+        return _reply(R.rerun(loaded, guard, root), guard=guard)
 
     return server
 
