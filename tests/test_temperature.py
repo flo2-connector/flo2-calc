@@ -68,7 +68,8 @@ def test_a_conversion_that_does_not_end_keeps_its_exact_value():
 
 @pytest.mark.parametrize("given, to, expected", [
     ("9 delta_degF", "delta_degC", "5 delta_degC"),
-    ("5 delta_degC", "K", "5 K"),
+    ("5 delta_degC", "K", "5 delta_K"),        # a change converted to K stays a change (round 3, q036)
+    ("18 delta_degF", "K", "10 delta_K"),
     ("10 K", "delta_degF", "18 delta_degF"),
     ("2.5 degC/W", "K/W", "2.5 K/W"),           # a degree in a compound is a change
     ("18 um/(m*degF)", "um/(m*K)", "32.4 um/(m*K)"),
@@ -129,7 +130,7 @@ def test_the_difference_of_two_temperatures_is_a_change():
 def test_a_rise_from_two_readings_is_the_same_change_in_k():
     """q012's 65 K rise, from two readings and no offsets typed by hand."""
     r = result_of(inp("hot", "85 degC"), inp("cold", "20 degC"), op("d", "sub", "hot", "cold"), op("k", "convert", "d", unit="K"))
-    assert r["value"] == "65 K"
+    assert r["value"] == "65 delta_K", "a rise, written so it is never read as a temperature of 65 K"
 
 
 def test_a_temperature_minus_a_change_is_a_temperature():
@@ -143,7 +144,7 @@ def test_a_temperature_minus_k_is_refused_because_k_could_be_either():
 
 
 def test_k_minus_a_temperature_is_a_change_in_k():
-    assert value(inp("k", "300 K"), inp("t", "25 degC"), op("r", "sub", "k", "t")) == "1.85 K"
+    assert value(inp("k", "300 K"), inp("t", "25 degC"), op("r", "sub", "k", "t")) == "1.85 delta_K"
 
 
 def test_a_change_minus_a_temperature_is_refused():
@@ -227,3 +228,126 @@ def test_c_with_a_degree_mark_after_it_is_refused_naming_both_readings():
     with pytest.raises(CallError) as caught:
         read_graph(graph(inp("a", "25 C°")))
     assert '"degC"' in caught.value.problem and '"delta_degC"' in caught.value.problem
+
+
+# ---------------------------------------------------------------- a change stays a change (round 3, q036; flo2-calc 0.7.0)
+#
+# ver:a-temperature-difference-stays-a-difference. flo2-calc 0.6.1 converted
+# 18 delta_degF to a bare "10 K", and converted that on to -263.15 degC as if
+# it were a temperature: right in q036, silently wrong in the next step a
+# design takes. A K known to be a change is now delta_K, exactly the size of K,
+# and never read as a temperature.
+
+# Every way a change of temperature comes out in kelvin, and the change it is.
+CHANGE_IN_KELVIN = [
+    pytest.param([inp("r", "18 delta_degF"), op("x", "convert", "r", unit="K")], "10 delta_K", id="delta_degF to K"),
+    pytest.param([inp("r", "10 delta_degC"), op("x", "convert", "r", unit="K")], "10 delta_K", id="delta_degC to K"),
+    pytest.param([inp("r", "10 delta_K"), op("x", "convert", "r", unit="K")], "10 delta_K", id="delta_K to K"),
+    pytest.param([inp("a", "30 degC"), inp("b", "20 degC"), op("d", "sub", "a", "b"), op("x", "convert", "d", unit="K")],
+                 "10 delta_K", id="degC - degC, to K"),
+    pytest.param([inp("a", "86 degF"), inp("b", "68 degF"), op("d", "sub", "a", "b"), op("x", "convert", "d", unit="K")],
+                 "10 delta_K", id="degF - degF, to K"),
+    pytest.param([inp("k", "303.15 K"), inp("t", "20 degC"), op("x", "sub", "k", "t")], "10 delta_K", id="K - degC"),
+    pytest.param([inp("rth", "2.5 K/W"), inp("p", "4 W"), op("x", "mul", "rth", "p")], "10 delta_K", id="K/W * W"),
+    pytest.param([inp("p", "4000 mW"), inp("rth", "2.5 K/W"), op("x", "mul", "p", "rth")], "10 delta_K", id="mW * K/W"),
+    pytest.param([inp("rth", "2.5 degC/W"), inp("p", "4 W"), op("d", "mul", "rth", "p"), op("x", "convert", "d", unit="K")],
+                 "10 delta_K", id="degC/W * W, to K"),
+    pytest.param([inp("q", "1000 J"), inp("c", "100 J/K"), op("x", "div", "q", "c")], "10 delta_K", id="J / (J/K)"),
+    pytest.param([inp("x", "10 K*W/W")], "10 delta_K", id="K inside a compound, as written"),
+]
+
+
+@pytest.mark.parametrize("nodes, change", CHANGE_IN_KELVIN)
+def test_a_change_of_temperature_in_kelvin_is_written_delta_k(nodes, change):
+    assert value(*nodes) == change
+
+
+@pytest.mark.parametrize("nodes, change", CHANGE_IN_KELVIN)
+@pytest.mark.parametrize("scale", ["degC", "degF"])
+def test_a_change_in_kelvin_is_never_converted_as_a_temperature(nodes, change, scale):
+    """The step 0.6.1 got silently wrong: -263.15 degC from a 10 K rise."""
+    r = refusal(*nodes, op("onward", "convert", nodes[-1]["id"], unit=scale))
+    assert r["kind"] == "offset_temperature" and r["units"] == ["delta_K", scale]
+    assert "change of temperature, not a temperature" in r["reason"] and f"delta_{scale}" in r["reason"]
+
+
+@pytest.mark.parametrize("nodes, change", CHANGE_IN_KELVIN)
+def test_a_change_in_kelvin_converts_on_as_a_change_and_shifts_a_temperature(nodes, change):
+    last = nodes[-1]["id"]
+    assert value(*nodes, op("to_c", "convert", last, unit="delta_degC")) == "10 delta_degC"
+    assert value(*nodes, op("to_f", "convert", last, unit="delta_degF")) == "18 delta_degF"
+    assert value(*nodes, inp("t0", "20 degC"), op("hot", "add", "t0", last)) == "30 degC"
+    assert value(*nodes, inp("t0", "30 degC"), op("cool", "sub", "t0", last)) == "20 degC", "a known change needs no guess"
+    r = refusal(*nodes, inp("t0", "20 degC"), op("cmp", "lt", "t0", last))
+    assert r["kind"] == "offset_temperature", "a temperature is never compared with a change"
+
+
+def test_q036_the_rise_in_kelvin_and_the_next_step():
+    nodes = [inp("rise", "18 delta_degF", "imported spec: an allowed temperature RISE"), op("rise_k", "convert", "rise", unit="K")]
+    answer = run(*nodes)
+    assert answer["result"] == {"node": "rise_k", "value": "10 delta_K"}
+    assert "-263.15" not in str(run(*nodes, op("c", "convert", "rise_k", unit="degC")))
+
+
+def test_q096_a_k_typed_for_a_rise_still_adds_to_a_temperature():
+    """add(20 degC, 10 K) is 30 degC, and 30 degC is 303.15 K, as before."""
+    answer = run(inp("t", "20 degC"), inp("d", "10 K"), op("n", "add", "t", "d"), op("k", "convert", "n", unit="K"))
+    assert [v["value"] for v in answer["values"]][-2:] == ["30 degC", "303.15 K"]
+
+
+def test_a_k_typed_or_scaled_is_still_read_by_where_it_stands():
+    """Only a K KNOWN to be a change is delta_K. A typed K is a temperature in
+    convert, and a K scaled by a plain number keeps its K."""
+    assert value(inp("k", "298.15 K"), op("c", "convert", "k", unit="degC")) == "25 degC"
+    assert value(inp("k", "10 K"), inp("n", "2"), op("x", "mul", "k", "n")) == "20 K"
+    assert value(inp("k", "10 K"), inp("n", "50 %"), op("x", "mul", "k", "n")) == "5 K"
+    assert value(inp("k", "300 K"), inp("d", "10 delta_K"), op("x", "add", "k", "d")) == "310 K"
+    assert value(inp("a", "300 K"), inp("b", "25 degC"), op("r", "min", "a", "b")) == "298.15 K"
+
+
+def test_offset_units_in_products_are_changes_or_refused():
+    """A degree that comes out of a product is a change; a reading never multiplies."""
+    assert value(inp("rth", "2.5 degC/W"), inp("p", "4 W"), op("x", "mul", "rth", "p")) == "10 delta_degC"
+    assert value(inp("rth", "4.5 degF/W"), inp("p", "4 W"), op("x", "mul", "rth", "p")) == "18 delta_degF"
+    assert value(inp("rth", "2.5 K/W"), inp("p", "4 W"), op("x", "mul", "rth", "p")) == "10 delta_K"
+    assert value(inp("a", "12 um/(m*degC)"), inp("d", "10 delta_K"), inp("l", "2 m"), op("r", "mul", "a", "d", "l"),
+                 op("u", "convert", "r", unit="um")) == "240 um"
+    r = refusal(inp("t", "25 degC"), inp("w", "2 W"), op("x", "mul", "t", "w"))
+    assert r["kind"] == "offset_temperature"
+
+
+def test_delta_k_is_a_change_a_typed_one_too():
+    assert U.parse_unit("delta_K") == (("delta_K", 1),)
+    assert U.describe_dimension(U.parse_unit("delta_K")) == "temperature change"
+    assert value(inp("t", "25 degC"), inp("d", "5 delta_K"), op("r", "add", "t", "d")) == "30 degC"
+    r = refusal(inp("d", "5 delta_K"), op("c", "convert", "d", unit="degF"))
+    assert r["kind"] == "offset_temperature"
+
+
+def test_a_temperature_minus_k_still_names_every_way_to_write_a_change():
+    r = refusal(inp("t", "30 degC"), inp("k", "5 K"), op("r", "sub", "t", "k"))
+    assert "delta_K" in r["reason"] and "delta_degC" in r["reason"]
+
+
+def test_an_array_of_changes_converted_to_k_stays_changes():
+    from conftest import graph as g_
+
+    def arr(values, unit):
+        return {"array": values, "unit": unit}
+
+    answer = evaluation_json(evaluate(read_graph(g_(inp("r", arr(["9", "18"], "delta_degF")), op("k", "convert", "r", unit="K")))))
+    assert answer["result"]["array"]["unit"] == "delta_K" and answer["result"]["array"]["values"] == ["5", "10"]
+    answer = evaluation_json(evaluate(read_graph(g_(inp("r", arr(["9", "18"], "delta_degF")), op("k", "convert", "r", unit="K"),
+                                                    op("c", "convert", "k", unit="degC")))))
+    assert answer["status"] == "refused" and answer["refused"]["kind"] == "offset_temperature"
+    answer = evaluation_json(evaluate(read_graph(g_(inp("t", arr(["300", "310"], "K")), inp("c", "20 degC"), op("d", "sub", "t", "c")))))
+    assert answer["result"]["array"]["unit"] == "delta_K"
+
+
+def test_before_0_7_0_a_change_in_k_was_a_bare_k():
+    """Records of version 6 and older re-run under the rules they were made with
+    (units.before_delta_k; tests/test_record.py re-runs one)."""
+    with U.before_delta_k():
+        assert value(inp("r", "18 delta_degF"), op("x", "convert", "r", unit="K")) == "10 K"
+        assert value(inp("rth", "2.5 K/W"), inp("p", "4 W"), op("x", "mul", "rth", "p")) == "10 K"
+    assert value(inp("r", "18 delta_degF"), op("x", "convert", "r", unit="K")) == "10 delta_K"

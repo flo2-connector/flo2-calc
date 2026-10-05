@@ -359,6 +359,73 @@ def test_a_furlong_is_exactly_660_international_feet_and_a_fortnight_14_days():
     assert answer["result"]["exact"] == "1397/8400000 m/s"
 
 
+# ---------------------------------------------------------------- troy weight and the week (round 3, fix 3)
+
+
+def test_the_troy_ounce_pennyweight_grain_and_week_are_exact():
+    """q034 typed 31.1034768 g for the troy ounce ("ozt" was refused with no
+    hint); q002 typed 1 week = 7 d. NIST Handbook 44, Appendix C, and NIST SP
+    811: 1 troy ounce = 31.1034768 g, 1 pennyweight = 1/20 troy ounce, 1 grain =
+    64.79891 mg, all exact."""
+    assert U.atom("ozt").factor == Fraction("0.0311034768")
+    assert U.atom("dwt").factor == U.atom("ozt").factor / 20 == Fraction("0.00155517384")
+    assert U.atom("grain").factor == Fraction("0.00006479891")
+    assert U.atom("ozt").factor == 480 * U.atom("grain").factor, "a troy ounce is 480 grains"
+    assert U.atom("week").factor == 7 * U.atom("d").factor == U.atom("fortnight").factor / 2
+    assert value(inp("a", "1.5 ozt"), op("r", "convert", "a", unit="g")) == "46.6552152 g"
+    assert value(inp("a", "1 ozt"), op("r", "convert", "a", unit="dwt")) == "20 dwt"
+    assert value(inp("a", "1 week"), op("r", "convert", "a", unit="h")) == "168 h"
+    assert value(inp("a", "1 ozt"), inp("b", "1 oz"), op("r", "gt", "a", "b")) == "true", "troy and avoirdupois differ"
+
+
+def test_gr_is_refused_naming_the_grain_and_the_gram():
+    with pytest.raises(CallError) as caught:
+        read_graph(graph(inp("a", "5 gr")))
+    assert '"grain"' in caught.value.problem and '"g"' in caught.value.problem and "Write" in caught.value.problem
+
+
+@pytest.mark.parametrize("text, hint", [("troy_ounce", "ozt"), ("pennyweights", "dwt"), ("grains", "grain"), ("weeks", "week")])
+def test_the_spellings_people_write_for_them_are_hinted(text, hint):
+    with pytest.raises(CallError) as caught:
+        read_graph(graph(inp("a", f"2 {text}")))
+    assert f'Write "{hint}"' in caught.value.problem
+
+
+@pytest.mark.parametrize("text, reading, listed", [
+    ("mile", "mile (length)", ["furlong (660 ft)", "ft", "km"]),
+    ("ton", "ton (mass)", ["t (the tonne)", "oz (the avoirdupois ounce)", "ozt (the troy ounce)"]),
+    ("hp", "horsepower (power)", ["W", "kW"]),
+    ("kelvin", "kelvin (temperature)", ["K (a temperature or a change)", "delta_K (a change)"]),
+])
+def test_an_unknown_unit_pint_reads_is_named_with_the_units_of_its_kind_and_nothing_substituted(text, reading, listed):
+    """Round 3 (q034): "ozt" got no hint. A spelling pint reads is now named for
+    what pint reads it as, with the units of that kind flo2-calc knows; it is
+    still refused, and no unit and no factor is offered in its place."""
+    with pytest.raises(CallError) as caught:
+        read_graph(graph(inp("a", f"2 {text}")))
+    said = caught.value.problem
+    assert f"pint reads it as {reading}" in said and "substitutes nothing" in said
+    assert all(u in said for u in listed), said
+    assert "Write" not in said and "never guessed" in said
+    assert not any(c.isdigit() for c in said.split("pint reads it as")[1].split("Units are spelled")[0].replace("flo2-calc", "").replace("660", "")), \
+        "no conversion factor to type in"
+
+
+def test_a_kind_flo2_calc_does_not_carry_is_said_so():
+    with pytest.raises(CallError) as caught:
+        read_graph(graph(inp("a", "2 acre")))
+    assert "carries no unit of that kind" in caught.value.problem
+
+
+@pytest.mark.parametrize("text", ["kt", "yd", "notaunit", "wk", "mils"])
+def test_where_pint_and_the_text_as_written_disagree_or_pint_reads_nothing_there_is_no_reading(text):
+    """kt is a kilotonne as written (k + t) and a knot to pint; yd a yoctoday
+    as written; mils pint's angular mil: none is named."""
+    with pytest.raises(CallError) as caught:
+        read_graph(graph(inp("a", f"2 {text}")))
+    assert "pint reads" not in caught.value.problem
+
+
 # ---------------------------------------------------------------- a computed unit shown simpler (round 2, fix 8)
 
 
@@ -410,7 +477,7 @@ def test_a_rounded_value_is_shown_simpler_only_by_a_power_of_ten():
 def test_no_two_units_share_a_size_so_rule_two_never_chooses():
     seen: dict = {}
     for spelling in U.VOCABULARY:
-        if spelling in ("degC", "degF", "%", "delta_degC", "delta_degF", "dBm", "dBW"):
+        if spelling in ("degC", "degF", "%", "delta_degC", "delta_degF", "delta_K", "dBm", "dBW"):
             continue
         key = (U.atom(spelling).dimension, U.atom(spelling).factor)
         assert key not in seen, (spelling, seen.get(key))

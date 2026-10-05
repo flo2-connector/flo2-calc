@@ -1,6 +1,6 @@
 ---
 name: support-a-decision-with-math
-description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison against a limit, a root, a logarithm, a gain in dB or a power in dBm, an angle, a p-value or a critical value, a count of true conditions or a k-of-n vote, an empirical formula with stated units, or a computation over data or a grid (a sum, a mean, a standard deviation, a fitted slope, an FFT) - especially one with units. It covers composing the computation, units, arrays, rounded and float64 results, refusals, checking the formula and working it shows back, making the computation record, saving it, linking it to the decision, and checking it later.
+description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison against a limit, a root, a logarithm, a gain in dB or a power in dBm, an angle, a p-value or a critical value, a count of true conditions, a k-of-n vote or a binomial probability, an empirical formula whose formula and constants the person or a cited document gave, or a computation over data or a grid (a sum, a mean, a standard deviation, a fitted slope, an FFT) - especially one with units. It covers composing the computation, units, arrays, rounded and float64 results, where an empirical formula's constants must come from (never your memory), refusals, checking the formula and working it shows back, making the computation record, saving it, linking it to the decision, and checking it later.
 compatibility: Needs the flo2-calc MCP server (evaluate_graph, add_node, record_computation, rerun_record), which also serves this skill as the MCP prompt support-a-decision-with-math and the resource skill://flo2-calc/support-a-decision-with-math/SKILL.md. Nothing else has to be running. Linking a record to a design uses the design tool's own tools (reflow2), when there is one.
 ---
 
@@ -27,14 +27,30 @@ Use flo2-calc when a decision, a trade or a limit turns on something computed:
   tail probability, a chi-square p-value, a Student-t critical value;
 - **data or a grid:** the mean and spread of measurements, a fitted rate with its standard error, how many readings are
   out of range, a discretised integral over a grid, the spectrum of a signal or an aperture (an FFT).
-- **a count or a vote:** how many of eight conditions hold, whether two of three sensors agree.
+- **a count or a vote:** how many of eight conditions hold, whether two of three sensors agree, the chance that at
+  least 3 of 5 independent detections happen.
 
 You reason; flo2-calc calculates. Choosing which equation applies, whether an approximation holds, or which events
 to combine is yours (and the person's). flo2-calc does the calculation it is given and never decides that for you.
 
-Do not use it for a domain's own formulas, such as metal weight from volume, ring sizes, or a building's areas. The
-helper that owns the domain computes those (flo2-cad, flo2-ifc), and you bring its number into flo2-calc as an input,
-with that helper as its source.
+Do not use it for a domain's own formulas, such as metal weight from volume, ring sizes, a building's areas, or an
+electronics standard's sizing rule (a PCB trace's width for a current). The helper that owns the domain computes
+those (flo2-cad, flo2-ifc), and you bring its number into flo2-calc as an input, with that helper as its source.
+
+### An empirical formula's constants come from the person or a document, never from your memory
+
+An empirical relation or a standard's formula (a datasheet's curve fit, a code's coefficient, a standard's sizing
+rule) is only as good as its constants, and flo2-calc cannot tell where a number came from. So:
+
+- **Compute one only when the formula and every constant in it were given**: by the person, in the question, or in a
+  document you can name with its edition and clause. Each constant is an input whose `source` says where it was
+  given: `"given by the person"`, `"given in the question"`, or the document, edition and clause.
+- **When a result under a named formula or standard is asked for without them, do not recall them**, even when you
+  are sure you know them. Ask the person for the formula and its constants (with their units), or name the document
+  and edition you would take them from and have the person confirm them before you calculate. Or send it to the helper
+  that owns that domain.
+- A recalled constant that happens to be right is still the failure: the next one recalled wrong would be computed
+  just as confidently, and recorded as if it were checked.
 
 ## Standalone (a plugin, or a server on this machine)
 
@@ -49,13 +65,17 @@ with that helper as its source.
    `"20 mA"`, `"12 g"`. Write a plain number as text too (`"0.1"`, `"1/3"`), because a JSON `0.1` is refused: it
    arrives as a binary float.
    - A value is **one** number. Never type arithmetic inside it (`"3 + 4"`, `"2^10"`): make each operation a node.
-   - **Temperatures:** `"25 degC"`, `"77 degF"` or `"298.15 K"`. A change of temperature is `"5 delta_degC"`, or a
-     degree inside a compound unit (`"2.5 degC/W"`). Never write a bare `C` or `F`: flo2-calc refuses them, because
-     they could be coulombs or farads. Write `coulomb` or `farad` when you mean those.
+   - **Temperatures:** `"25 degC"`, `"77 degF"` or `"298.15 K"`. A change of temperature is `"5 delta_degC"`,
+     `"5 delta_K"`, or a degree inside a compound unit (`"2.5 degC/W"`). A change converted to K comes back as
+     `delta_K`, so it is never read as a temperature later: converting it to `degC` is refused; convert it to
+     `delta_degC` instead. Never write a bare `C` or `F`: flo2-calc refuses them, because they could be coulombs or
+     farads. Write `coulomb` or `farad` when you mean those.
    - **Money:** the ISO 4217 code, `"987.50 USD"`. flo2-calc holds no exchange rates, so it refuses to add USD to
      EUR. To convert, give the rate as an input with its date and source,
      `{"id": "rate", "value": "0.92 EUR/USD", "source": "ECB reference rate, 2026-10-02"}`, and multiply by it.
    - **Gallons:** `gal_us` or `gal_imp`. A bare `gal` is refused, because it is two different units.
+   - **Precious metals:** `ozt` (the troy ounce), `dwt` (the pennyweight) and `grain`. `oz` is the avoirdupois ounce,
+     a different mass. A bare `gr` is refused, because it is written for both the grain and the gram.
    - **Decibels:** a gain or loss is `"6 dB"` (`"0.2 dB/m"` per length); a power level is `"-30 dBm"` or `"10 dBW"`.
      Never type a dB value as a plain number, and never type the 10 or 20 of a decibel formula yourself (step 4).
 3. **Evaluate it.**
@@ -70,7 +90,7 @@ with that helper as its source.
      plain text and in LaTeX.
 4. **Use the built-in operators for anything that is not exact; never type a constant or a result in.**
    - `{"id": "pi", "op": "pi"}` and `{"id": "e", "op": "e"}` are the constants. Do not type pi to 30 digits as an input.
-   - `sqrt`, `exp`, `ln`, `log10`, and `pow` with a non-whole exponent (`"1/3"`, `"0.44"`).
+   - `sqrt`, `exp`, `ln`, `log10`, and `pow` with a non-whole exponent (`"1/3"`, `"2.5"`).
    - `sin`, `cos`, `tan` take an angle WITH its unit (`"37.5 deg"`). `asin`, `acos`, `atan`, `atan2` need
      `"unit": "deg"` or `"rad"` for the angle they give. `convert` turns deg into rad.
    - `normal_cdf`, `normal_sf` (the upper tail), `normal_quantile`, `chi2_sf` (a p-value), `t_quantile` (a critical
@@ -80,12 +100,30 @@ with that helper as its source.
      `"amplitude"` (20 log10). You must say which; flo2-calc never picks one. A power level converts with `convert`:
      `"10 dBm"` to `"mW"`, or a power in `mW` to `"dBm"`. A level plus a gain in dB is a level; two levels never add.
    - **Counting:** `count_true` counts the true values; `k_of_n` with args `[k, b1, b2, ...]` is true when at least k
-     are. Never add true/false values, and never tally them yourself.
-   - **An empirical formula with stated units** (IPC-2221, a datasheet's fit): take each input's number in the unit
-     the formula states with `magnitude` (`{"op": "magnitude", "args": ["I"], "unit": "A"}`), compute on the plain
-     numbers, then put the stated unit on the result with `with_unit` and say where it comes from:
-     `{"op": "with_unit", "args": ["A"], "unit": "mil^2", "source": "IPC-2221: A in mil^2"}`. Never multiply by a typed
-     `"1 mil^2"` to get a unit back.
+     are; `to_number` turns true into 1 and false into 0. Never add true/false values, and never tally them yourself.
+   - **Combinatorics and the binomial:** `choose` (`[n, k]`), `factorial` (`[n]`), and `binomial_pmf`, `binomial_cdf`,
+     `binomial_sf` with args `[k, n, p]`: P(X = k), P(X <= k) and P(X > k). "At least 3 of 5" is `binomial_sf` with
+     k = 2. All exact for an exact p. Whether the trials are independent with one p is your judgement; say so.
+   - **Powers:** `pow` with a whole exponent is exact however large the exponent, until the exact number passes the
+     host's digits budget; then it is refused with how many digits it would have. Add `"digits"` to that node for its
+     correctly rounded value instead: `(1 - 1e-6)^(10^6)` with `"digits": 30`.
+   - **An empirical formula with stated units** (a datasheet's fit, a standard's relation, its formula and constants
+     given as above): put each constant in as an input whose source says where it was given, take each input's number
+     in the unit the formula states with `magnitude` (`{"op": "magnitude", "args": ["I"], "unit": "A"}`), compute on
+     the plain numbers, then put the stated unit on the result with `with_unit` and say which document states it:
+
+     ```json
+     {"nodes": [
+       {"id": "k", "value": "<the constant, as given>", "source": "given by the person: <document, edition, clause>"},
+       {"id": "b", "value": "<the exponent, as given>", "source": "given by the person: <document, edition, clause>"},
+       {"id": "x", "value": "<the input> <its unit>", "source": "the design's own quantity"},
+       {"id": "x_num", "op": "magnitude", "args": ["x"], "unit": "<the unit the formula takes x in>"},
+       {"id": "y", "op": "with_unit", "args": ["y_num"], "unit": "<the unit the formula gives y in>",
+        "source": "<document, edition, clause>: y in that unit"}]}
+     ```
+
+     (the nodes that compute `y_num` from `x_num`, `k` and `b` are the formula as given). Never multiply by a typed
+     `"1 mm^2"` to get a unit back, and never fill in a constant the person did not give.
    - Their results come back labelled `"rounded"`: correctly rounded to 30 significant digits (ask for more with
      `"digits"`, up to 1000), with `error_at_most`, and never with an `exact` fraction. Anything computed from a rounded
      value is labelled rounded too, with its bound. Where the result is rational it stays exact (`sqrt(9/4)` is `1.5`).
@@ -97,6 +135,8 @@ with that helper as its source.
      its mean is every deviation. A column (`column`) meets a row as a grid.
    - Reduce with `sum`, `mean`, `min`, `max`, `product`, `count_true`, `any`, `all` (add `"axis": 0` or `1` for each
      column or row of a grid). Compare and combine for "how many are out of range": `lt`, `gt`, `or`, `count_true`.
+   - `length` counts an array's elements (`"axis"` for a grid's columns or rows). Use it for n, never a typed count:
+     `sqrt(n)` and degrees of freedom then rest on the data, not on your counting.
    - Statistics over data are named, with no default: `variance_sample` or `variance_population`, `sd_sample` or
      `sd_population`. Choose the one the question means (n - 1 for a sample, n for a whole population).
    - A straight-line fit is `fit_slope`, `fit_intercept`, `fit_slope_se`, `fit_intercept_se` and `fit_residual_se`,
@@ -141,6 +181,11 @@ with that helper as its source.
    - A "Malformed call" error names the field to fix: an unknown unit, a missing node, a cycle.
    - An expression typed as a value is refused. If it is called **malformed** (`"3 + * 4"`), do not repair it or guess
      what it meant: ask the person what was intended, then build that as nodes.
+   - If it is called **ambiguous** (`"6/2(1+2)"`, an implied multiplication), the refusal gives both readings. Never
+     pick one: ask which was meant, or build each reading as nodes and give both values, saying which is which.
+   - An unknown unit that pint reads (`"mile"`) is named for what it is, with the units of that kind flo2-calc knows.
+     Nothing is substituted: give the value in one of those units, from a source that states it, never a conversion
+     factor you recall.
    - A near-miss unit may say what to write instead (`khz` gives `Write "kHz"`). Units are case-sensitive, and a
      prefix's case is its size: `mJ` is a millijoule and `MJ` a megajoule. When flo2-calc gives no hint, write the
      unit you mean yourself. Never change its prefix to get past the refusal.

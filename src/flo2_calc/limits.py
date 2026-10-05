@@ -215,6 +215,27 @@ def power_digits_at_least(base: int, n: int) -> int:
     return (n * (b - 1) * 30102) // 100000 + 1
 
 
+def _power_size(b: int, n: int, exact_digits: Callable[[int, int], int | None] | None) -> tuple[int, bool]:
+    """(the digits of |b| ** n, whether that count is exact rather than a lower bound)."""
+    b = abs(b)
+    if b <= 1 or n == 0:
+        return 1, True
+    if exact_digits is not None:
+        d = exact_digits(b, n)
+        if d is not None:
+            return d, True
+    return power_digits_at_least(b, n), False
+
+
+def power_digits_at_most(base: int, n: int) -> int:
+    """An upper bound on the digits of base ** n (n >= 0), from base's size alone."""
+    b = abs(base).bit_length()
+    if b <= 1 or n == 0:
+        return 1
+    # base < 2^b, so base^n < 2^(n b); 30103/100000 is just over log10(2).
+    return (n * b * 30103) // 100000 + 1
+
+
 def allow_int_text(max_digits: int) -> None:
     """Python refuses to write an int of more than 4,300 digits as text, by
     default. flo2-calc writes every value exactly, and its own digits budget is
@@ -285,24 +306,74 @@ class Guard:
                 )
         self._remember(num if num.bit_length() >= den.bit_length() else den)
 
-    def check_power(self, base: Fraction, n: int) -> None:
-        """BEFORE base ** n: refuse it when even the smallest result it could be
-        passes the digits budget. A power of a fraction in lowest terms stays in
-        lowest terms, so its numerator and denominator are each base's to the
-        power |n|, and the bound is close (within a factor of two for base 2 or
-        3, tighter for anything larger)."""
-        self.check_time()
+    def _power_parts(self, base: Fraction, n: int) -> tuple[tuple[str, int], tuple[str, int]]:
         num, den = (base.numerator, base.denominator) if n >= 0 else (base.denominator, base.numerator)
-        for part, b in (("numerator", num), ("denominator", den)):
-            at_least = power_digits_at_least(b, abs(n))
-            if at_least > self.limits.max_digits:
+        return ("numerator", num), ("denominator", den)
+
+    def power_fits(self, base: Fraction, n: int, exact_digits: Callable[[int, int], int | None] | None = None) -> bool:
+        """Whether base ** n is within the digits budget, judged as check_power
+        judges it, without stopping."""
+        for _part, b in self._power_parts(base, n):
+            if power_digits_at_most(b, abs(n)) <= self.limits.max_digits:
+                continue
+            if _power_size(b, abs(n), exact_digits)[0] > self.limits.max_digits:
+                return False
+        return True
+
+    def check_power(
+        self,
+        base: Fraction,
+        n: int,
+        exact_digits: Callable[[int, int], int | None] | None = None,
+        hint: str = "",
+    ) -> None:
+        """BEFORE base ** n: refuse it when the result passes the digits budget.
+        A power of a fraction in lowest terms stays in lowest terms, so its
+        numerator and denominator are each base's to the power |n|: their digit
+        counts come from `exact_digits` (realmath.power_digits, from Arb) where
+        given and decided, else from a close lower bound (within a factor of two
+        for base 2 or 3, tighter for anything larger). `hint` is said after the
+        reason (pow: how to get a correctly rounded value instead). This is the
+        ONLY size check on a power: flo2-calc 0.1.0 to 0.6.1 also refused any
+        whole exponent above 1000, a cap the served limits never named
+        (round 3: q072, q086)."""
+        self.check_time()
+        for part, b in self._power_parts(base, n):
+            if power_digits_at_most(b, abs(n)) <= self.limits.max_digits:
+                continue
+            size, exact = _power_size(b, abs(n), exact_digits)
+            if size > self.limits.max_digits:
+                beyond = (
+                    f" No host can carry it exactly: a digits budget is at most {MAX_DIGITS_RANGE[1]:,}."
+                    if size > MAX_DIGITS_RANGE[1]
+                    else ""
+                )
                 self._stop(
                     "max_digits",
-                    f"{self._here()}the power's {part} would have at least {at_least:,} digits, past this host's budget "
-                    f"of {self.limits.max_digits:,} digits for any exact number, so it was not computed: flo2-calc "
-                    "sizes a power from its operands before computing it.",
-                    needed=at_least,
+                    f"{self._here()}the power's {part} would have {'' if exact else 'at least '}{size:,} digits, past "
+                    f"this host's budget of {self.limits.max_digits:,} digits for any exact number, so it was not "
+                    f"computed: flo2-calc sizes a power from its operands before computing it.{beyond}{hint}",
+                    needed=size,
                 )
+
+    def check_digits(self, digits_: int, what: str, exact: bool = False) -> None:
+        """BEFORE a value of `digits_` digits (a lower bound, unless `exact`) is
+        computed: refuse it when that passes the digits budget (a factorial, a
+        binomial coefficient, a binomial probability's denominator)."""
+        self.check_time()
+        if digits_ > self.limits.max_digits:
+            beyond = (
+                f" No host can carry it exactly: a digits budget is at most {MAX_DIGITS_RANGE[1]:,}."
+                if digits_ > MAX_DIGITS_RANGE[1]
+                else ""
+            )
+            self._stop(
+                "max_digits",
+                f"{self._here()}the {what} would have {'' if exact else 'at least '}{digits_:,} digits, past this host's "
+                f"budget of {self.limits.max_digits:,} digits for any exact number, so it was not computed: flo2-calc "
+                f"sizes it from its operands before computing it.{beyond}",
+                needed=digits_,
+            )
 
     def check_rounded_size(self, exponent: int, places: int, what: str = "result") -> None:
         """BEFORE a rounded value of `places` significant digits and decimal

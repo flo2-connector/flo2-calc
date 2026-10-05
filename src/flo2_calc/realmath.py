@@ -392,10 +392,62 @@ def scaled(fn: Fn, k: Fraction) -> Fn:
     return Fn(fn.name, lambda *a: fn.arb(*a) * _arb(k), exact, arb_exact)
 
 
-def integer_power(n: int) -> Fn:
-    """x^n for a whole n, used for a rounded base: rational at a rational x,
-    so its exact value at the written decimal is always found (and sized)."""
-    return Fn("pow", lambda x: x**n, lambda x: x**n)
+def integer_power(n: int, guard: L.Guard) -> Fn:
+    """x^n for a whole n: for a rounded base (any exponent), or for an exact
+    base asked for "digits" whose exact power passes the host's digits budget.
+    It is rational at a rational x, and its exact value is used wherever it fits
+    the budget. Where it does not, the value is decided by Ziv's test on Arb's
+    enclosure of x^n (binary powering, so the exponent's size costs nothing):
+    a power that large cannot be a rounding tie unless its digits stop short,
+    and a true tie is never decided, only stopped at the budget."""
+
+    def exact(x: Fraction) -> Fraction | None:
+        if not guard.power_fits(x, n, power_digits):
+            return None
+        return x**n
+
+    return Fn("pow", lambda x: x**n, exact)
+
+
+def power_digits(b: int, n: int) -> int | None:
+    """The exact number of decimal digits of b^n (b >= 2, n >= 1):
+    floor(n log10 b) + 1, the floor decided by Arb (log10 b is irrational
+    unless b is a power of ten, so the floor is always decided at some
+    precision). None when a few precisions do not decide it."""
+    k = L.digits(b) - 1
+    if b == L.ten_to(k):
+        return n * k + 1
+    F = flint()
+    with _LOCK:
+        saved = F.ctx.prec
+        try:
+            for extra in (64, 128, 256, 512):
+                F.ctx.prec = n.bit_length() + b.bit_length() + extra
+                y = F.arb(b).log() / F.arb(10).log() * F.arb(n)
+                f = y.floor().unique_fmpz()
+                if f is not None:
+                    return int(f) + 1
+        finally:
+            F.ctx.prec = saved
+    return None
+
+
+def power_decade(x: Fraction, n: int) -> int:
+    """About floor(n log10 |x|), the decimal exponent of x^n (x != 0): to size a
+    rounded power before it is made. An estimate: the enclosure is sized
+    exactly again when it is read back (`_enclosure`)."""
+    F = flint()
+    with _LOCK:
+        saved = F.ctx.prec
+        try:
+            F.ctx.prec = 64 + abs(n).bit_length()
+            y = _arb(abs(x)).log() / F.arb(10).log() * F.arb(n)
+            f = y.floor().unique_fmpz()
+            if f is not None:
+                return int(f)
+            return int(y.mid().floor().unique_fmpz())
+        finally:
+            F.ctx.prec = saved
 
 
 def angle_factor(k: int) -> Fn:

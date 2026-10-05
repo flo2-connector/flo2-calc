@@ -1,11 +1,11 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-6.schema.json; version 1 to
-5 records, schemas/calc-record-1.schema.json to calc-record-5.schema.json,
+A record is one JSON object (schemas/calc-record-7.schema.json; version 1 to
+6 records, schemas/calc-record-1.schema.json to calc-record-6.schema.json,
 still re-run):
 
     record_format   "flo2-calc computation record"
-    schema_version  6
+    schema_version  7
     status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
@@ -22,7 +22,7 @@ still re-run):
     result          {"node", "value"}, labelled the same way; or, when the graph
                     names a list of results, "results": one such entry each
     formula         the computation as equations, plain text with LaTeX beside
-                    it (formula.py)
+                    it, every line ending with its value (formula.py)
     working         every step, numbered, in evaluation order: its formula,
                     its value and its label (formula.py)
     max_exact_elements  a record holding an array: the most elements an exact
@@ -46,6 +46,14 @@ number in full, a rounded value with every one of its digits, a computed
 compound unit in a simpler unit of the same size, and adds the formula and
 the working. A record of version 1 to 3 is re-run under the writing of its
 own version (evaluator.LEGACY), so it reproduces byte for byte.
+
+VERSION 7 (flo2-calc 0.7.0, round 3) ends every formula line with its value
+(a record of version 4 to 6 ended only a result's: evaluator.
+FORMULA_RESULTS_ONLY), allows round 3's operators (choose, factorial,
+binomial_pmf, binomial_cdf, binomial_sf, to_number, length), and writes a K
+known to be a change of temperature as delta_K. A record of version 6 or
+older is re-run under the rules it was made with (units.before_delta_k), so a
+change it converted to K is still the bare K it holds, and it reproduces.
 
 DETERMINISTIC. There is no timestamp and no machine name, and the file is
 written with sorted keys, so the same graph (and name, and supports) gives a
@@ -92,6 +100,7 @@ import json
 import os
 import re
 import tempfile
+from contextlib import nullcontext
 from dataclasses import replace
 from functools import cache
 from importlib import resources
@@ -106,6 +115,7 @@ from flo2_calc import units as U
 from flo2_calc.errors import CallError, LimitExceeded
 from flo2_calc.evaluator import (
     CURRENT,
+    FORMULA_RESULTS_ONLY,
     LEGACY,
     WORKING_REST_RECORD,
     Evaluation,
@@ -124,7 +134,7 @@ from flo2_calc.evaluator import (
 from flo2_calc.numbers import ARITHMETIC_NOTE, ARRAYS_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 SCHEMA_FILES = {
     1: "calc-record-1.schema.json",
     2: "calc-record-2.schema.json",
@@ -132,7 +142,9 @@ SCHEMA_FILES = {
     4: "calc-record-4.schema.json",
     5: "calc-record-5.schema.json",
     6: "calc-record-6.schema.json",
+    7: "calc-record-7.schema.json",
 }
+DELTA_K_FROM = 7  # the first schema version whose rules write a K known to be a change as delta_K
 COMPUTED = "computed"
 NOT_COMPUTED = "not_computed"
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -215,8 +227,18 @@ def exact_limit_of(record: dict[str, Any]) -> int | None:
 
 
 def style_of(version: int) -> Style:
-    """How a record of this schema version writes its values."""
-    return CURRENT if version >= 4 else LEGACY
+    """How a record of this schema version writes its values and its formula."""
+    if version >= 7:
+        return CURRENT
+    return FORMULA_RESULTS_ONLY if version >= 4 else LEGACY
+
+
+def rules_of(version: Any) -> Any:
+    """The rules a record of this schema version is evaluated under: a record of
+    version 6 or older was made before delta_K (units.before_delta_k)."""
+    if isinstance(version, int) and version < DELTA_K_FROM:
+        return U.before_delta_k()
+    return nullcontext()
 
 
 def check_sources(graph: Graph) -> None:
@@ -289,7 +311,7 @@ def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | No
     record["values"] = values
     record.update(results_json(evaluation, values))
     if version >= 4:
-        shown = shown_back(evaluation, values)
+        shown = shown_back(evaluation, values, style_of(version))
         record["formula"] = shown.formula
         record["working"] = shown.working
         evaluation.guard.spend_reply(len(canonical({"formula": shown.formula, "working": shown.working})))
@@ -328,11 +350,12 @@ def pending_problems(record: dict[str, Any], data_root: Path | None = None) -> l
     seal: its inputs must be the ones its graph gives, and the node it stopped
     at must be in its graph. (Its values cannot be checked: it has none.)"""
     try:
-        graph = read_graph(record["graph"], "record.graph", data_root, exact_limit_of(record))
+        with rules_of(record["schema_version"]):
+            graph = read_graph(record["graph"], "record.graph", data_root, exact_limit_of(record))
+            again = inputs_of(graph, style_of(record["schema_version"]))
     except CallError as e:
         return [{"field": e.path, "recorded": "(as written)", "now": f"cannot be read: {e.problem}"}]
     out = []
-    again = inputs_of(graph, style_of(record["schema_version"]))
     if again != record["inputs"]:
         out.append({"field": "inputs", "recorded": record["inputs"], "from_its_graph": again})
     stopped_at = record["stopped"].get("node")
@@ -393,7 +416,7 @@ def _replaceable_pending(target: Path, new: dict[str, Any]) -> bool:
         old = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return False
-    if not isinstance(old, dict) or old.get("schema_version") not in (2, 3, 4, 5, 6) or old.get("status") != NOT_COMPUTED:
+    if not isinstance(old, dict) or old.get("schema_version") not in range(2, SCHEMA_VERSION + 1) or old.get("status") != NOT_COMPUTED:
         return False
     import jsonschema
 
@@ -705,15 +728,19 @@ def rerun(record: dict[str, Any], guard: L.Guard | None = None, data_root: Path 
     within: list[dict[str, Any]] = []
     stopped: dict[str, Any] | None = None
     try:
-        graph = read_graph(record["graph"], "record.graph", data_root, exact)
-        evaluation = evaluate(graph, guard)
+        with rules_of(record["schema_version"]):  # the rules it was made under
+            graph = read_graph(record["graph"], "record.graph", data_root, exact)
+            evaluation = evaluate(graph, guard)
+            again = (
+                build(evaluation, record["name"], record.get("supports"), record["schema_version"]) if evaluation.ok else None
+            )
         if evaluation.stopped:
             stopped = evaluation.refusal
         elif not evaluation.ok:
             differences.append({"field": "result", "recorded": record["result"], "rerun": {"refused": evaluation.refusal}})
             answer["result"] = None
         else:
-            again = build(evaluation, record["name"], record.get("supports"), record["schema_version"])
+            assert again is not None
             differences += _differences(record, again)
             if differences and hash_ok:
                 within, differences = _weigh_against_bounds(differences, graph)

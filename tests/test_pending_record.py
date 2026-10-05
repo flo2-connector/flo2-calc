@@ -63,7 +63,7 @@ def direct_of(g=GROWING, name="stage-gain", supports=SUPPORTS):
 def test_a_pending_record_holds_the_graph_the_inputs_and_the_limit_and_no_result():
     rec = pending_of()
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 6 and rec["status"] == "not_computed"
+    assert rec["schema_version"] == 7 and rec["status"] == "not_computed"
     assert rec["graph"] == GROWING
     assert rec["supports"] == SUPPORTS
     assert "values" not in rec and "result" not in rec, "no values and no result"
@@ -296,7 +296,7 @@ def test_a_version_2_not_yet_computed_record_completes_to_this_versions_direct_r
     assert answer_of(completed)["status"] == "ok"
     direct = one("record_computation", {"graph": GROWING, "name": "stage-gain", "supports": SUPPORTS})
     assert completed.content[1].resource.text == direct.content[1].resource.text
-    assert json.loads(completed.content[1].resource.text)["schema_version"] == 6
+    assert json.loads(completed.content[1].resource.text)["schema_version"] == 7
 
 
 def test_a_tampered_version_1_record_is_still_caught():
@@ -338,4 +338,4 @@ def test_a_version_3_pending_file_is_replaced_by_its_current_completion_even_whe
     done = R.build(evaluate(read_graph(g)), "big", None)
     saved = R.write(tmp_path, "big.calc.json", R.file_bytes(done))
     assert saved["written"] is True and "replaced" in saved
-    assert json.loads((tmp_path / "big.calc.json").read_text())["schema_version"] == 6
+    assert json.loads((tmp_path / "big.calc.json").read_text())["schema_version"] == 7

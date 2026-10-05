@@ -293,6 +293,8 @@ def test_the_operator_families_are_the_accepted_ones():
         "units", "decibels", "counting",
         # 0.6.0, arrays (req:flo2-calc-computes-over-arrays)
         "reductions", "statistics over data", "transforms", "complex values", "making and shaping arrays",
+        # 0.7.0, round 3: choose and factorial
+        "combinatorics",
     }
     assert {k for k, v in OPS.items() if v[0] == "logic"} == {"and", "or", "not", "nor", "nand", "xor"}
 
@@ -478,7 +480,7 @@ def test_magnitude_reads_a_number_only_in_a_unit_of_what_the_quantity_measures()
 
 def test_with_unit_needs_a_plain_number_a_unit_and_where_that_unit_comes_from():
     e = malformed(graph(inp("y", "42.39"), op("a", "with_unit", "y", unit="mil^2")))
-    assert e.path == "graph.nodes[1].source" and "IPC-2221" in e.problem
+    assert e.path == "graph.nodes[1].source" and "document" in e.problem and "IPC-2221" not in e.problem
     e = malformed(graph(inp("y", "42.39"), op("a", "with_unit", "y", source="x")))
     assert e.path == "graph.nodes[1].unit"
     e = malformed(graph(inp("y", "42.39"), op("a", "with_unit", "y", unit="", source="x")))
@@ -496,3 +498,148 @@ def test_the_stated_unit_and_its_source_are_kept_in_the_graph():
     g = read_graph(graph(*IPC))
     kept = g.to_json()["nodes"][-1]
     assert kept == {"id": "area", "op": "with_unit", "args": ["A"], "unit": "mil^2", "source": "IPC-2221: the cross-section A is in mil^2"}
+
+
+# ---------------------------------------------------------------- an implied multiplication is ambiguous (round 3, q093)
+
+
+@pytest.mark.parametrize("text, left_to_right, binding_first", [
+    ("6/2(1+2)", "(6 / 2) * (1 + 2)", "6 / (2 * (1 + 2))"),       # q093: 9 or 1
+    ("6÷2(1+2)", "(6 / 2) * (1 + 2)", "6 / (2 * (1 + 2))"),
+    ("1/2(3)", "(1 / 2) * 3", "1 / (2 * 3)"),
+    ("8/2(2+2)", "(8 / 2) * (2 + 2)", "8 / (2 * (2 + 2))"),
+    ("1/(2)(3)", "(1 / 2) * 3", "1 / (2 * 3)"),
+])
+def test_an_implied_multiplication_is_called_ambiguous_with_both_readings_and_neither_chosen(text, left_to_right, binding_first):
+    """Round 3, q093: "6/2(1+2)" was called malformed and the agent told not to
+    repair it, which, obeyed, drops the two readings the person needs."""
+    e = malformed(graph(inp("a", text)))
+    assert e.path == "graph.nodes[0].value"
+    assert "is ambiguous" in e.problem and "implied multiplication" in e.problem
+    assert left_to_right in e.problem and binding_first in e.problem
+    assert "malformed" not in e.problem and "do not repair" not in e.problem
+    assert "ask the person which reading was meant" in e.problem and "give both values" in e.problem
+    assert "does not choose" in e.problem
+
+
+@pytest.mark.parametrize("text", ["2(3+4)", "(1+2)(3+4)", "2(3)/4", "(1+2)3"])
+def test_an_implied_multiplication_with_one_reading_is_an_expression_not_ambiguous_nor_malformed(text):
+    e = malformed(graph(inp("a", text)))
+    assert "is an expression" in e.problem and "ambiguous" not in e.problem and "malformed" not in e.problem
+
+
+@pytest.mark.parametrize("text, where", [
+    ("6/2(1+)", 'nothing after "+" at character 6'),
+    ("(1+2)(3", '"(" at character 6 is never closed'),
+    ("6/2(1+2) mm", "two values stand side by side"),
+])
+def test_a_malformed_expression_with_an_implied_multiplication_is_still_malformed_where_it_is(text, where):
+    e = malformed(graph(inp("a", text)))
+    assert "is a malformed expression" in e.problem and where in e.problem and "ambiguous" not in e.problem
+
+
+# ---------------------------------------------------------------- combinatorics, the binomial, to_number (round 3, q060, q061)
+
+
+@pytest.mark.parametrize("n, k", [(0, 0), (5, 0), (5, 2), (5, 5), (10, 3), (52, 5), (100, 50), (7, 9)])
+def test_choose_is_the_exact_binomial_coefficient(n, k):
+    import math
+
+    assert value(inp("n", str(n)), inp("k", str(k)), op("c", "choose", "n", "k")) == str(math.comb(n, k))
+
+
+@pytest.mark.parametrize("n", [0, 1, 5, 20, 100])
+def test_factorial_is_exact(n):
+    import math
+
+    assert value(inp("n", str(n)), op("f", "factorial", "n")) == str(math.factorial(n))
+
+
+@pytest.mark.parametrize("nodes, kind", [
+    ([inp("n", "-1"), op("f", "factorial", "n")], "out_of_domain"),
+    ([inp("n", "2.5"), op("f", "factorial", "n")], "out_of_domain"),
+    ([inp("n", "5 mm"), op("f", "factorial", "n")], "unit_mismatch"),
+    ([inp("n", True), op("f", "factorial", "n")], "type_mismatch"),
+    ([inp("x", "2"), op("s", "sqrt", "x"), op("f", "factorial", "s")], "out_of_domain"),
+    ([inp("n", "5"), inp("k", "-1"), op("c", "choose", "n", "k")], "out_of_domain"),
+    ([inp("n", "-5"), inp("k", "1"), op("c", "choose", "n", "k")], "out_of_domain"),
+])
+def test_combinatorics_take_exact_whole_plain_numbers(nodes, kind):
+    assert refused(*nodes)["kind"] == kind
+
+
+def test_a_huge_factorial_or_coefficient_is_stopped_before_it_is_computed():
+    import time
+
+    start = time.monotonic()
+    r = refused(inp("n", "1000000"), op("f", "factorial", "n"))
+    assert r["kind"] == "exceeds_limits" and r["limit"]["name"] == "max_digits"
+    r = refused(inp("n", "10000000"), inp("k", "5000000"), op("c", "choose", "n", "k"))
+    assert r["kind"] == "exceeds_limits"
+    assert time.monotonic() - start < 5, "sized first, not computed and then measured"
+
+
+def _binomial(op_name, k, n, p):
+    from math import comb
+
+    terms = {i: comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(n + 1)}
+    if op_name == "binomial_pmf":
+        return terms.get(k, Fraction(0))
+    below = sum((t for i, t in terms.items() if i <= k), Fraction(0))
+    return below if op_name == "binomial_cdf" else 1 - below
+
+
+@pytest.mark.parametrize("op_name", ["binomial_pmf", "binomial_cdf", "binomial_sf"])
+@pytest.mark.parametrize("k, n, p", [
+    (2, 5, "0.8"), (2, 5, "0.01"), (0, 5, "0.8"), (5, 5, "0.8"), (3, 10, "1/3"), (-1, 4, "1/2"), (7, 4, "1/2"),
+    (0, 0, "0.3"), (2, 6, "0"), (0, 6, "0"), (6, 6, "1"), (5, 6, "1"), (40, 100, "0.37"),
+])
+def test_the_binomial_is_exact_for_an_exact_p(op_name, k, n, p):
+    got = result(inp("k", str(k)), inp("n", str(n)), inp("p", p), op("r", op_name, "k", "n", "p"))
+    want = _binomial(op_name, k, n, Fraction(p))
+    assert "rounded" not in got
+    assert Fraction(got.get("exact", got["value"])) == want, (op_name, k, n, p)
+
+
+def test_q060_and_q061_are_one_node_each():
+    """At least 3 of 5 independent frames: P(X > 2), no 32 x 5 grid of typed outcomes."""
+    assert value(inp("k", "2"), inp("n", "5"), inp("p", "0.8"), op("P", "binomial_sf", "k", "n", "p")) == "0.94208"
+    assert value(inp("k", "2"), inp("n", "5"), inp("q", "0.01"), op("P", "binomial_sf", "k", "n", "q")) == "0.0000098506"
+
+
+def test_the_binomial_from_a_rounded_p_carries_a_bound_that_holds():
+    import mpmath as mp
+
+    mp.mp.dps = 60
+    for op_name in ("binomial_pmf", "binomial_cdf", "binomial_sf"):
+        got = result(inp("x", "1/2"), op("p", "sqrt", "x"), inp("k", "4"), inp("n", "7"), op("r", op_name, "k", "n", "p"))
+        assert "rounded" in got and got["rounded"]["correctly_rounded"] is False
+        p = mp.sqrt(mp.mpf(1) / 2)
+        terms = [mp.binomial(7, i) * p**i * (1 - p) ** (7 - i) for i in range(8)]
+        true = {"binomial_pmf": terms[4], "binomial_cdf": sum(terms[:5]), "binomial_sf": sum(terms[5:])}[op_name]
+        bound = mp.mpf(got["rounded"]["error_at_most"])
+        assert abs(mp.mpf(got["value"]) - true) <= bound, (op_name, got)
+
+
+@pytest.mark.parametrize("nodes, kind", [
+    ([inp("k", "1"), inp("n", "5"), inp("p", "1.2"), op("r", "binomial_sf", "k", "n", "p")], "out_of_domain"),
+    ([inp("k", "1"), inp("n", "5"), inp("p", "-0.1"), op("r", "binomial_cdf", "k", "n", "p")], "out_of_domain"),
+    ([inp("k", "1"), inp("n", "5"), inp("p", "0.5 mm"), op("r", "binomial_pmf", "k", "n", "p")], "unit_mismatch"),
+    ([inp("k", "1.5"), inp("n", "5"), inp("p", "0.5"), op("r", "binomial_pmf", "k", "n", "p")], "out_of_domain"),
+    ([inp("k", "1"), inp("n", "-5"), inp("p", "0.5"), op("r", "binomial_pmf", "k", "n", "p")], "out_of_domain"),
+])
+def test_the_binomial_refuses_what_it_cannot_take(nodes, kind):
+    assert refused(*nodes)["kind"] == kind
+
+
+def test_a_percent_probability_is_folded_in():
+    assert value(inp("k", "2"), inp("n", "5"), inp("p", "80 %"), op("P", "binomial_sf", "k", "n", "p")) == "0.94208"
+
+
+def test_to_number_turns_true_into_one_and_false_into_zero_and_nothing_else():
+    assert value(inp("b", True), op("x", "to_number", "b")) == "1"
+    assert value(inp("b", False), op("x", "to_number", "b")) == "0"
+    assert value(inp("a", "3"), inp("b", "2"), op("g", "gt", "a", "b"), op("x", "to_number", "g"), inp("w", "5"),
+                 op("y", "mul", "x", "w")) == "5"
+    assert refused(inp("n", "1"), op("x", "to_number", "n"))["kind"] == "type_mismatch"
+    assert refused(inp("b", True), inp("one", "1"), op("bad", "add", "b", "one"))["kind"] == "type_mismatch", "booleans still never add"

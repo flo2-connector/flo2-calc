@@ -22,7 +22,8 @@ A value is one number: text that holds arithmetic ("3 + 4") is refused as an
 expression, to be built as nodes.
 
 An OPERATION node has an `op` and `args`, the ids of the nodes it takes, in
-order. `convert` also takes the `unit` to convert to, and so do asin, acos,
+order. `convert` also takes the `unit` to convert to (a change of temperature
+converted to K is written delta_K, so it stays a change), and so do asin, acos,
 atan and atan2 (the angle unit of their result, "deg" or "rad"), `magnitude`
 (the unit to read a quantity's number in) and `with_unit` (the unit it states,
 with the `source` that states it). db_to_ratio and ratio_to_db take `kind`,
@@ -87,12 +88,21 @@ operation with many arguments; every input, partial result and value is held
 to the digits budget; a power is sized before it is computed; a rounded value
 is sized from its exponent before it is made, and the working precision that
 decides its rounding is held to the digits budget too. Passing one stops the
-evaluation like a refusal, of kind "exceeds_limits" (limits.py).
+evaluation like a refusal, of kind "exceeds_limits" (limits.py). These are the
+only limits on a calculation: a power has no exponent cap of its own (0.1.0
+to 0.6.1 refused any whole exponent above 1000; round 3, q072 and q086).
+
+ROUND 3 (flo2-calc 0.7.0): choose and factorial, exact; the binomial
+distribution (binomial_pmf, binomial_cdf, binomial_sf), exact for an exact p;
+to_number (true is 1, false is 0); length (an array's elements); a whole
+power of a rounded base for any exponent, and of an exact base past the
+digits budget as a correctly rounded value when the node asks for "digits".
 """
 
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
@@ -121,7 +131,6 @@ from flo2_calc.numbers import (
 MAX_NODES = 500
 MAX_ARGS = 100
 MAX_NOTE = 2000
-MAX_POWER_ARG = 1000
 MAX_PLACES = 1000
 ID = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]{0,63}$")
 
@@ -153,6 +162,7 @@ ARITHMETIC, FUNCTIONS, CONSTANTS, TRIG, ROUNDING, STATISTICS = (
     "arithmetic", "functions", "constants", "trigonometry", "rounding", "statistics",
 )
 UNITS_OPS, DECIBELS, COUNTING = "units", "decibels", "counting"  # dec:round-2-fixes
+COMBINATORICS = "combinatorics"  # round 3
 REDUCTION, DATA, TRANSFORM, COMPLEX, ARRAY = (
     "reductions", "statistics over data", "transforms", "complex values", "making and shaping arrays",
 )
@@ -165,15 +175,19 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "div": (ARITHMETIC, 2, 2, "the first divided by the second; units divide; division by zero is refused"),
     "neg": (ARITHMETIC, 1, 1, "minus the value"),
     "abs": (ARITHMETIC, 1, 1, "the absolute value; of a complex value (an FFT's), its modulus |z|"),
-    "pow": (ARITHMETIC, 2, 2, "the first raised to the second, a plain number: exact for a whole exponent; a non-whole one "
-            "(\"1/3\", \"0.44\") gives a rounded value unless the result is rational, needs a base >= 0, and keeps a unit "
+    "pow": (ARITHMETIC, 2, 2, "the first raised to the second, a plain number: exact for a whole exponent of any size, sized "
+            "before it is computed and stopped past the host's digits budget (with \"digits\", such a power of an exact base "
+            "is given correctly rounded instead); a whole power of a rounded base is rounded; a non-whole exponent "
+            "(\"1/3\", \"2.5\") gives a rounded value unless the result is rational, needs a base >= 0, and keeps a unit "
             "only when its root is exact (m^2 to the 1/2 is m)"),
     "min": (ARITHMETIC, 1, None, "the smallest, in the first one's unit; element by element for arrays; with ONE array, "
             "the smallest of its elements (\"axis\" 0 or 1 for each column or row of a grid)"),
     "max": (ARITHMETIC, 1, None, "the largest, in the first one's unit; element by element for arrays; with ONE array, "
             "the largest of its elements (\"axis\" as for min)"),
     "convert": (ARITHMETIC, 1, 1, 'the value in the node\'s "unit" ("" for a plain number); it must measure the same thing. '
-                "deg to rad (or back) is a rounded value, since pi/180 is irrational; every other conversion is exact"),
+                "deg to rad (or back) is a rounded value, since pi/180 is irrational; every other conversion is exact. A "
+                "change of temperature converted to K is written delta_K: it stays a change, and never converts to degC or "
+                "degF as a temperature"),
     "sqrt": (FUNCTIONS, 1, 1, "the square root of a value >= 0; exact when it is rational (sqrt(9/4) is 3/2), else rounded; "
              "m^2 gives m, and a unit with no exact square root (m) is refused"),
     "exp": (FUNCTIONS, 1, 1, "e to the power of a plain number; rounded (exp(0) is exactly 1)"),
@@ -205,6 +219,13 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
                 "number > 0: a test's p-value; rounded"),
     "t_quantile": (STATISTICS, 2, 2, "the Student-t x with P(T <= x) = p, for args [p, dof], p in (0, 1) and dof an exact "
                    "plain number > 0; rounded"),
+    # round 3
+    "binomial_pmf": (STATISTICS, 3, 3, "P(X = k) for X binomial with args [k, n, p]: n independent trials, each with "
+                     "probability p; k and n exact whole plain numbers (n >= 0), p a plain number from 0 to 1. Exact for an "
+                     "exact p; from a rounded p, rounded with its bound"),
+    "binomial_cdf": (STATISTICS, 3, 3, "P(X <= k), at most k successes, for args [k, n, p] as binomial_pmf; exact for an exact p"),
+    "binomial_sf": (STATISTICS, 3, 3, "P(X > k), MORE than k successes, for args [k, n, p] as binomial_pmf (\"at least 3 of 5\" "
+                    "is binomial_sf of k = 2); exact for an exact p"),
     "and": ("logic", 2, None, "true when every argument is true"),
     "or": ("logic", 2, None, "true when any argument is true"),
     "not": ("logic", 1, 1, "true when the argument is false"),
@@ -254,8 +275,10 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "magnitude": (UNITS_OPS, 1, 1, 'the number of the node\'s "unit" a quantity is, a plain number (2 A in "mA" is 2000); '
                   "refused unless the quantity measures what that unit measures. For an empirical formula, whose "
                   "numbers are taken in stated units"),
-    "with_unit": (UNITS_OPS, 1, 1, 'a plain number given the node\'s "unit", which the node\'s "source" states (an '
-                  'empirical formula\'s result, e.g. "IPC-2221: A in mil^2"); flo2-calc cannot check it, so it is recorded'),
+    "with_unit": (UNITS_OPS, 1, 1, 'a plain number given the node\'s "unit", which the node\'s "source" states: the document '
+                  "the formula and its constants were given from (an empirical formula's result in the unit that document "
+                  "states); flo2-calc cannot check it, so it is recorded. An empirical formula's constants are inputs whose "
+                  "sources say where the person or a cited document gave them, never recalled from memory"),
     "db_to_ratio": (DECIBELS, 1, 1, 'a gain in dB as a plain ratio: "kind" "power" gives 10^(x/10), "amplitude" '
                     "10^(x/20); kind is never defaulted; rounded unless exact"),
     "ratio_to_db": (DECIBELS, 1, 1, 'a plain ratio > 0 as a gain in dB: "kind" "power" gives 10 log10(r), '
@@ -264,6 +287,14 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
                    'true/false array are ("axis" 0 or 1 for each column or row of a grid): an exact whole number'),
     "k_of_n": (COUNTING, 2, None, "args [k, b1, b2, ...]: true when at least k of the true/false values b are true; "
                "k is an exact whole number from 0 to their count; [k, array] counts a true/false array's elements"),
+    # round 3
+    "to_number": (COUNTING, 1, 1, "a true/false value as a number: true is 1 and false is 0, exactly (element by element "
+                  "for a true/false array); never a guess, and the only way a true/false value becomes a number"),
+    "choose": (COMBINATORICS, 2, 2, "the binomial coefficient C(n, k), for args [n, k]: the ways to choose k of n, exact; n and "
+               "k exact whole plain numbers, n >= 0 and k >= 0 (0 when k > n)"),
+    "factorial": (COMBINATORICS, 1, 1, "n! for an exact whole plain number n >= 0, exact (0! is 1); sized before it is computed"),
+    "length": (REDUCTION, 1, 1, 'the number of elements of an array, an exact whole number; with "axis" 0 the length of each '
+               "column (the grid's rows), with 1 the length of each row"),
 }
 
 # Operators that may give a rounded value, and so take "digits".
@@ -274,7 +305,9 @@ UNIT_OPS = frozenset({"convert", "asin", "acos", "atan", "atan2", "magnitude", "
 ANGLE_UNIT_OPS = frozenset({"asin", "acos", "atan", "atan2", "phase"})
 KIND_OPS = frozenset({"db_to_ratio", "ratio_to_db"})  # each must be told "kind"
 SOURCED_OPS = frozenset({"with_unit"})  # each must say, in "source", where what it asserts comes from
-AXIS_OPS = frozenset({"sum", "product", "mean", "min", "max", "count_true", "any", "all"})
+AXIS_OPS = frozenset({"sum", "product", "mean", "min", "max", "count_true", "any", "all", "length"})
+# Exact operators that take single values, and take exact arrays element by element (arrays.py).
+PER_ELEMENT = frozenset({"choose", "factorial", "binomial_pmf", "binomial_cdf", "binomial_sf"})
 ROUND_MODES = ("half_even", "half_away_from_zero", "half_toward_zero", "half_up", "half_down")
 
 INPUT_KEYS = ("id", "value", "source", "note")
@@ -385,10 +418,12 @@ class Style:
     whole_in_full: bool  # a whole number in full, never "/1" or e-notation
     every_digit: bool  # a rounded value with every one of its digits, trailing zeros kept
     simplify_units: bool  # a computed value's compound unit shown simpler where one is the same size (units.simplify)
+    every_line_valued: bool = True  # every formula line ends with its value, not only a result's (round 3)
 
 
-LEGACY = Style(False, False, False)  # record schema versions 1 to 3 (flo2-calc 0.1.0 to 0.4.0)
-CURRENT = Style(True, True, True)  # schema version 4 (0.5.0), and every reply
+LEGACY = Style(False, False, False, False)  # record schema versions 1 to 3 (flo2-calc 0.1.0 to 0.4.0)
+FORMULA_RESULTS_ONLY = Style(True, True, True, False)  # versions 4 to 6 (0.5.0 to 0.6.1): only a result's line has its value
+CURRENT = Style(True, True, True, True)  # schema version 7 (0.7.0), and every reply
 
 
 def _power_of_ten(f: Fraction) -> bool:
@@ -654,7 +689,7 @@ def _node(obj: Any, path: str, data_root: Any = None, exact_limit: int | None = 
             raise CallError(
                 at(path, "source"),
                 f'{op} states a unit flo2-calc cannot check, so it must say where that unit comes from: give it a '
-                '"source", the relation that states it (for example "IPC-2221: A in mil^2"), or {"design_node": "<id>"}.',
+                '"source", the document (and edition) that gives the formula and states its unit, or {"design_node": "<id>"}.',
             )
     elif "source" in obj:
         raise CallError(at(path, "source"), f'only an input and with_unit take a "source"; "{op}" computes its value.')
@@ -963,8 +998,22 @@ def _arithmetic(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
             places = _places(node, qs)  # type: ignore[arg-type]
             out = RM.evaluate(RM.angle_factor(k), [_ball(first, f)], places, guard)
             return _outcome(out, node.unit, node, qs, places)  # type: ignore[arg-type]
-        return _settle(first.magnitude * f, node.unit, first.error * f, qs)  # type: ignore[arg-type]
+        return _settle(first.magnitude * f, U.converted_unit(first.unit, node.unit), first.error * f, qs)  # type: ignore[arg-type]
     raise AssertionError(f"operator {op} has no evaluation")  # pragma: no cover
+
+
+def _power_hint(base: Fraction, n: int, places: int, guard: L.Guard) -> str:
+    """What a refused exact power can be instead: its correctly rounded value,
+    when one that size fits the budget, else how large it is."""
+    if base == 0:
+        return ""
+    decade = RM.power_decade(base, n)
+    if abs(decade) + places + 1 <= guard.limits.max_digits:
+        return (
+            f' Its value is about 1e{decade:+d}: give the node "digits" (for example {places}) for its correctly rounded '
+            "value, labelled rounded."
+        )
+    return f" Its value is about 1e{decade:+d}, too far from 1 for even a rounded value to be carried within this budget."
 
 
 def _pow(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
@@ -978,8 +1027,6 @@ def _pow(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
     whole = exponent.rounding is None and exponent.magnitude.denominator == 1
     if whole:
         n = exponent.magnitude.numerator
-        if abs(n) > MAX_POWER_ARG:
-            raise Refusal(f"pow: an exponent is at most {MAX_POWER_ARG} either way; this one is {n}.", kind="too_large")
         if first.magnitude == 0 and n < 0 and first.rounding is None:
             raise Refusal(f'pow: "{names[0]}" is zero, and a negative power of zero divides by zero.', kind="division_by_zero")
         if first.magnitude == 0 and n == 0 and first.rounding is None:
@@ -995,17 +1042,28 @@ def _pow(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
             assert scale == Fraction(1, 100) ** (k * n)
             folded = Fraction(1, 100) ** k
             base = base * folded
-        guard.check_power(base, n)  # BEFORE computing: a huge power stalls inside one operation
+        places = _places(node, qs)  # type: ignore[arg-type]
         if first.rounding is None:
-            return Quantity(base**n, unit)
-        # A rounded base: the exact power of its written decimal, rounded, with Arb's bound over its ball.
+            # Sized BEFORE computing: a huge power stalls inside one operation. Within the budget it is exact;
+            # past it, a node that asks for "digits" gets the correctly rounded value, and any other is stopped.
+            if guard.power_fits(base, n, RM.power_digits):
+                return Quantity(base**n, unit)
+            if node.digits is not None and base != 0:
+                guard.check_rounded_size(RM.power_decade(base, n), places, "power")
+                out = RM.evaluate(RM.integer_power(n, guard), [RM.Ball(base)], places, guard)
+                return _outcome(out, unit, node, qs, places)  # type: ignore[arg-type]
+            guard.check_power(base, n, RM.power_digits, _power_hint(base, n, places, guard))
+            raise AssertionError("check_power passes what power_fits refused")  # pragma: no cover
+        # A rounded base, any exponent: the correctly rounded power of its written decimal (exactly, where that
+        # fits the budget), with Arb's bound over its ball, sized from its exponent first.
         ball = _ball(first, folded)
         if n <= 0 and _sign(ball) is None:
             raise _undecidable(f'pow: "{names[0]}" may be zero within its error bound, and {"a negative power" if n else "the power zero"} of zero has no value', first)
         if n == 0:
             return Quantity(Fraction(1), unit)
-        places = _places(node, qs)  # type: ignore[arg-type]
-        out = RM.evaluate(RM.integer_power(n), [ball], places, guard)
+        if ball.mid != 0:
+            guard.check_rounded_size(RM.power_decade(ball.mid, n), places, "power")
+        out = RM.evaluate(RM.integer_power(n, guard), [ball], places, guard)
         if out.error == 0:
             return Quantity(out.value, unit)
         return Quantity(out.value, unit, Rounding(places, out.error, False, _origins(qs)))  # type: ignore[arg-type]
@@ -1222,7 +1280,132 @@ def _statistics(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
         p = _probability(op, qs[0], names[0])
         dof = _dof(op, qs[1], names[1])
         return _outcome(RM.t_quantile(p, dof, places, guard), U.PLAIN, node, qs, places)  # type: ignore[arg-type]
+    if op in BINOMIAL:
+        return _binomial(node, qs, guard)
     raise AssertionError(op)  # pragma: no cover
+
+
+# ---------------------------------------------------------------- combinatorics and the binomial (round 3)
+
+BINOMIAL = ("binomial_pmf", "binomial_cdf", "binomial_sf")
+
+
+def _whole_number(op: str, q: Value, name: str, what: str, least: int | None = 0) -> int:
+    """An exact whole plain number (at least `least`, when given), or a refusal naming why not."""
+    if isinstance(q, bool):
+        raise Refusal(f'{op} takes {what}, and "{name}" is {"true" if q else "false"}.', kind="type_mismatch")
+    if q.unit != U.PLAIN:
+        raise Refusal(
+            f'{op} takes {what}, a plain number, and "{name}" is {value_text(q)} ({U.describe_dimension(q.unit)}).',
+            kind="unit_mismatch",
+            units=(U.format_unit(q.unit), ""),
+        )
+    if q.rounding is not None:
+        raise Refusal(f'{op} takes {what}, an exact whole number, and "{name}" is a rounded value ({value_text(q)}).', kind="out_of_domain")
+    if q.magnitude.denominator != 1 or (least is not None and q.magnitude < least):
+        bound = "" if least is None else f" of at least {least}"
+        raise Refusal(f'{op} takes {what}, a whole number{bound}, and "{name}" is {value_text(q)}.', kind="out_of_domain")
+    return q.magnitude.numerator
+
+
+def _combinatorics(node: OpNode, args: list[Value], guard: L.Guard) -> Quantity:
+    """choose and factorial: exact whole numbers, sized before they are computed
+    (a lower bound on their digits against the host's budget), then held to it."""
+    op, names = node.op, node.args
+    if op == "factorial":
+        n = _whole_number(op, args[0], names[0], "n")
+        # n! >= (n/3)^n, so its digits are at least those of floor(n/3)^n.
+        guard.check_digits(L.power_digits_at_least(max(n // 3, 1), n), "factorial")
+        return Quantity(Fraction(math.factorial(n)))
+    n = _whole_number(op, args[0], names[0], "n")
+    k = _whole_number(op, args[1], names[1], "k")
+    if k > n:
+        return Quantity(Fraction(0))
+    j = min(k, n - k)
+    if j:
+        # C(n, j) >= (n/j)^j, so its digits are at least those of floor(n/j)^j.
+        guard.check_digits(L.power_digits_at_least(n // j, j), "binomial coefficient")
+    return Quantity(Fraction(math.comb(n, j)))
+
+
+def _binomial_exact(op: str, k: int, n: int, p: Fraction, guard: L.Guard) -> Fraction:
+    """P(X = k), P(X <= k) or P(X > k) for X binomial(n, p), p = a/b exactly:
+    sum(C(n, i) a^i (b - a)^(n - i)) / b^n over the i the tail holds, in whole
+    numbers (each term from the last by one exact multiplication and one exact
+    division), summing the shorter of the two tails. Sized first by b^n."""
+    a, b = p.numerator, p.denominator
+    c = b - a
+    if b == 1:  # p is 0 or 1: X is 0 or n for certain
+        x = n if a == 1 else 0
+        hit = {"binomial_pmf": k == x, "binomial_cdf": x <= k, "binomial_sf": x > k}[op]
+        return Fraction(1 if hit else 0)
+    exact_digits = RM.power_digits(b, n) if n else 1
+    guard.check_digits(exact_digits or L.power_digits_at_least(b, n), f"probability's denominator ({b}^{n}, for p = {a}/{b})", exact_digits is not None)
+    if op == "binomial_pmf":
+        if not 0 <= k <= n:
+            return Fraction(0)
+        return Fraction(math.comb(n, k) * a**k * c ** (n - k), b**n)
+    # P(X <= k): i from 0 to k.  P(X > k): i from k + 1 to n.
+    lo, hi = max(0, k + 1), n  # the upper tail's terms
+    if k < 0:
+        upper_terms, lower_terms = n + 1, 0
+    elif k >= n:
+        upper_terms, lower_terms = 0, n + 1
+    else:
+        upper_terms, lower_terms = hi - lo + 1, k + 1
+    total = b**n
+    if lower_terms <= upper_terms:
+        part = _binomial_sum(n, a, c, 0, lower_terms - 1, guard) if lower_terms else 0
+        below = part
+    else:
+        part = _binomial_sum(n, a, c, lo, hi, guard) if upper_terms else 0
+        below = total - part
+    return Fraction(below if op == "binomial_cdf" else total - below, total)
+
+
+def _binomial_sum(n: int, a: int, c: int, first: int, last: int, guard: L.Guard) -> int:
+    """sum over i = first..last of C(n, i) a^i c^(n - i), in whole numbers."""
+    if a == 0:
+        return c**n if first == 0 else 0
+    if c == 0:
+        return a**n if last == n else 0
+    term = math.comb(n, first) * a**first * c ** (n - first)
+    total = term
+    for i in range(first, last):
+        if (i - first) % 64 == 63:
+            guard.check_time()
+        term = term * (n - i) * a // ((i + 1) * c)
+        total += term
+    return total
+
+
+def _binomial(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
+    op, names = node.op, node.args
+    k = _whole_number(op, qs[0], names[0], "k, a count of successes", least=None)
+    n = _whole_number(op, qs[1], names[1], "n, a number of trials")
+    p = _fold(_plain(op, qs[2], names[2], "a probability, a plain number"))
+    if p.rounding is None:
+        if not 0 <= p.magnitude <= 1:
+            raise Refusal(f'{op}: "{names[2]}" is {value_text(qs[2])}; a probability is from 0 to 1.', kind="out_of_domain")
+        return Quantity(_binomial_exact(op, k, n, p.magnitude, guard))
+    b = _ball(p)
+    if b.hi < 0 or b.lo > 1:
+        raise Refusal(f'{op}: "{names[2]}" is {value_text(qs[2])}; a probability is from 0 to 1.', kind="out_of_domain")
+    if b.lo < 0 or b.hi > 1:
+        raise _undecidable(f'{op}: "{names[2]}" may be outside 0 to 1 within its error bound', qs[2])
+    # From a rounded p: the exact value at its written decimal, and a bound from the values the
+    # polynomial takes over p's ball: P(X <= k) falls and P(X > k) rises with p, so their extremes are
+    # at the ends; P(X = k) rises then falls, so its extremes are at the ends or at its peak, p = k/n.
+    value = _binomial_exact(op, k, n, b.mid, guard)
+    points = [b.lo, b.hi]
+    if op == "binomial_pmf" and n and b.lo < Fraction(k, n) < b.hi:
+        points.append(Fraction(k, n))
+    error = max(abs(_binomial_exact(op, k, n, x, guard) - value) for x in points)
+    if error == 0:
+        return Quantity(value)
+    places = _places(node, qs)  # type: ignore[arg-type]
+    c = N.round_significant(value, places)
+    return Quantity(c, U.PLAIN, Rounding(places, N.round_up_significant(error + abs(value - c), 2), False, _origins(qs)))
 
 
 # ---------------------------------------------------------------- rounding to places, exactly
@@ -1440,9 +1623,12 @@ def _level(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Value:
 
 def _units_op(node: OpNode, q: Value, guard: L.Guard) -> Quantity:
     """magnitude: a quantity's number in a named unit; with_unit: a stated unit
-    put on a plain number. An empirical formula (IPC-2221's I = k dT^0.44
-    A^0.725, with A in mil^2) works on numbers taken in stated units; these
-    two make those units part of the graph and the record."""
+    put on a plain number. An empirical formula (a datasheet's fit, a
+    standard's relation) works on numbers taken in stated units; these two make
+    those units part of the graph and the record. Its constants are inputs the
+    person or a cited document gave, each with that source (round 3, q077):
+    flo2-calc cannot check where a number came from, so the skill and the
+    instructions say it."""
     name = node.args[0]
     if isinstance(q, bool):
         raise Refusal(f'{node.op} takes a number, and "{name}" is {"true" if q else "false"}.', kind="type_mismatch")
@@ -1480,6 +1666,8 @@ def _counting(node: OpNode, args: list[Value]) -> Value:
     op, names = node.op, node.args
     if op == "count_true":
         return Quantity(Fraction(sum(_booleans(op, args, names))))
+    if op == "to_number":
+        return Quantity(Fraction(1 if _booleans(op, args, names)[0] else 0))
     k, votes = args[0], args[1:]
     if isinstance(k, bool):
         raise Refusal(f'k_of_n\'s first argument is k, a whole number, and "{names[0]}" is {"true" if k else "false"}.', kind="type_mismatch")
@@ -1503,6 +1691,8 @@ def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value:
     family = OPS[op][0]
     if family == COUNTING:
         return _counting(node, args)
+    if family == COMBINATORICS:
+        return _combinatorics(node, args, guard)
     if family == UNITS_OPS:
         return _units_op(node, args[0], guard)
     if family == "logic":
@@ -1624,14 +1814,16 @@ def results_json(ev: Evaluation, values: list[dict[str, Any]]) -> dict[str, Any]
     return {"result": by_node[ev.graph.result]}
 
 
-def shown_back(ev: Evaluation, values: list[dict[str, Any]] | None) -> FM.Rendering:
-    """The formula and the working, from the graph and the values as written."""
+def shown_back(ev: Evaluation, values: list[dict[str, Any]] | None, style: Style = CURRENT) -> FM.Rendering:
+    """The formula and the working, from the graph and the values as written,
+    in `style`'s rendering (a record of version 4 to 6 ends only a result's
+    formula line with its value; version 7 and every reply end every line so)."""
     shown = {
         v["node"]: FM.Shown(v["value"], v.get("exact"), v.get("rounded"), v.get("float64"), "array" in v)
         for v in values or []
     }
     graph = ev.graph
-    return FM.render(list(graph.nodes), evaluation_order(graph), graph.result_ids, shown, ev.refusal)
+    return FM.render(list(graph.nodes), evaluation_order(graph), graph.result_ids, shown, ev.refusal, style.every_line_valued)
 
 
 WORKING_REST_REPLY = "are not shown here; record_computation keeps every one in its record"

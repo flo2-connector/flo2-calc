@@ -22,7 +22,8 @@
 - **Shown back** (`dec:idea-show-a-computation-in-math-notation`, and option (b) of the decision above): every reply
   and record carries the computation as a `formula` and a numbered `working`, plain text with LaTeX beside it, rendered
   from what was evaluated (`formula.py`), never written separately. A reply shows a readable view; the record holds
-  every step. The rendering is part of the record format: change it only with a new `schema_version`.
+  every step. Every formula line ends with its value (schema version 7; versions 4 to 6 ended only a result's). The
+  rendering is part of the record format: change it only with a new `schema_version`.
 
 - **Standalone** (`req:sister-mcp`, Anthony's words of 2026-10-04): flo2-calc never imports, calls or assumes flo2,
   reflow2, flo2-cad or flo2-ifc, and no feature degrades without them. `tests/test_standalone.py` holds the import
@@ -43,11 +44,12 @@
   - Arithmetic on a rounded value stays rounded, its bound carried. A comparison, ceil, floor or round of one is
     answered only when the bound decides it, else refused as `undecidable`.
   - Its text shows every one of its `digits`, trailing zeros kept. A whole exact number is written in full.
-- **Operators** (`dec:first-increment-operators`, then `dec:round-1-fixes-one-to-six`, then `dec:round-2-fixes`):
-  arithmetic, logic (AND, OR, NOT, NOR, NAND, XOR), comparison, functions (sqrt, exp, ln, log10), constants (pi, e),
-  trigonometry, rounding (ceil, floor, round), statistics, counting (count_true, k_of_n), units for empirical formulas
-  (magnitude, with_unit, whose stated unit needs a `source`) and decibels (db_to_ratio, ratio_to_db, whose `kind`,
-  power or amplitude, is never defaulted). Set operations come later. Arrays, statistics over data and the FFT are
+- **Operators** (`dec:first-increment-operators`, then `dec:round-1-fixes-one-to-six`, then `dec:round-2-fixes`, then
+  round 3's fixes, `ver:question-set-round-3`): arithmetic, logic (AND, OR, NOT, NOR, NAND, XOR), comparison, functions
+  (sqrt, exp, ln, log10), constants (pi, e), trigonometry, rounding (ceil, floor, round), statistics (with the binomial:
+  binomial_pmf, binomial_cdf, binomial_sf, exact for an exact p), counting (count_true, k_of_n, to_number),
+  combinatorics (choose, factorial), units for empirical formulas (magnitude, with_unit, whose stated unit needs a
+  `source`) and decibels (db_to_ratio, ratio_to_db, whose `kind`, power or amplitude, is never defaulted). Set operations come later. Arrays, statistics over data and the FFT are
   v0.6.0's (`req:flo2-calc-computes-over-arrays`). The units side (more units, degC/degF, currencies, dB) is
   `units.py`'s, not the evaluator's.
 - **Results** may be one node or a list (`"result": ["lo", "hi"]`), each reported by name as `results`.
@@ -60,6 +62,11 @@
     prefix's case is its size (`tests/test_unit_hints.py` walks every prefix, symbol and case).
   - Each currency is its own dimension, with no exchange rates; only a sourced rate the caller gives converts.
   - `degC` and `degF` are temperatures with an offset (`temperature.py`); a bare `C` or `F` is refused as ambiguous.
+  - A `K` known to be a change of temperature is `delta_K` (a change converted to K, a product in K through a
+    compound, K minus a temperature), so it never converts to `degC` or `degF` as a temperature (round 3, q036).
+    Records of version 6 and older re-run under the rules before it (`units.before_delta_k`, `record.rules_of`).
+  - An unknown spelling pint reads is named for what pint reads it as, with the units of that kind flo2-calc knows;
+    nothing is substituted. `gr` is refused as ambiguous (grain or gram).
   - `dB` is its own dimension, like a currency; `dBm` and `dBW` are power levels with an offset (`decibels.py`), read
     only as a value's whole unit.
   - A computed compound unit is SHOWN in a simpler unit of the same size where one exists (`units.simplify`, rules 0 to
@@ -73,6 +80,9 @@
     `ENV`.
   - The evaluator checks them as it goes. A power is sized BEFORE it is computed, and every partial result is held
     to the budget. Passing one is a normal refusal, `kind: "exceeds_limits"`, never `isError` and never a crash.
+  - They are the ONLY limits on a calculation. A power has no exponent cap of its own (0.1.0 to 0.6.1 had one, 1000,
+    which no served limit named: round 3). Never add a hard-coded cap; if one must exist, it is a served limit with
+    its own plain refusal, in the instructions and the README's Limits table.
   - A recorded calculation stopped there comes back as a NOT-YET-COMPUTED record (`status: "not_computed"`, no
     result). `record_computation` takes it in place of a graph and completes it to the direct computation's record,
     byte for byte. `rerun_record` says it has no result yet.
@@ -83,6 +93,9 @@
 - **Results reach reflow2 through the agent** (`dec:agent-carries-results`): flo2-calc never writes to reflow2. The
   record comes back as a file (`calcfile:///<name>.calc.json`), which flo2 keeps when hosted.
 - **Generic math only:** no jewelry, building or other domain formula belongs here.
+- **An empirical formula's constants come from the person or a cited document, never from the agent's memory**
+  (round 3, q077). flo2-calc cannot check where a number came from, so the served skill and `server.INSTRUCTIONS` say
+  it, and an example in either never carries a real standard's constants for an agent to copy.
 - **Arrays** (`req:flo2-calc-computes-over-arrays`, `dec:idea-how-arrays-are-computed`, option (a)): one unit per
   array; an exact array stays exact through rational operations; an FFT, a rounded-class function over an array, an
   array of more elements than the host's `max_exact_elements` (65,536 on a laptop, 4,096 in the image; a record keeps
@@ -126,9 +139,12 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
   new schema file beside the old one. Never edit an older `calc-record-<n>.schema.json` in place. Version 2
   (flo2-calc 0.2.0) added `status`; version 3 (0.4.0) added the `rounded` label, the new operators' fields and
   `python_flint` in `produced_by`; version 4 (0.5.0) added `formula`, `working`, `results`, `simplified_from`, the
-  round-2 operators' fields, and a new writing of values. Every older version must still re-run, each under its own
-  version's writing (`evaluator.LEGACY` for 1 to 3): `tests/data/*.v1.calc.json` were made by 0.1.0,
-  `tests/data/*.v2.calc.json` by 0.2.0, and `tests/data/display.v3.calc.json` by 0.4.0.
+  round-2 operators' fields, and a new writing of values; version 5 (0.6.0) arrays; version 6 (0.6.1)
+  `max_exact_elements`; version 7 (0.7.0) every formula line's value, round 3's operators and `delta_K`. Every older
+  version must still re-run, each under its own version's writing (`evaluator.LEGACY` for 1 to 3,
+  `evaluator.FORMULA_RESULTS_ONLY` for 4 to 6) and rules (`record.rules_of`: before `delta_K` for 1 to 6):
+  `tests/data/*.v1.calc.json` were made by 0.1.0, `tests/data/*.v2.calc.json` by 0.2.0,
+  `tests/data/display.v3.calc.json` by 0.4.0, and `tests/data/temperature-and-formula.v6.calc.json` by 0.6.1.
 - Nothing goes to stdout except MCP messages.
 - The licence is Apache-2.0. No secrets.
 - Record what you build on the design:

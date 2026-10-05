@@ -187,8 +187,84 @@ def test_a_huge_power_is_refused_before_it_is_computed():
     assert took < 2, f"refused in {took:.2f} s: it was computed, not sized"
     assert (r["node"], r["op"]) == ("z", "pow")
     assert r["reached"]["largest_digits"] == 20_000
-    assert r["limit"]["name"] == "max_digits" and r["limit"]["needed_at_least"] > 19_000_000
-    assert "would have at least" in r["reason"] and "so it was not computed" in r["reason"]
+    assert r["limit"]["name"] == "max_digits" and r["limit"]["needed_at_least"] == 20_000_000
+    assert "would have 20,000,000 digits" in r["reason"] and "so it was not computed" in r["reason"]
+
+
+# ---------------------------------------------------------------- no exponent cap: the served limits are the only limits (round 3)
+
+
+def test_a_power_has_no_exponent_cap_of_its_own_only_the_digits_budget():
+    """Round 3 (q072, q086): flo2-calc 0.1.0 to 0.6.1 refused any whole exponent
+    above 1000 (kind too_large), a cap the served limits never named. It refused
+    2^1001, which has 302 digits, and record_computation gave no not-yet-computed
+    record for it, since it was not an exceeds_limits stop."""
+    from flo2_calc import evaluator as E
+
+    assert not hasattr(E, "MAX_POWER_ARG")
+    assert run(graph(inp("b", "2"), inp("n", "1001"), op("p", "pow", "b", "n")))["result"]["value"] == str(2**1001)
+    tiny = run(graph(inp("b", "2"), inp("n", "-1001"), op("p", "pow", "b", "n")))["result"]
+    assert Fraction(tiny["exact"]) == Fraction(1, 2**1001)
+    assert run(graph(inp("b", "10"), inp("n", "19999"), op("p", "pow", "b", "n")))["status"] == "ok"
+    r = stopped(graph(inp("b", "10"), inp("n", "20000"), op("p", "pow", "b", "n")))
+    assert r["limit"]["needed_at_least"] == 20_001, "the digit count is exact, so the budget is the line"
+
+
+def test_q086_a_power_no_host_can_carry_says_how_many_digits_it_would_have():
+    started = time.perf_counter()
+    r = stopped(graph(inp("b", "2"), inp("n", "1000000000"), op("p", "pow", "b", "n")))
+    assert time.perf_counter() - started < 2
+    assert r["limit"] == {"name": "max_digits", "value": 20_000, "needed_at_least": 301_029_996, "setting": "--max-digits or FLO2_CALC_MAX_DIGITS"}
+    assert "would have 301,029,996 digits" in r["reason"] and "No host can carry it exactly" in r["reason"]
+    assert "about 1e+301029995" in r["reason"]
+
+
+def test_q072_a_whole_power_past_the_budget_is_correctly_rounded_when_the_node_asks_for_digits():
+    """(1 - 1e-6)^(10^6): its exact numerator has 6,000,000 digits. Without
+    "digits" it is stopped (exceeds_limits, so a record comes back not yet
+    computed), and the refusal says to ask for digits; with them it is the
+    correctly rounded value, labelled rounded."""
+    import mpmath as mp
+
+    base = [inp("one", "1"), inp("p", "1e-6"), op("q", "sub", "one", "p"), inp("n", "1000000")]
+    r = stopped(graph(*base, op("power", "pow", "q", "n")))
+    assert "6,000,000 digits" in r["reason"] and 'give the node "digits"' in r["reason"]
+    answer = run(graph(*base, op("power", "pow", "q", "n", digits=30), op("P", "sub", "one", "power"), result=["power", "P"]))
+    power, P = answer["results"]
+    assert power["rounded"]["correctly_rounded"] is True and power["rounded"]["digits"] == 30
+    mp.mp.dps = 80
+    true = (1 - mp.mpf(10) ** -6) ** (10**6)
+    assert mp.mpf(power["value"]) == mp.mpf(mp.nstr(true, 30)), (power["value"], mp.nstr(true, 40))
+    assert abs(mp.mpf(P["value"]) - (1 - true)) <= mp.mpf(P["rounded"]["error_at_most"])
+    exact_fits = run(graph(*base[:3], inp("n2", "3"), op("cube", "pow", "q", "n2", digits=30)))["result"]
+    assert "rounded" not in exact_fits, "where the exact power fits the budget it stays exact, digits or not"
+
+
+def test_a_whole_power_of_a_rounded_base_takes_any_exponent():
+    import mpmath as mp
+
+    answer = run(graph(inp("x", "2"), op("s", "sqrt", "x"), inp("n", "2000"), op("p", "pow", "s", "n")))
+    p = answer["result"]
+    assert p["value"].startswith("1.0715086071862673209484250") and p["value"].endswith("e+301")
+    assert p["rounded"]["digits"] == 30
+    mp.mp.dps = 80
+    assert abs(mp.mpf(p["value"]) - mp.mpf(2) ** 1000) <= mp.mpf(p["rounded"]["error_at_most"]), "the bound holds"
+    pi_big = run(graph(op("pi", "pi"), inp("n", "10000"), op("p", "pow", "pi", "n")))["result"]
+    assert pi_big["value"].endswith("e+4971")
+    too_far = stopped(graph(inp("x", "2"), op("s", "sqrt", "x"), inp("n", "1000000"), op("p", "pow", "s", "n")))
+    assert too_far["limit"]["name"] == "max_digits", "a rounded value of about 1e+150515 is sized first and stopped"
+
+
+def test_a_power_past_the_budget_in_a_record_comes_back_not_yet_computed():
+    from flo2_calc import record as R
+
+    g = read_graph(graph(inp("b", "2", "base"), inp("n", "100000", "exponent"), op("p", "pow", "b", "n")))
+    ev = evaluate(g, L.Guard())
+    assert ev.stopped, "exceeds_limits, never too_large"
+    pending = R.build_pending(g, "big-power", None, ev.refusal, L.LAPTOP)
+    assert pending["status"] == "not_computed" and pending["stopped"]["limit"]["needed_at_least"] == 30_103
+    done = evaluate(read_graph(pending["graph"]), L.Guard(L.Limits(max_digits=40_000)))
+    assert done.ok and str(done.values["p"].magnitude) == str(2**100000)
 
 
 @pytest.mark.parametrize("base, n", [("2", 997), ("3", 999), ("1/7", 1000), ("123456789", 977), ("99999/100000", 951), ("12345678901234567890", -999)])

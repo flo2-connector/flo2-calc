@@ -58,7 +58,7 @@ def validator():
 def test_a_record_holds_what_a_decision_needs():
     rec = make(supports={"design_node": "dec:fiber-route"})
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 6
+    assert rec["schema_version"] == 7
     assert rec["status"] == "computed"
     assert "stopped" not in rec and "limits_in_force" not in rec, "a computed record carries no host limits"
     assert rec["graph"] == FIBER
@@ -182,7 +182,7 @@ def test_a_record_whose_input_was_edited_and_hash_recomputed_is_still_caught():
 
 def test_a_record_from_a_newer_schema_is_refused_by_name():
     rec = make()
-    rec["schema_version"] = 7
+    rec["schema_version"] = R.SCHEMA_VERSION + 1
     with pytest.raises(CallError) as caught:
         R.load(rec)
     assert caught.value.path == "record.schema_version"
@@ -253,7 +253,8 @@ def test_the_operators_of_round_2_are_in_the_record_with_their_fields():
     assert R.rerun(rec)["reproduces"] is True
 
 
-@pytest.mark.parametrize("name", ["display.v3.calc.json", "battery.v1.calc.json", "fiber-bend-margin.v1.calc.json", "stage-gain.v2.calc.json"])
+@pytest.mark.parametrize("name", ["display.v3.calc.json", "battery.v1.calc.json", "fiber-bend-margin.v1.calc.json", "stage-gain.v2.calc.json",
+                                  "temperature-and-formula.v6.calc.json"])
 def test_records_made_by_earlier_versions_still_reproduce_under_their_own_writing(name):
     """display.v3.calc.json was made by flo2-calc 0.4.0 with every value whose
     writing 0.5.0 changes: a compound unit 0.5.0 shows simpler (mAh/mA, V/mA,
@@ -285,3 +286,60 @@ def test_the_same_graph_made_now_is_written_the_new_way():
     assert values["root"]["value"].endswith("078570")
     assert values["pct"] == {"node": "pct", "value": "0.9", "simplified_from": "mm/m"}
     assert values["growth"] == {"node": "growth", "value": "0.001105 um", "simplified_from": "um^2/m"}
+
+
+# ---------------------------------------------------------------- version 7 (flo2-calc 0.7.0, round 3)
+
+
+def test_a_version_6_record_re_runs_under_the_rules_and_writing_it_was_made_with():
+    """temperature-and-formula.v6.calc.json was made by flo2-calc 0.6.1 with
+    every path 0.7.0 changes: a change converted to K, K minus a temperature
+    and a product in K (each a bare K then, delta_K now), an array of changes
+    converted to K, and a formula line that is not a result's (no value then,
+    its value now). Re-run, it reproduces byte for byte."""
+    rec = json.loads((DATA / "temperature-and-formula.v6.calc.json").read_text())
+    assert rec["schema_version"] == 6 and rec["produced_by"]["flo2_calc"] == "0.6.1"
+    values = {v["node"]: v["value"] for v in rec["values"]}
+    assert values["rise_k"] == "10 K" and values["diff"] == "1.85 K" and values["dt"] == "10 K"
+    assert {f["node"]: f["text"] for f in rec["formula"]}["dt"] == "dt = rth * p"
+    answer = R.rerun(R.load(rec))
+    assert answer["reproduces"] is True, answer["differences"]
+
+
+def test_the_same_graph_recorded_now_writes_delta_k_and_every_line_s_value():
+    old = json.loads((DATA / "temperature-and-formula.v6.calc.json").read_text())
+    now = make(old["graph"], old["name"], old["supports"])
+    assert now["schema_version"] == 7
+    validator().validate(now)
+    values = {v["node"]: v for v in now["values"]}
+    assert values["rise_k"]["value"] == "10 delta_K" and values["diff"]["value"] == "1.85 delta_K"
+    assert values["dt"]["value"] == "10 delta_K" and values["total"]["value"] == "40 delta_K"
+    assert values["rises_k"]["array"]["unit"] == "delta_K"
+    lines = {f["node"]: f["text"] for f in now["formula"]}
+    assert lines["dt"] == "dt = rth * p = 10 delta_K"
+    assert R.rerun(now)["reproduces"] is True
+
+
+def test_round_3_operators_are_in_a_version_7_record_and_re_run():
+    g = graph(
+        inp("n", "5", "five frames"), inp("k", "2", "rule: more than 2"), inp("p", "0.8", "per-frame detection"),
+        op("c", "choose", "n", "k"), op("f", "factorial", "n"), op("pmf", "binomial_pmf", "k", "n", "p"),
+        op("cdf", "binomial_cdf", "k", "n", "p"), op("sf", "binomial_sf", "k", "n", "p"),
+        inp("flags", {"array": [True, False, True, True, False]}, "detections"), op("ones", "to_number", "flags"),
+        op("count", "length", "flags"), inp("big", "2", "base"), inp("e", "1001", "exponent"), op("pw", "pow", "big", "e"),
+        result=["c", "f", "pmf", "cdf", "sf", "ones", "count", "pw"],
+    )
+    rec = make(g, "round-3-operators")
+    validator().validate(rec)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({**rec, "schema_version": 6}, R.schema(6))
+    results = {r["node"]: r["value"] for r in rec["results"]}
+    assert results["c"] == "10" and results["f"] == "120" and results["sf"] == "0.94208"
+    assert results["count"] == "5" and results["pw"] == str(2**1001)
+    assert R.rerun(rec)["reproduces"] is True
+
+
+def test_every_published_schema_is_kept_and_version_7_is_current():
+    assert R.SCHEMA_VERSION == 7 and sorted(R.SCHEMA_FILES) == [1, 2, 3, 4, 5, 6, 7]
+    assert R.schema(7)["properties"]["schema_version"] == {"const": 7}
+    assert R.schema(6)["properties"]["schema_version"] == {"const": 6}, "a released schema is never edited"

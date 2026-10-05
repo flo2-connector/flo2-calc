@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flo2-calc"
-version = "0.6.1"
+version = "0.7.0"
 description = "Exact math and logic for the decisions in a design, as an MCP server: units checked, results re-runnable, every computation kept as a record a decision can cite."
 readme = "README.md"
 requires-python = ">=3.12"

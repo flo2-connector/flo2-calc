@@ -37,6 +37,7 @@ build it as nodes, rather than read as a number and a strange unit.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from decimal import MAX_EMAX, MIN_EMIN, ROUND_HALF_EVEN, Context, Decimal
 from fractions import Fraction
 
@@ -59,8 +60,8 @@ ARITHMETIC_NOTE = (
     "value for these inputs is given beside it as a fraction. A computed value whose compound unit is exactly a "
     "simpler unit is shown in it (\"simplified_from\" names the unit it was computed in); the value does not "
     "change. Comparisons use exact values. A value marked \"rounded\" is NOT exact: it comes from pi, e, a root, "
-    "exp, ln, log10, a non-whole power, trigonometry, a deg-rad conversion, a decibel conversion or a distribution, "
-    "or from arithmetic on such a value. It is a decimal of the stated number of significant digits, every one "
+    "exp, ln, log10, a non-whole power (or a whole one asked for \"digits\" past the digits budget), trigonometry, a "
+    "deg-rad conversion, a decibel conversion or a distribution, or from arithmetic on such a value. It is a decimal of the stated number of significant digits, every one "
     "written, given no \"exact\" fraction, and \"error_at_most\" bounds its distance from the true value. Where it says "
     "\"correctly_rounded\", it is the true value rounded half-even, decided from a rigorous enclosure (Arb ball "
     "arithmetic, python-flint). A comparison, ceil, floor or round of a rounded value is answered only when its "
@@ -155,7 +156,8 @@ _TOKEN = re.compile(
 def malformed_at(text: str) -> str | None:
     """Where an expression is malformed, in words, or None when it is a
     well-formed one (a number, with a unit, is one operand; + and - may be a
-    sign)."""
+    sign). A value directly before "(", or a ")" directly before a number, is
+    an implied multiplication, not a malformation (`implied_readings`)."""
     want_operand = True
     last: tuple[str, int] | None = None  # the last operator, sign or bracket, and where
     last_kind: str | None = None
@@ -175,7 +177,8 @@ def malformed_at(text: str) -> str | None:
                 if kind == "word" and last_kind == "num":  # "4 mm": a number's unit
                     last_kind = "word"
                     continue
-                return f'two values stand side by side with no operator between them, at character {start}'
+                if not (kind == "num" and last_kind == "close"):  # "(1 + 2)3": an implied multiplication
+                    return f'two values stand side by side with no operator between them, at character {start}'
             want_operand, last_kind = False, kind
         elif kind == "op":
             if want_operand:
@@ -188,10 +191,9 @@ def malformed_at(text: str) -> str | None:
                     return f'there is nothing between "(" at character {last[1]} and "{tok}" at character {start}'
                 return f'there is no operand between "{last[0]}" at character {last[1]} and "{tok}" at character {start}'
             want_operand, last = True, (tok, start)
-        elif kind == "open":
-            if not want_operand:
-                return f'"(" at character {start} follows a value with no operator between them'
+        elif kind == "open":  # after a value: an implied multiplication
             opened.append(start)
+            want_operand = True
             last = ("(", start)
         else:  # close
             if not opened:
@@ -211,10 +213,161 @@ def malformed_at(text: str) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------- an implied multiplication (round 3, q093)
+#
+# "6/2(1+2)" is not malformed: it is AMBIGUOUS. A value written directly
+# before "(" (or a ")" directly before a value or "(") is an implied
+# multiplication, and conventions differ on whether it binds tighter than "/"
+# (or "÷"): left to right it is (6 / 2) * (1 + 2) = 9; binding first it is
+# 6 / (2 * (1 + 2)) = 1. Round 3 found the round-2 refusal calling it
+# "malformed" and telling the agent not to repair it, which, obeyed, drops the
+# two readings the person needs. Both readings are given, neither is chosen.
+
+_IMPLIED = "implied"
+_PREC = {"+": 10, "-": 10, "*": 20, "/": 20, "^": 40}
+_UNARY = 30
+
+
+@dataclass(frozen=True)
+class _Node:
+    op: str | None  # None: a value; "neg"/"pos": a sign; else a binary operator ("implied" for an implied product)
+    text: str = ""
+    args: tuple["_Node", ...] = ()
+
+
+def _render(n: _Node, top: bool = True) -> str:
+    if n.op is None:
+        return n.text
+    if n.op in ("neg", "pos"):
+        return ("-" if n.op == "neg" else "+") + _render(n.args[0], False)
+    sym = "*" if n.op == _IMPLIED else n.op
+    inner = f"{_render(n.args[0], False)} {sym} {_render(n.args[1], False)}"
+    return inner if top else f"({inner})"
+
+
+def _has_implied(n: _Node) -> bool:
+    return n.op == _IMPLIED or any(_has_implied(a) for a in n.args)
+
+
+def _parse_readings(text: str, implied_prec: int) -> tuple[_Node, int] | None:
+    """The expression read with an implied multiplication of precedence
+    `implied_prec` (20: an ordinary "*", left to right; 25: binding before "*"
+    and "/"), and where (1-based) the first implied multiplication stands; None
+    when it does not read as one expression that way."""
+    toks: list[tuple[str, str, int]] = []
+    pos = 0
+    while pos < len(text):
+        m = _TOKEN.match(text, pos)
+        if m is None or m.end() == pos:
+            if text[pos:].strip() == "":
+                break
+            return None
+        kind = m.lastgroup
+        tok = m.group(kind)
+        toks.append((kind, {"×": "*", "÷": "/"}.get(tok, tok), m.start(kind) + 1))
+        pos = m.end()
+    i = 0
+    first_implied: list[int] = []
+
+    def peek() -> tuple[str, str, int] | None:
+        return toks[i] if i < len(toks) else None
+
+    def prefix() -> _Node:
+        nonlocal i
+        t = peek()
+        if t is None:
+            raise ValueError
+        kind, tok, _at = t
+        if kind == "num":
+            i += 1
+            text_ = tok
+            nxt = peek()
+            if nxt is not None and nxt[0] == "word":  # a number's unit
+                i += 1
+                text_ += " " + nxt[1]
+            return _Node(None, text_)
+        if kind == "open":
+            i += 1
+            inner = parse(0)
+            if peek() is None or peek()[0] != "close":  # type: ignore[index]
+                raise ValueError
+            i += 1
+            return inner if inner.op is not None or "(" in inner.text else _Node(None, inner.text)
+        if kind == "op" and tok in "+-":
+            i += 1
+            return _Node("neg" if tok == "-" else "pos", args=(parse(_UNARY),))
+        raise ValueError
+
+    def infix(prev_close: bool) -> tuple[str, int, int] | None:
+        t = peek()
+        if t is None:
+            return None
+        kind, tok, at = t
+        if kind == "op" and tok in _PREC:
+            return tok, _PREC[tok], at
+        if kind == "open" or (kind == "num" and prev_close):
+            return _IMPLIED, implied_prec, at
+        return None
+
+    def parse(min_prec: int) -> _Node:
+        nonlocal i
+        left = prefix()
+        while True:
+            prev_close = i > 0 and toks[i - 1][0] == "close"
+            found = infix(prev_close)
+            if found is None or found[1] < min_prec:
+                return left
+            op, prec, at = found
+            if op == _IMPLIED:
+                first_implied.append(at)
+            else:
+                i += 1
+            right = parse(prec if op == "^" else prec + 1)
+            left = _Node(op, args=(left, right))
+
+    try:
+        tree = parse(0)
+    except ValueError:
+        return None
+    if i != len(toks) or not first_implied:
+        return None
+    return tree, min(first_implied)
+
+
+def implied_readings(text: str) -> tuple[str, str, int] | None:
+    """For an expression with an implied multiplication: (its reading with the
+    implied product as an ordinary "*", left to right; its reading with the
+    implied product binding first; where the first implied product stands).
+    None when the text has none, or does not read as one expression with it."""
+    a = _parse_readings(text, 20)
+    b = _parse_readings(text, 25)
+    if a is None or b is None or not _has_implied(a[0]):
+        return None
+    return _render(a[0]), _render(b[0]), a[1]
+
+
 def expression_problem(raw: str) -> str:
     """The refusal of arithmetic typed inside a value. A malformed expression is
     called malformed, with where; it is never answered with an example built
-    from its own numbers, which would be a guess at what it meant."""
+    from its own numbers, which would be a guess at what it meant. An
+    AMBIGUOUS one (an implied multiplication whose readings differ) is called
+    ambiguous, with both readings, and neither is chosen."""
+    readings = implied_readings(raw.strip())
+    if readings is not None:
+        left_to_right, binding_first, at = readings
+        if left_to_right != binding_first:
+            return (
+                f'"{raw}" is ambiguous: it has an implied multiplication (a value written directly next to a bracket, '
+                f'at character {at}), and conventions differ on whether an implied multiplication binds tighter than '
+                f'"/". Taken as an ordinary "*", left to right, it reads {left_to_right}; binding first, it reads '
+                f"{binding_first}. flo2-calc does not choose between them, and neither should you: ask the person "
+                "which reading was meant, or build each reading as nodes and give both values, saying which is which. "
+                "A value is one number with an optional unit. " + NODE_SHAPE
+            )
+        return (
+            f'"{raw}" is an expression (with an implied multiplication, read {left_to_right}), and flo2-calc does not '
+            "read arithmetic inside a value: a value is one number with an optional unit. " + NODE_SHAPE
+        )
     where = malformed_at(raw.strip())
     if where is not None:
         return (

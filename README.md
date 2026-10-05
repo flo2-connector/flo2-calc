@@ -27,13 +27,16 @@ when a question set or a real design needs them, never for parity (`dec:idea-wha
   Units that measure different things are refused, naming the operation and both units, never stripped. A unit
   flo2-calc does not know is refused, never guessed, and a hint never offers a unit of another size or kind.
 - **Correct or refused.** A computation that cannot be done says which node, which operation and why. It never
-  returns a number it cannot stand behind.
+  returns a number it cannot stand behind. An ambiguous expression is given back with both readings, never one chosen.
+- **The agent reasons; flo2-calc calculates.** It never chooses an equation, and an empirical formula's constants come
+  from the person or a document they can check, never from the agent's memory: the served skill and the server's
+  instructions say so, because flo2-calc cannot tell where a number came from.
 - **Shown back.** Every reply and record shows the computation as a formula and as numbered steps, each in plain text
   with LaTeX beside it: `t = C / I = 450/13 h`. You can check it is the computation you meant.
 - **Re-runnable.** A computation comes back as a **computation record**, a `.calc.json` file a decision can cite.
   Anyone can re-run it and get the same values, and an edited record is caught.
 - **Never runs away.** Each host sets limits at start-up: a deadline per call, and a budget for the digits of any
-  exact number and for the reply. A calculation past one is stopped cleanly, with its reason. A recorded one comes
+  exact number and for the reply. They are the only limits. A calculation past one is stopped cleanly, with its reason. A recorded one comes
   back as a **not-yet-computed record** that flo2-calc on a machine with more room completes.
 
 It stands alone. Nothing in it imports, calls or assumes flo2, reflow2 or another helper, and no feature needs them.
@@ -141,6 +144,13 @@ Why each value:
 - **Arrays, 16 MiB on flo2.io.** A 256 x 256 grid's discretised integral and 2-D FFT hold about 7 MiB; the image's
   measured peak with them is 105 MiB under the 128m cap (Measurements, below).
 
+**These are the only limits on a calculation.** A power has no exponent cap of its own: flo2-calc 0.1.0 to 0.6.1
+also refused any whole exponent above 1000 (kind `too_large`), a cap none of the served limits named, which refused
+`2^1001` (302 digits) and gave `record_computation` no not-yet-computed record (round 3, q072 and q086). Since 0.7.0 a
+power is sized against the digits budget alone. How a graph may be written (at most 500 nodes, 100 arguments a
+node, 1,000 digits for a rounded value, 80 characters for a number) is part of the graph's form: a graph past it is a
+malformed call naming the field, not a stopped calculation.
+
 The image sets flo2.io's profile (`ENV` in the `Dockerfile`). Run elsewhere, pass your own, for example
 `docker run -e FLO2_CALC_MAX_DIGITS=20000 ...`. A workstation raises them all. A setting flo2-calc cannot use, such as
 `--max-digits 5`, stops it at start-up with the reason, and is never silently replaced. The limits in force are in
@@ -153,8 +163,13 @@ How they are kept (`src/flo2_calc/limits.py`):
   one too large for the host is never allocated. Every input, partial sum, partial product and value is held to the digits budget. The reply is measured
   as it is written, so a reply too large to send is never built whole.
 - **A power is sized BEFORE it is computed.** A huge power stalls inside a single Python operation, which nothing can
-  interrupt. For example, a 20,000-digit number to the power 1000 takes about 44 s on one CPU. flo2-calc bounds
-  the power's size from its operands first, and refuses one that would pass the budget, at once.
+  interrupt. For example, a 20,000-digit number to the power 1000 takes about 44 s on one CPU. flo2-calc counts the
+  power's digits from its operands first (exactly, `floor(n log10 b) + 1`, decided by Arb), and refuses one that would
+  pass the budget, at once, saying how many digits it would have: `2^(10^9)` would have 301,029,996, more than any
+  host can be set to carry. Where the exact power passes the budget, a `pow` node given `"digits"` returns its
+  correctly rounded value instead (`(1 - 1e-6)^(10^6)`, whose exact numerator has 6,000,000 digits, is
+  `0.367879257231645094285798125270`), and the refusal says so when that value would fit. A whole power of a rounded
+  base takes any exponent, sized from the value it will have.
 - **The refusal** is a normal reply, never `isError`. It has `kind: "exceeds_limits"` and names:
   - the limit, its value, and the least it would have needed when that is known (`needed_at_least`);
   - the setting that raises it;
@@ -167,8 +182,8 @@ How they are kept (`src/flo2_calc/limits.py`):
 
   ```json
   {"node": "z", "op": "pow", "kind": "exceeds_limits",
-   "reason": "pow at node \"z\": the power's numerator would have at least 19,999,167 digits, past this host's budget of 20,000 digits for any exact number, so it was not computed ...",
-   "limit": {"name": "max_digits", "value": 20000, "needed_at_least": 19999167, "setting": "--max-digits or FLO2_CALC_MAX_DIGITS"},
+   "reason": "pow at node \"z\": the power's numerator would have 20,000,000 digits, past this host's budget of 20,000 digits for any exact number, so it was not computed ...",
+   "limit": {"name": "max_digits", "value": 20000, "needed_at_least": 20000000, "setting": "--max-digits or FLO2_CALC_MAX_DIGITS"},
    "reached": {"nodes_done": 4, "nodes": 5, "largest_digits": 20000, "elapsed": "0.002 s"},
    "limits": {"deadline": "45 s", "max_digits": 20000, "max_reply_bytes": 8388608}}
   ```
@@ -207,7 +222,11 @@ the same graph, and gives the same result, as the same nodes sent whole.
   A **malformed** one (`"3 + * 4"`, `"(3 + 4"`, `"2 1/2"`) is called malformed, with where (`no operand between "+"
   at character 3 and "*" at character 5`), and the agent is told not to repair it but to ask what was meant. The
   refusal's example has no number and no operator of the input's own: round 2 found the old example, `3` and `4`
-  joined by `add`, was the very guess forbidden for `"3 + * 4"`.
+  joined by `add`, was the very guess forbidden for `"3 + * 4"`. An **ambiguous** one is not malformed: an implied
+  multiplication (`"6/2(1+2)"`: a value written directly next to a bracket) reads one way if it is an ordinary `*`
+  taken left to right, `(6 / 2) * (1 + 2)`, and another if it binds first, `6 / (2 * (1 + 2))`. The refusal says it is
+  ambiguous, gives both readings, chooses neither, and asks for the person's reading or both values as nodes (round 3
+  found 0.6.1 calling it malformed, which, obeyed, dropped the two readings).
 - **Its `source`** says where the value came from: free text, or `{"design_node": "<id>"}` naming a node in a reflow2
   design (add `"design": "<id>"` for another design). flo2-calc records it and never resolves it. A record needs a
   source on every input.
@@ -226,14 +245,17 @@ the same graph, and gives the same result, as the same nodes sent whole.
 | constants | `pi`, `e` (no `args`) |
 | trigonometry | `sin`, `cos`, `tan` (of an angle in `deg` or `rad`); `asin`, `acos`, `atan`, `atan2` (with `"unit"`: `"deg"` or `"rad"`, the unit of the angle they give) |
 | rounding | `ceil`, `floor`, `round` (with `"places"`, and for `round` a `"mode"`) |
-| statistics | `normal_cdf`, `normal_sf`, `normal_quantile`, `chi2_sf`, `t_quantile` |
+| statistics | `normal_cdf`, `normal_sf`, `normal_quantile`, `chi2_sf`, `t_quantile`, `binomial_pmf`, `binomial_cdf`, `binomial_sf` |
 | logic | `and`, `or`, `not`, `nand`, `nor`, `xor` |
 | comparison | `eq`, `ne`, `lt`, `le`, `gt`, `ge` |
-| counting | `count_true`, `k_of_n` |
+| counting | `count_true`, `k_of_n`, `to_number` |
+| combinatorics | `choose`, `factorial` |
 | units | `magnitude` (with `"unit"`), `with_unit` (with `"unit"` and `"source"`) |
 | decibels | `db_to_ratio`, `ratio_to_db` (each with `"kind"`: `"power"` or `"amplitude"`) |
 
-- **`pow`** is exact for a whole exponent, as before. A non-whole exponent (`"1/3"`, `"0.44"`) needs a base of 0 or
+- **`pow`** is exact for a whole exponent of any size, sized first against the digits budget (Limits); with `"digits"`
+  a whole power past the budget is correctly rounded instead, and a whole power of a rounded base is rounded with its
+  bound. A non-whole exponent (`"1/3"`, `"2.5"`) needs a base of 0 or
   more and gives a rounded value, unless the result is rational: `27` to the `1/3` is exactly `3`. A unit survives only
   an exact root: `9 m^2` to the `1/2` is `3 m`, and `2 m` to the `0.5` is refused.
 - **`sqrt`** takes a value of 0 or more. `m^2` gives `m`, and `m/s` squared gives `m/s`. A unit with no exact square
@@ -259,16 +281,31 @@ the same graph, and gives the same result, as the same nodes sent whole.
   - `chi2_sf` takes `[x, dof]`: the upper tail, a chi-square test's p-value.
   - `t_quantile` takes `[p, dof]`: the Student-t critical value.
   - Degrees of freedom are an exact plain number above 0; a rounded one is refused.
+  - `binomial_pmf`, `binomial_cdf` and `binomial_sf` take `[k, n, p]`: P(X = k), P(X <= k) and P(X > k) for n
+    independent trials of probability p. "At least 3 of 5" is `binomial_sf` with k = 2. `k` and `n` are exact whole
+    numbers, `p` a plain number from 0 to 1. Exact for an exact `p` (`binomial_sf(2, 5, 0.8)` is `0.94208`); from a
+    rounded `p`, rounded with a bound from the polynomial's values over `p`'s ball. Whether the trials are independent
+    with one `p` is the agent's judgement.
 - **`digits`**: any rounded operator may take `"digits"`, from 1 to 1000 significant digits; 30 when left out.
 - **`count_true`** counts the true values among its arguments: an exact whole number. **`k_of_n`** takes `[k, b1, b2,
   ...]` and is true when at least `k` of the `b` are true (`k` an exact whole number from 0 to their count). `add` still
-  refuses true/false: booleans never add as numbers.
-- **Units for an empirical formula.** A formula such as IPC-2221's trace current, `I = k dT^0.44 A^0.725` with `I` in
-  A, `dT` in delta_degC and `A` in mil^2, works on numbers taken in stated units. `magnitude` takes a quantity's number
-  in a named unit (`2 A` in `"mA"` is `2000`), refused unless the quantity measures what that unit measures, so `2000`
-  is never read as amperes. `with_unit` puts a stated unit on a plain number (`"unit": "mil^2"`), and must say in
-  `"source"` where that unit comes from (`"IPC-2221: A in mil^2"`), because flo2-calc cannot check it. Both are kept
-  in the graph and the record, so a typed `1 mm^2` can no longer stand in for the unit.
+  refuses true/false: booleans never add as numbers. **`to_number`** is the one way a true/false value becomes a
+  number: true is `1`, false is `0` (element by element for a true/false array).
+- **`choose`** (`[n, k]`, the binomial coefficient, `0` when `k > n`) and **`factorial`** (`[n]`) are exact, on exact
+  whole numbers of 0 or more, and sized before they are computed.
+- **Units for an empirical formula.** An empirical relation (a datasheet's curve fit, a standard's sizing rule) works on
+  numbers taken in stated units. `magnitude` takes a quantity's number in a named unit (`2 A` in `"mA"` is `2000`),
+  refused unless the quantity measures what that unit measures, so `2000` is never read as amperes. `with_unit` puts a
+  stated unit on a plain number (`"unit": "mm^2"`), and must say in `"source"` which document states that unit,
+  because flo2-calc cannot check it. Both are kept in the graph and the record, so a typed `1 mm^2` can no longer
+  stand in for the unit.
+- **An empirical formula's constants come from the person or a cited document, never from the agent's memory.** The
+  served skill and the server's instructions say so: compute such a formula only when the formula and every constant
+  were given, each constant an input whose `source` says where (`"given by the person"`, or the document, edition and
+  clause); when a named standard's result is asked for without them, ask for them, or name the document and edition
+  and have the person confirm before calculating. flo2-calc cannot tell where a number came from, so this is the
+  guard. Round 3 (held-out q077) found an agent computing an IPC-2221 trace width from four constants it recalled,
+  following the skill's example of round 2, which was written from a question where the constants were given.
 - **Decibels.** `db_to_ratio` turns a gain in dB into a plain ratio, and `ratio_to_db` a plain ratio above 0 into dB.
   Each must be told `"kind"`: `"power"` (10 log10) or `"amplitude"` (20 log10). There is no default, because the same
   10 dB is a power ratio of 10 and an amplitude ratio of about 3.16. Both are rounded, and exact where the result is a
@@ -281,13 +318,13 @@ Spelled as reflow2 spells them, one spelling each. The vocabulary is in `src/flo
 | Measures | Units |
 |---|---|
 | length | `m` `km` `cm` `mm` `um` `nm` `in` `ft` `mil` (a thousandth of an inch), `furlong` (660 ft, exactly 201.168 m) |
-| mass | `kg` `g` `mg` `ug` `t` `ct` `lb` `oz` |
-| time | `s` `ms` `us` `ns` `min` `h` `d` `fortnight` (14 d) |
+| mass | `kg` `g` `mg` `ug` `t` `ct` `lb` `oz` (the avoirdupois ounce), `ozt` (the troy ounce, exactly 31.1034768 g), `dwt` (the pennyweight, 1/20 ozt), `grain` (exactly 64.79891 mg) |
+| time | `s` `ms` `us` `ns` `min` `h` `d` `week` (7 d) `fortnight` (14 d) |
 | electrical | `A` `kA` `mA` `uA` `nA` `pA`, `V` `kV` `mV` `uV`, `ohm` `mohm` `kohm` `Mohm`, `farad` `mF` `uF` `nF` `pF`, `H` `mH` `uH`, `coulomb` `Ah` `mAh` |
 | power, energy | `W` `MW` `kW` `mW` `uW`, `J` `kJ` `MJ` `mJ` `uJ` `Wh` `mWh` `kWh` `MWh` `eV` |
 | frequency, force | `Hz` `mHz` `kHz` `MHz` `GHz`, `N` `kN` `lbf` |
 | pressure | `Pa` `mPa` `kPa` `MPa` `GPa` `bar` `psi` `ksi` |
-| temperature | `K`, `degC` `degF` (a temperature), `delta_degC` `delta_degF` (a change of temperature) |
+| temperature | `K`, `degC` `degF` (a temperature), `delta_degC` `delta_degF` `delta_K` (a change of temperature) |
 | volume | `L` `mL`, `gal_us` (231 in^3, exactly 3.785411784 L), `gal_imp` (exactly 4.54609 L) |
 | angle | `deg` `arcmin` `arcsec`, `rad` |
 | money | `USD` `EUR` `JPY` `GBP` `CNY` `AUD` `CAD` `CHF` `HKD` `SGD` |
@@ -302,7 +339,10 @@ Spelled as reflow2 spells them, one spelling each. The vocabulary is in `src/flo
 - **Refused:**
   - units that measure different things (`2 mm + 3 g`);
   - a unit against a plain number (`2 mm + 3`);
-  - an unknown spelling, never guessed. A bare `gal` is two units, and the refusal names both.
+  - an unknown spelling, never guessed. A bare `gal` is two units, and the refusal names both; so is a bare `gr`
+    (the grain, or the gram). A spelling pint reads but flo2-calc does not carry (`mile`, `hp`) is named for what
+    pint reads it as, with the units of that kind flo2-calc knows; nothing is substituted and no factor is offered
+    (round 3: `ozt` got no hint, and the agent typed 31.1034768 g).
 - **Angles** are their own dimension, so `30 deg + 1` is refused. `arcmin` and `arcsec` are exact fractions of a
   `deg` (1/60 and 1/3600). `deg` and `rad` are never mixed in one operation, because their ratio is pi/180, which no
   fraction holds exactly. `convert` turns one into the other (and `arcmin` or `arcsec` into `rad`, through `deg`) as a
@@ -370,20 +410,25 @@ bare `C` or `F` no longer re-runs: `rerun_record` says the unit cannot be read n
 #### Temperatures
 
 `K`, `degC` and `degF`. A value whose whole unit is `degC` or `degF` is a **temperature**: a reading on a scale whose
-zero is not zero temperature. A **change** of temperature is `delta_degC`, `delta_degF`, or a degree inside a compound
-unit (`2.5 degC/W` is `2.5 K/W`). A value in `K` can be either, so each rule says which it is, and where both are
-possible the operation is refused:
+zero is not zero temperature. A **change** of temperature is `delta_degC`, `delta_degF`, `delta_K`, or a degree inside
+a compound unit (`2.5 degC/W` is `2.5 K/W`). A value in `K` can be either, so each rule says which it is, and where
+both are possible the operation is refused. A `K` KNOWN to be a change is written `delta_K` (exactly the size of `K`),
+so it is never read as a temperature: a change converted to `K` (`18 delta_degF` is `10 delta_K`), a product that
+comes out in `K` through a compound unit (`2.5 K/W * 4 W` is `10 delta_K`), and `K` minus a temperature. Round 3
+(q036) found 0.6.1 giving a bare `10 K` for `18 delta_degF`, which then converted to `-263.15 degC`.
 
 | Operation | Rule |
 |---|---|
-| `convert` | A temperature converts exactly between `degC`, `degF` and `K` (`36.6 degC` is `309.75 K`; `98.6 degF` is `37 degC`). A temperature is never turned into a change, nor a change into a temperature. |
+| `convert` | A temperature converts exactly between `degC`, `degF` and `K` (`36.6 degC` is `309.75 K`; `98.6 degF` is `37 degC`). A temperature is never turned into a change, nor a change into a temperature: a change converted to `K` is `delta_K`, and `delta_K` (or any change) converted to `degC` or `degF` is refused, naming `delta_degC` or `delta_degF`. |
 | `add` | At most one temperature. Everything added to it is a change (`delta_degC`, `delta_degF` or `K`), and the sum is a temperature on its scale: `25 degC + 5 K` is `30 degC`. Two temperatures are refused: their sum means nothing. |
-| `sub` | Temperature minus temperature is a change: `30 degC - 77 degF` is `5 delta_degC`. Temperature minus `delta_degC` or `delta_degF` is a temperature. **Temperature minus `K` is refused**: `5 K` could be a change or a temperature, and the answers differ. `K` minus a temperature is a change, in `K`. |
+| `sub` | Temperature minus temperature is a change: `30 degC - 77 degF` is `5 delta_degC`. Temperature minus `delta_degC`, `delta_degF` or `delta_K` is a temperature. **Temperature minus `K` is refused**: `5 K` could be a change or a temperature, and the answers differ. `K` minus a temperature is a change, `delta_K`. |
 | `eq` `ne` `lt` `le` `gt` `ge` `min` `max` | Temperatures, and `K` as a temperature, are compared exactly on one scale. `min` and `max` answer in the first one's unit. A temperature is never compared with a change. |
 | `mul` `div` `pow` `neg` `abs` | Refused on a temperature in `degC` or `degF`. Convert it to `K` first, or work with a change. |
 
 A product that comes out in degrees is a change: `1.2 W * 23.25 degC/W` is `27.9 delta_degC`, and adding it to
-`40 degC` gives `67.9 degC`. A temperature refusal is of kind `offset_temperature`. `°C`, `℃`, `°F` and `℉` are
+`40 degC` gives `67.9 degC`; `1.2 W * 23.25 K/W` is `27.9 delta_K`, the same change. A `K` typed as an input, or a
+`K` scaled by a plain number, is still read by where it stands (`20 degC + 10 K` is `30 degC`, round 3's q096). A
+record of version 6 or older was made before `delta_K`, and re-runs under the rules it was made with. A temperature refusal is of kind `offset_temperature`. `°C`, `℃`, `°F` and `℉` are
 hinted to `degC` and `degF`.
 
 #### Money
@@ -438,7 +483,8 @@ The rule, deterministic and applied in this order (`units.simplify`):
    the number does not change: `mAh/mA` is `h`, `V/mA` is `kohm`, `V*mA` is `mW`, `kPa*m^2` is `kN`, `uF*V^2` is `uJ`,
    `N*s^2/m` is `kg`. No two units of the vocabulary share a size, so this never has to choose.
 3. Otherwise, a compound that measures what one of its own spellings measures is shown in the first such spelling:
-   `um^2/m` (a length) in `um`. A degree inside a compound is a change of temperature, so it is shown as `delta_degC`.
+   `um^2/m` (a length) in `um`. A degree inside a compound is a change of temperature, so it is shown as `delta_degC`
+   (and a kelvin as `delta_K`).
 4. Otherwise it is shown as it is: `m/s`, `J/kg`, `lbf*ft`.
 
 A temperature reading and `%` are never chosen. A unit the graph chose itself is never re-chosen: an input's, a
@@ -502,8 +548,10 @@ plain text, with LaTeX beside it.
 
 **The formula** is one equation per named node: every result, and every operation that is not folded into the one
 that uses it. An operation used once, not a result, and at most 80 characters long is folded in, so a small graph reads
-as one equation and a large one as named sub-expressions. A result's line ends with its value: `=` for an exact value
-(its exact fraction where its decimal does not end), `≈` for a rounded one.
+as one equation and a large one as named sub-expressions. **Every line ends with its value**, as every step of the
+working does: `=` for an exact value (its exact fraction where its decimal does not end), `≈` for a rounded or float64
+one, an array by its description (round 3 found 17 answers whose intermediate lines, `t_raw = C / I_avg`, carried
+none). A record of version 4 to 6 ended only a result's line with its value, and re-runs that way.
 
 **The working** is every node as a numbered step, in evaluation order: an input as given; an operation with its
 arguments by name, then with their values written in, then its value; and its label (`given`, `exact`, or `rounded:`
@@ -568,14 +616,16 @@ data:
 
 | Family | Operators |
 |---|---|
-| reductions | `sum`, `product` (plain arrays), `mean`, `min` and `max` (with one array), `count_true`, `any`, `all`: each with `"axis"` 0 (down each column) or 1 (along each row) for a grid; `argmin`, `argmax` (1-D) |
+| reductions | `sum`, `product` (plain arrays), `mean`, `min` and `max` (with one array), `count_true`, `any`, `all`: each with `"axis"` 0 (down each column) or 1 (along each row) for a grid; `argmin`, `argmax` (1-D); `length`, the number of elements, exact (with `"axis"` 0, each column's length, the rows; with 1, each row's), so n comes from the data, never a typed count (round 3, q070) |
 | statistics over data | `variance_sample`, `variance_population`, `sd_sample`, `sd_population` (1-D; sample divides by n - 1, population by n: named, never a default); `fit_slope`, `fit_intercept`, `fit_slope_se`, `fit_intercept_se`, `fit_residual_se` (args `[x, y]`: least squares y = intercept + slope x, and s = sqrt(SSR / (n - 2))) |
 | transforms | `fft`, `ifft` (1-D), `fft2`, `ifft2` (2-D), numpy's convention: no scaling forward, 1/n back |
 | complex values | `abs` (the modulus), `phase` (with `"unit"`: `"deg"` or `"rad"`), `real`, `imag`, `conj` |
 | making and shaping arrays | `linspace` (`[start, stop, count]`, both ends included), `column` (1-D to n x 1), `transpose`, `element` (`[array, i]` or `[array, row, col]`, from 0) |
 
 A function over an array (`sqrt`, `exp`, `ln`, `sin`, the distributions ...) works element by element, and a
-`count_true` of several true/false values counts them.
+`count_true` of several true/false values counts them. `to_number` turns a true/false array into an exact array of 1
+and 0. `choose`, `factorial` and the binomial work element by element on exact arrays, by the rules for one value; a
+float64 argument is refused.
 
 **Exact or float64, and labelled.**
 
@@ -687,8 +737,12 @@ flo2's helper contract fixes the split.
 ## The computation record
 
 One JSON object, defined by
-[`src/flo2_calc/schemas/calc-record-6.schema.json`](src/flo2_calc/schemas/calc-record-6.schema.json) (JSON Schema
-draft 2020-12). Version 6 (0.6.1) adds `max_exact_elements` to a record that holds an array (the host's exact-array
+[`src/flo2_calc/schemas/calc-record-7.schema.json`](src/flo2_calc/schemas/calc-record-7.schema.json) (JSON Schema
+draft 2020-12). Version 7 (0.7.0, round 3) ends every line of `formula` with its value, allows round 3's operators
+(`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`), and writes a `K` known to
+be a change of temperature as `delta_K`. A record of version 6 or older re-runs under the writing and the rules it was
+made with (`tests/data/temperature-and-formula.v6.calc.json`, made by 0.6.1, holds every path 0.7.0 changes and
+reproduces byte for byte). Version 6 (0.6.1) added `max_exact_elements` to a record that holds an array (the host's exact-array
 limit it was made with, which re-running uses), and to a host's limits. Version 5 (0.6.0) added arrays: an inline array or a data file's path and sha256 as an input's value,
 the `array` and `float64` labels on values, the array operators and `axis`, `numpy` in `produced_by`, and
 `max_array_bytes` among a host's limits. Versions 1 to 3 ([`calc-record-1.schema.json`](src/flo2_calc/schemas/calc-record-1.schema.json),
@@ -708,7 +762,7 @@ version.
 
 | Field | Holds |
 |---|---|
-| `record_format`, `schema_version` | `"flo2-calc computation record"`, `6` |
+| `record_format`, `schema_version` | `"flo2-calc computation record"`, `7` |
 | `max_exact_elements` | a record that holds an array: the most elements an exact array had where it was made; re-running uses it |
 | `status` | `"computed"`, or `"not_computed"` (below) |
 | `name` | the record's name; its file is `<name>.calc.json` |
@@ -718,7 +772,7 @@ version.
 | `inputs` | each input's `id`, `value`, `unit` and `source` (free text or `{"design_node"}`) |
 | `values` | every node's value, in evaluation order, with `"exact"` (the exact value for these inputs) beside an exact value whose text is rounded, or the `"rounded"` label on a rounded value: which values were rounded, and at what precision; `"simplified_from"` where a computed unit is shown simpler; `"array"` (shape, kind, unit, sha256, the elements up to 1,024) on an array, `"float64"` (error_at_most, how, from) on a float64 value |
 | `result` | `{"node", "value"}`, labelled the same way; or `results`, one each, when the graph names a list |
-| `formula` | the computation as equations, plain text with LaTeX beside it |
+| `formula` | the computation as equations, plain text with LaTeX beside it, every line ending with its value |
 | `working` | every step, numbered, with its formula, value and label |
 | `produced_by` | `{"flo2_calc", "pint", "python_flint", "numpy"}` versions |
 | `content_hash` | `sha256:` over the canonical JSON (keys sorted, no spaces, UTF-8) of every other field |
@@ -823,7 +877,9 @@ flo2-tool-sandbox's flags:
 | Time for the whole session, one CPU, cold start included | 74 s under 128m and under 256m (the 1,000-digit rounded graphs take about 8 s a call; t_quantile is most of it) |
 | Image size | 278 MB (`python:3.12-slim` and the venv; python-flint adds about 26 MB, numpy about 69 MB) |
 
-Measured on 2026-10-04 with flo2-calc 0.6.0. 0.5.0 peaked at 91.3 MiB and 0.4.0 at 78.2 MiB in their 27-call sessions; numpy, loaded and
+Measured on 2026-10-04 with flo2-calc 0.6.0. 0.7.0 (round 3's fixes) ran the same 34-call session under the 128 MiB
+cap the same day and peaked at 100.2 MiB, every runaway call stopped at its limit and the container alive after: its
+changes (new operators, the formula's values, delta_K) cost no measurable memory. 0.5.0 peaked at 91.3 MiB and 0.4.0 at 78.2 MiB in their 27-call sessions; numpy, loaded and
 working on the arrays above, costs about 14 MiB more than 0.5.0. A cap of **128m** is still above the peak, with 22 MiB to spare,
 and the array budget (16 MiB in the image) keeps a call's arrays inside it. CI runs the image under 128m, and asks it
 every limit's questions there (`tests/test_limits.py`, `tests/test_pending_record.py`) and the arrays' questions
@@ -845,12 +901,14 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
   holds every step, and a shown working that no longer follows from its graph does not reproduce.
 - `tests/test_unit_hints.py`: every SI prefix with every unit symbol, in every case, through the hint. No hint may
   change a size, a kind or a typed prefix. It also holds round 1's list, one by one.
-- `tests/test_temperature.py`: `degC` and `degF`, converted exactly; a difference of temperatures stays correct.
+- `tests/test_temperature.py`: `degC` and `degF`, converted exactly; a difference of temperatures stays correct, and
+  stays a difference through `convert`, products and subtraction (`delta_K`), on every path, single values and arrays.
 - `tests/test_rounded.py`, with `tests/oracle.py`: every rounded operator against mpmath at 120 digits, on hard cases
   next to a rounding tie, both sides; exact results that stay exact; the unit rules and domains of every new operator;
   the labels in the record; and the limits.
 - `tests/test_record.py`: the record is deterministic and fits its schema; it re-runs; tampering is caught; several
-  results; records of versions 1 to 3 reproduce under their own writing.
+  results; records of versions 1 to 3 and 6 reproduce under their own writing (and version 6's under its own
+  temperature rules); round 3's operators in a version 7 record.
 - `tests/test_server.py`: the four tools over a real MCP client session. Every refusal's reason is read on the
   client's side. The served skill (prompt and resource) is read there too, and matches its file.
 - `tests/test_conformance.py`: flo2's helper contract, asked in raw JSON-RPC as flo2's plug asks it. It also holds
@@ -869,8 +927,9 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
   few nodes, a 256 x 256 grid's integral and 2-D FFT, a record re-run, the array budget, a data file.
 - `tests/test_standalone.py`: the server alone, with a clean environment. It checks the root's edges, and that the
   package imports nothing of flo2 or reflow2.
-- `tests/test_manifests.py`, `tests/test_dependency_currency.py`: both plugin formats, the skill, and the dependency
-  check.
+- `tests/test_manifests.py`, `tests/test_dependency_currency.py`: both plugin formats, the skill (and that it and the
+  server's instructions say an empirical formula's constants come from the person or a cited document, never memory),
+  and the dependency check.
 
 Set `FLO2_CALC_SERVER` to a command line, such as a confined `docker run` of the image, to ask the image the
 conformance, server, limit and not-yet-computed questions instead (CI's `image` job does).
@@ -906,7 +965,7 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    per record. **0.5.0 also offers an MCP prompt and a resource** (the skill, `initialize` now lists `prompts` and
    `resources` beside `tools`). They are not tools, so the door's allow-list of four is untouched; the door may ignore
    them, since hosted on flo2.io the skill is served by flo2 itself. The image's size is unchanged (209 MB), and its
-   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`.
+   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`. 0.7.0 (round 3's fixes) changes the skill's text again (an empirical formula's constants come from the person or a cited document, never the agent's memory; ambiguous expressions; troy weight; the new operators) and the server's instructions; adds `op` values inside a graph (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`) and the units `ozt`, `dwt`, `grain`, `week` and `delta_K`; and makes the record schema version 7. The four tools, their classes and their top-level arguments are unchanged; the image's limits are unchanged.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.

@@ -243,7 +243,7 @@ def test_rounded_values_reach_the_agent_labelled_and_a_decided_comparison_is_ans
 def test_a_record_with_rounded_values_is_made_and_re_runs_over_the_client():
     made, = anyio.run(calls, [("record_computation", {"graph": ROUNDED, "name": "ci-half-width"})])
     rec = json.loads(made.content[1].resource.text)
-    assert rec["schema_version"] == 6 and rec["produced_by"]["python_flint"] and rec["produced_by"]["numpy"]
+    assert rec["schema_version"] == 7 and rec["produced_by"]["python_flint"] and rec["produced_by"]["numpy"]
     assert {v["node"] for v in rec["values"] if "rounded" in v} == {"sd", "t", "half", "rad", "s", "pi"}
     again, = anyio.run(calls, [("rerun_record", {"record": made.content[1].resource.text})])
     assert json.loads(text_of(again))["reproduces"] is True
@@ -334,3 +334,38 @@ def test_several_results_come_back_by_name_over_the_client():
 def test_a_decibel_conversion_without_its_kind_reaches_the_agent_as_a_malformed_call():
     reason = reason_of(one("evaluate_graph", {"graph": graph(inp("g", "6 dB"), op("r", "db_to_ratio", "g"))}))
     assert reason.startswith("Malformed call. graph.nodes[1].kind:") and "never picks one" in reason
+
+
+# ---------------------------------------------------------------- round 3's fixes, over a real client session (and in the image)
+
+
+def test_round_3_reaches_the_agent_over_the_client():
+    """The two safety fixes and the rest, asked of the server as an agent asks
+    it: CI's image job asks the confined image the same."""
+    rise = graph(inp("rise", "18 delta_degF", "spec"), op("k", "convert", "rise", unit="K"))
+    onward = graph(*rise["nodes"], op("c", "convert", "k", unit="degC"))
+    vote = graph(inp("k", "2"), inp("n", "5"), inp("p", "0.8"), op("P", "binomial_sf", "k", "n", "p"))
+    power = graph(inp("b", "2"), inp("n", "1001"), op("p", "pow", "b", "n"))
+    data = graph(inp("x", {"array": ["12.1", "11.8", "12.4", "12.0", "11.9"], "unit": "mm"}), op("n", "length", "x"))
+    got = anyio.run(calls, [
+        ("evaluate_graph", {"graph": rise}), ("evaluate_graph", {"graph": onward}), ("evaluate_graph", {"graph": vote}),
+        ("evaluate_graph", {"graph": power}), ("evaluate_graph", {"graph": data}),
+        ("evaluate_graph", {"graph": graph(inp("a", "6/2(1+2)"))}), ("evaluate_graph", {"graph": graph(inp("w", "1.5 ozt"))}),
+        ("evaluate_graph", {"graph": graph(inp("d", "2 mile"))}),
+    ])
+    assert answer_of(got[0])["result"]["value"] == "10 delta_K"
+    refused = answer_of(got[1])["refused"]
+    assert refused["kind"] == "offset_temperature" and "delta_degC" in refused["reason"]
+    assert answer_of(got[2])["result"]["value"] == "0.94208"
+    assert answer_of(got[3])["result"]["value"] == str(2**1001)
+    assert answer_of(got[4])["result"]["value"] == "5"
+    ambiguous = reason_of(got[5])
+    assert "is ambiguous" in ambiguous and "(6 / 2) * (1 + 2)" in ambiguous and "6 / (2 * (1 + 2))" in ambiguous
+    assert answer_of(got[6])["result"]["value"] == "1.5 ozt"
+    assert "pint reads it as mile" in reason_of(got[7]) and "substitutes nothing" in reason_of(got[7])
+
+
+def test_the_instructions_say_where_an_empirical_formulas_constants_come_from():
+    hello = anyio.run(_instructions)
+    assert "NEVER FROM YOUR MEMORY" in hello.instructions and "IPC-2221" in hello.instructions
+    assert "They are the only limits on a calculation" in hello.instructions

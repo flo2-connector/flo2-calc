@@ -14,7 +14,12 @@ THE DECISIONS THIS HOLDS (design 0bee0c00b35845f6):
     arcsec and the two gallons; degC and degF as temperatures with an offset;
   - dec:round-2-fixes: furlong and fortnight; dB as its own kind of value, and
     dBm and dBW as power levels (decibels.py); a computed value's compound unit
-    shown in a simpler unit of the same size where one exists (`simplify`).
+    shown in a simpler unit of the same size where one exists (`simplify`);
+  - round 3's fixes (flo2-calc 0.7.0): the troy ounce, pennyweight, grain and
+    week; delta_K, a change of temperature in kelvin, so that a change stays a
+    change through convert (`converted_unit`) and through a product; and an
+    unknown spelling that pint reads is named for what pint reads it as, with
+    the units of that kind flo2-calc carries, and nothing substituted.
 
 WHO DOES WHAT. The vocabulary below maps each spelling to a pint unit. pint,
 loaded with exact fractions, says what each unit measures (its dimension) and
@@ -37,7 +42,16 @@ DELIBERATE DEPARTURES FROM pint:
     is a temperature READING on a scale with an offset; temperature.py holds
     what may be done with one. Anywhere else (inside a compound unit such as
     degC/W, or as delta_degC and delta_degF) a degree is a CHANGE of
-    temperature, and multiplies like any other unit.
+    temperature, and multiplies like any other unit. A value in K can be a
+    temperature or a change, so a K that is KNOWN to be a change is written
+    delta_K (exactly the size of K): a change converted to K
+    (`converted_unit`), a product that comes out in K through a compound
+    (2.5 K/W * 4 W is 10 delta_K, as 2.5 degC/W * 4 W is 10 delta_degC), and
+    K minus a temperature (temperature.py). A delta_K is never read as a
+    temperature: convert to degC or degF refuses it. Round 3 (q036) found
+    convert(18 delta_degF, K) giving a bare 10 K, which then converted to
+    -263.15 degC as if it were a temperature.
+  - "gr" is not read: it is written for both the grain and the gram (AMBIGUOUS).
   - "mil" is the thousandth of an inch (pint's "thou"), not pint's angular mil.
   - "furlong" is the international furlong, 660 ft (exactly 201.168 m). pint's
     furlong is the US survey furlong (40 rods of 16.5 survey feet, 201.1684 m).
@@ -79,9 +93,12 @@ they first appeared, so a unit flo2-calc writes is one it reads back.
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from fractions import Fraction
 from functools import cache
+from typing import Iterator
 
 from flo2_calc.errors import Refusal
 
@@ -122,7 +139,10 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
     "t": ("metric_ton", "mass"),
     "ct": ("carat", "mass"),
     "lb": ("pound", "mass"),
-    "oz": ("ounce", "mass"),
+    "oz": ("ounce", "mass"),  # the avoirdupois ounce, exactly 28.349523125 g
+    "ozt": ("troy_ounce", "mass"),  # the troy ounce, exactly 31.1034768 g (NIST Handbook 44, Appendix C)
+    "dwt": ("pennyweight", "mass"),  # the pennyweight, 1/20 troy ounce, exactly 1.55517384 g
+    "grain": ("grain", "mass"),  # exactly 64.79891 mg ("gr" alone is not read: AMBIGUOUS)
     # time
     "s": ("second", "time"),
     "ms": ("millisecond", "time"),
@@ -131,6 +151,7 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
     "min": ("minute", "time"),
     "h": ("hour", "time"),
     "d": ("day", "time"),
+    "week": ("week", "time"),  # 7 d, exactly
     "fortnight": ("fortnight", "time"),  # 14 d, exactly
     # electric current
     "A": ("ampere", "current"),
@@ -202,6 +223,7 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
     "degF": ("delta_degree_Fahrenheit", "temperature"),
     "delta_degC": ("delta_degree_Celsius", "temperature change"),
     "delta_degF": ("delta_degree_Fahrenheit", "temperature change"),
+    "delta_K": ("kelvin", "temperature change"),  # a change of temperature in kelvin: never read as a temperature
     # volume
     "L": ("liter", "volume"),
     "mL": ("milliliter", "volume"),
@@ -226,10 +248,10 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
 # prefix and one of these (or an SI symbol in OTHER_SYMBOLS), and means
 # exactly that: tests/test_units.py holds each to it.
 UNPREFIXED: frozenset[str] = frozenset({
-    "m", "in", "ft", "mil", "furlong", "g", "t", "ct", "lb", "oz", "s", "min", "h", "d", "fortnight", "A", "V", "W",
-    "J", "Wh", "eV", "coulomb", "Ah", "ohm", "farad", "H", "Hz", "N", "lbf", "Pa", "bar", "psi", "ksi", "K", "degC",
-    "degF", "delta_degC", "delta_degF", "L", "gal_us", "gal_imp", "deg", "arcmin", "arcsec", "rad", "%", "dB", "dBm",
-    "dBW", *CURRENCIES,
+    "m", "in", "ft", "mil", "furlong", "g", "t", "ct", "lb", "oz", "ozt", "dwt", "grain", "s", "min", "h", "d", "week",
+    "fortnight", "A", "V", "W", "J", "Wh", "eV", "coulomb", "Ah", "ohm", "farad", "H", "Hz", "N", "lbf", "Pa", "bar",
+    "psi", "ksi", "K", "degC", "degF", "delta_degC", "delta_degF", "delta_K", "L", "gal_us", "gal_imp", "deg", "arcmin",
+    "arcsec", "rad", "%", "dB", "dBm", "dBW", *CURRENCIES,
 })
 
 # SI prefixes, case-sensitive: the case of a prefix is its size. "u", "µ"
@@ -263,7 +285,8 @@ NEAR_MISSES: dict[str, str] = {
     "sec": "s", "secs": "s", "second": "s", "seconds": "s", "hr": "h", "hrs": "h", "hour": "h", "hours": "h",
     "mins": "min", "minute": "min", "minutes": "min", "day": "d", "days": "d",
     "inch": "in", "inches": "in", '"': "in", "feet": "ft", "foot": "ft", "thou": "mil", "furlongs": "furlong",
-    "fortnights": "fortnight", "decibel": "dB", "decibels": "dB",
+    "fortnights": "fortnight", "weeks": "week", "decibel": "dB", "decibels": "dB",
+    "troy_ounce": "ozt", "troy_ounces": "ozt", "pennyweight": "dwt", "pennyweights": "dwt", "grains": "grain",
     "°": "deg", "degree": "deg", "degrees": "deg", "radian": "rad", "radians": "rad",
     "arcminute": "arcmin", "arcminutes": "arcmin", "arcsecond": "arcsec", "arcseconds": "arcsec",
     "°C": "degC", "℃": "degC", "°F": "degF", "℉": "degF",
@@ -291,6 +314,10 @@ AMBIGUOUS: dict[str, str] = {
     ),
     "C°": '"C°" could be a temperature ("degC") or a change of temperature ("delta_degC"); write the one you mean.',
     "F°": '"F°" could be a temperature ("degF") or a change of temperature ("delta_degF"); write the one you mean.',
+    "gr": (
+        '"gr" is written for the grain and, in some places, for the gram, which is about 15 times larger, so '
+        'flo2-calc reads it as neither. Write "grain" (exactly 64.79891 mg) or "g".'
+    ),
     **dict.fromkeys(
         ("gal", "gallon", "gallons"),
         "A gallon is two different units: the US gallon (\"gal_us\", 231 in^3, exactly 3.785411784 L) and the "
@@ -322,6 +349,14 @@ PERCENT = "%"
 SCALES = ("degC", "degF")  # a temperature reading when one is a value's whole unit (temperature.py)
 INTERVAL_OF = {"degC": "delta_degC", "degF": "delta_degF"}
 MAX_POWER = 12
+# What a few spellings are, where the spelling alone may not say (named in a hint's list of units of one kind).
+CALLED: dict[str, str] = {
+    "oz": "the avoirdupois ounce", "ozt": "the troy ounce", "dwt": "the pennyweight", "lb": "the avoirdupois pound",
+    "ct": "the metric carat", "t": "the tonne", "mil": "a thousandth of an inch", "furlong": "660 ft",
+    "gal_us": "the US gallon", "gal_imp": "the imperial gallon", "K": "a temperature or a change",
+    "degC": "a temperature", "degF": "a temperature", "delta_degC": "a change", "delta_degF": "a change",
+    "delta_K": "a change",
+}
 
 Unit = tuple[tuple[str, int], ...]
 """A unit: (spelling, exponent) pairs in the order they first appeared, no
@@ -329,6 +364,29 @@ zero exponents, each spelling once. () is a plain number."""
 
 PLAIN: Unit = ()
 KELVIN: Unit = (("K", 1),)
+KELVIN_CHANGE: Unit = (("delta_K", 1),)
+
+# Records of schema version 6 and older were made before delta_K: re-running
+# one (record.py) evaluates it under the rules it was made with, where a
+# change converted to K, a product in K and K minus a temperature were all a
+# bare K. `before_delta_k()` sets that for the re-run only.
+_DELTA_K: ContextVar[bool] = ContextVar("flo2_calc_delta_k", default=True)
+
+
+def delta_k() -> bool:
+    """Whether a K known to be a change of temperature is written delta_K (0.7.0
+    and later, and every reply), or a bare K (a record of version 6 or older)."""
+    return _DELTA_K.get()
+
+
+@contextmanager
+def before_delta_k() -> Iterator[None]:
+    """Evaluate under the temperature rules of flo2-calc 0.6.1 and earlier."""
+    token = _DELTA_K.set(False)
+    try:
+        yield
+    finally:
+        _DELTA_K.reset(token)
 
 
 @dataclass(frozen=True)
@@ -465,7 +523,7 @@ def _hint(text: str) -> str:
         return f' Write "{target}".'
     candidates = _vocabulary_by_fold().get(text.casefold(), ())
     if not candidates:
-        return ""
+        return _what_pint_reads(text)
     if len(text) == 1:
         # A one-letter symbol's case is all it has: S is siemens and s second, T tesla and t tonne.
         return CASE_NOTE
@@ -476,6 +534,68 @@ def _hint(text: str) -> str:
     if len(safe) == 1:
         return f' Write "{safe[0]}" (units are case-sensitive).'
     return CASE_NOTE
+
+
+@cache
+def _by_pint_name() -> dict[str, tuple[str, ...]]:
+    """The vocabulary's spellings by pint's name for the unit each one is (a
+    reading's degC and degF, which flo2-calc maps to a change for its factor,
+    and the units flo2-calc defines itself, left out)."""
+    out: dict[str, list[str]] = {}
+    for s, (pint_name, _measures) in VOCABULARY.items():
+        if pint_name is not None and s not in SCALES and s not in DEFINED:
+            out.setdefault(registry().get_name(pint_name), []).append(s)
+    return {k: tuple(v) for k, v in out.items()}
+
+
+def _pint_reading(text: str) -> tuple[str, tuple[tuple[str, int], ...], Meaning | None] | None:
+    """(pint's name for `text`, what it measures, its meaning when pint can give
+    it exactly), or None when pint reads `text` as no unit. Never raises."""
+    if not re.fullmatch(r"[A-Za-z_]{2,40}", text):
+        return None
+    try:
+        ureg = registry()
+        name = ureg.get_name(text)
+        dims = tuple(sorted((str(k), int(v)) for k, v in ureg.get_dimensionality(text).items() if v != 0))
+    except Exception:  # noqa: BLE001 - pint reads it as nothing, or cannot say: no reading
+        return None
+    try:
+        one = ureg.Quantity(Fraction(1), text).to_base_units().magnitude
+        exact: Meaning | None = (Fraction(one), dims, Fraction(0))
+    except Exception:  # noqa: BLE001 - an offset unit, or a definition pint cannot load exactly
+        exact = None
+    return name, dims, exact
+
+
+def _what_pint_reads(text: str) -> str:
+    """For a spelling flo2-calc does not know but pint reads ("ozt" before
+    0.7.0, "mile", "kilometer"): what pint reads it as, and the units of that
+    kind flo2-calc carries. Nothing is substituted: it says 'Write' only for a
+    spelling of the vocabulary that IS that same pint unit (the same factor,
+    kind and zero), and only when the text as written (`readings`) is that
+    unit too. A dimensionless reading (pint's angular mil, its radian) is not
+    named: angles and ratios are flo2-calc's own."""
+    read = _pint_reading(text)
+    if read is None:
+        return ""
+    name, dims, exact = read
+    if not dims:
+        return ""
+    same = _by_pint_name().get(name, ())
+    as_written = readings(text)
+    if len(same) == 1 and exact is not None and meaning(same[0]) == exact and as_written == {exact}:
+        return f' pint reads it as {name}, which is exactly "{same[0]}": Write "{same[0]}".'
+    kind = [s for s in VOCABULARY if s not in CURRENCIES and s not in DECIBELS and s not in ANGLES
+            and s != PERCENT and atom(s).dimension == dims]
+    what = measures(kind[0]) if kind else " ".join(f"{d}^{p}" if p != 1 else d for d, p in dims)
+    if as_written and exact is not None and exact not in as_written:
+        return ""  # pint reads it as something other than its own prefix and symbol: say nothing either way
+    listed = ", ".join(f"{s} ({CALLED[s]})" if s in CALLED else s for s in kind)
+    carries = (
+        f"The units of that kind flo2-calc knows: {listed}. Give the value in one of them, from a source that states it."
+        if kind else "flo2-calc carries no unit of that kind."
+    )
+    return f" pint reads it as {name} ({what}), which flo2-calc does not carry, and flo2-calc substitutes nothing for it. {carries}"
 
 
 # ---------------------------------------------------------------- reading
@@ -551,7 +671,7 @@ def parse_unit(text: str) -> Unit:
             f'"{whole}": {levels[0]} is a power level (dB above a reference power), and flo2-calc reads a level only '
             f'as a value\'s whole unit ("-30 {levels[0]}"), never inside a compound unit or raised to a power.'
         )
-    return as_change(unit) if len(pairs) > 1 else unit
+    return as_change(unit, compound=True) if len(pairs) > 1 else unit
 
 
 def _combine(pairs: list[tuple[str, int]]) -> Unit:
@@ -596,11 +716,31 @@ def scale_of(unit: Unit) -> str | None:
     return None
 
 
-def as_change(unit: Unit) -> Unit:
+def as_change(unit: Unit, compound: bool = False) -> Unit:
     """A computed unit that came out as a bare degC or degF is a change of
-    temperature (2.5 degC/W * 4 W is a rise of 10 delta_degC), never a reading."""
+    temperature (2.5 degC/W * 4 W is a rise of 10 delta_degC), never a reading.
+    So is a bare K that came out of a `compound` (2.5 K/W * 4 W is 10 delta_K):
+    a degree inside a compound unit is a change."""
     scale = scale_of(unit)
-    return ((INTERVAL_OF[scale], 1),) if scale else unit
+    if scale:
+        return ((INTERVAL_OF[scale], 1),)
+    if compound and unit == KELVIN and delta_k():
+        return KELVIN_CHANGE
+    return unit
+
+
+def _plain_or_percent(unit: Unit) -> bool:
+    return all(s == PERCENT for s, _ in unit)
+
+
+def converted_unit(from_unit: Unit, to_unit: Unit) -> Unit:
+    """The unit convert writes its result in: the node's, except that a change
+    of temperature converted to K stays a change, delta_K (exactly the size of
+    K). A change is never turned into a temperature, by convert or by what
+    convert writes."""
+    if to_unit == KELVIN and delta_k() and from_unit != KELVIN and scale_of(from_unit) is None and dimension(from_unit) == dimension(KELVIN):
+        return KELVIN_CHANGE
+    return to_unit
 
 
 # ---------------------------------------------------------------- what a unit measures
@@ -723,7 +863,9 @@ def multiply(left: Unit, right: Unit) -> tuple[Unit, Fraction]:
         else:
             out[spelling] = exp
     unit, fold = fold_percent(tuple((s, e) for s, e in out.items() if e != 0))
-    return as_change(unit), scale * fold
+    # A bare K is a change when it came through a compound, not straight from a K scaled by a plain number.
+    straight = (fold_percent(left)[0] == KELVIN and _plain_or_percent(right)) or (_plain_or_percent(left) and fold_percent(right)[0] == KELVIN)
+    return as_change(unit, compound=not straight), scale * fold
 
 
 def fold_percent(unit: Unit) -> tuple[Unit, Fraction]:
@@ -742,7 +884,7 @@ def power(unit: Unit, n: int) -> tuple[Unit, Fraction]:
     """The unit of a value raised to the whole number n, and the factor its
     magnitude takes (only a folded "%" gives one)."""
     out, fold = fold_percent(tuple((s, e * n) for s, e in unit if e * n != 0))
-    return as_change(out), fold
+    return as_change(out, compound=fold_percent(unit)[0] != KELVIN), fold
 
 
 # ---------------------------------------------------------------- angles, for trigonometry and deg-rad conversion
@@ -788,7 +930,7 @@ def pi_conversion(from_unit: Unit, to_unit: Unit) -> tuple[Fraction, int] | None
 # inside a compound is a change), and a percentage.
 _NEVER_SHOWN_IN = frozenset({"degC", "degF", PERCENT})
 # Not chosen by size alone (rule 2), being one size with K: a change of temperature.
-_NOT_BY_SIZE = frozenset({"delta_degC", "delta_degF", *LEVELS})
+_NOT_BY_SIZE = frozenset({"delta_degC", "delta_degF", "delta_K", *LEVELS})
 
 
 @cache
@@ -822,7 +964,7 @@ def simplify(unit: Unit) -> tuple[Unit, Fraction] | None:
       3. Otherwise, a compound that measures what one of its own spellings
          measures is shown in the first such spelling: um^2/m (a length) in um.
          A degree inside a compound is a change of temperature, so degC is
-         shown as delta_degC.
+         shown as delta_degC, and K as delta_K (rule 2's K too).
       4. Otherwise it is shown as it is: m/s, kg/(m*s^2), lbf*ft.
 
     It never chooses across dimensions, never a temperature reading or a
@@ -835,11 +977,11 @@ def simplify(unit: Unit) -> tuple[Unit, Fraction] | None:
         return PLAIN, size
     exact = _by_size().get((dims, size))
     if exact is not None:
-        return ((exact, 1),), Fraction(1)
+        return as_change(((exact, 1),), compound=True), Fraction(1)
     for spelling, _exp in unit:
         if atom(spelling).dimension == dims and spelling != PERCENT:
-            shown = INTERVAL_OF.get(spelling, spelling)
-            return ((shown, 1),), size / atom(shown).factor
+            shown = as_change(((spelling, 1),), compound=True)
+            return shown, size / factor(shown)
     return None
 
 
