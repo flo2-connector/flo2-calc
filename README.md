@@ -968,7 +968,12 @@ flo2-tool-sandbox's flags:
 
 Measured on 2026-10-04 with flo2-calc 0.6.0. 0.7.0 (round 3's fixes) ran the same 34-call session under the 128 MiB
 cap the same day and peaked at 100.2 MiB, every runaway call stopped at its limit and the container alive after: its
-changes (new operators, the formula's values, delta_K) cost no measurable memory. 0.5.0 peaked at 91.3 MiB and 0.4.0 at 78.2 MiB in their 27-call sessions; numpy, loaded and
+changes (new operators, the formula's values, delta_K) cost no measurable memory. 0.8.0 ran it on 2026-10-13 with
+eight more calls (42 in 133 s): a randomization test of 22 periods with any 11 on (705,432 arrangements, the most the
+image's 1,000,000 allows at that size: 0.62 s, recorded and re-run 1.24 s), Shapley values of 12 factors from 4,096
+outcomes, recorded and re-run (1.62 s), the gamma and beta quantiles and a lognormal tail at 1,000 digits (0.08 s), and
+two more runaway calls, 24 periods (2,704,156 arrangements) and 13 factors, stopped at `max_arrangements` and
+`max_shapley_factors`. It peaked at 103.5 MiB under 128m, every runaway call stopped and the container alive after. 0.5.0 peaked at 91.3 MiB and 0.4.0 at 78.2 MiB in their 27-call sessions; numpy, loaded and
 working on the arrays above, costs about 14 MiB more than 0.5.0. A cap of **128m** is still above the peak, with 22 MiB to spare,
 and the array budget (16 MiB in the image) keeps a call's arrays inside it. CI runs the image under 128m, and asks it
 every limit's questions there (`tests/test_limits.py`, `tests/test_pending_record.py`) and the arrays' questions
