@@ -1,0 +1,423 @@
+{
+  "arithmetic": "Exact rational arithmetic on the inputs as written: no binary floating point. + - * / and integer powers are exact, and so is every unit conversion but deg-rad and dBm-mW, so every value not marked \"rounded\" is exact FOR THESE INPUTS and no more accurate than they are: a decimal typed for an irrational number (a truncated pi or e) is taken as exactly that decimal, not as the number it stands for (the pi and e operators are the constants themselves). A whole number is written in full. Any other value whose decimal ends (at most 40 significant digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact value for these inputs is given beside it as a fraction. A computed value whose compound unit is exactly a simpler unit is shown in it (\"simplified_from\" names the unit it was computed in); the value does not change. Comparisons use exact values. A value marked \"rounded\" is NOT exact: it comes from pi, e, a root, exp, ln, log10, a non-whole power (or a whole one asked for \"digits\" past the digits budget), trigonometry, a deg-rad conversion, a decibel conversion or a distribution, or from arithmetic on such a value. It is a decimal of the stated number of significant digits, every one written, given no \"exact\" fraction, and \"error_at_most\" bounds its distance from the true value. Where it says \"correctly_rounded\", it is the true value rounded half-even, decided from a rigorous enclosure (Arb ball arithmetic, python-flint). A comparison, ceil, floor or round of a rounded value is answered only when its error bound decides it, and refused otherwise. An ARRAY of exact numbers stays exact through rational operations, reductions and the statistics that are rational; a value marked \"float64\" is NOT exact: an FFT, a rounded-class function over an array, an array of more elements than this record's max_exact_elements (the host's setting where it was made), or anything mixed with such a value, computed in IEEE 754 double precision. Every element of a float64 value lies within its \"error_at_most\" of the true value, a rigorous bound whose basis \"how\" names (the FFT's: Higham 2002, Theorem 24.2, for a power-of-two length; Arb's rigorous DFT for any other). An array of more than 1,024 elements is written as its sha256 over every element's text, which re-running compares.",
+  "content_hash": "sha256:6397fbb7a40472cf2dba167ece7b55de5fc45a7de9835f2034789a9a2710a407",
+  "formula": [
+    {
+      "latex": "\\text{m} = \\overline{\\text{x}} = \\frac{3100}{3}\\,\\mathrm{mg}/\\mathrm{L}",
+      "node": "m",
+      "text": "m = mean(x) = 3100/3 mg/L"
+    },
+    {
+      "latex": "\\text{v} = \\operatorname{Var}_{\\text{sample}}\\left(\\text{x}\\right) = \\frac{4900}{3}\\,\\mathrm{mg}^{2}/\\mathrm{L}^{2}",
+      "node": "v",
+      "text": "v = variance_sample(x) = 4900/3 mg^2/L^2"
+    },
+    {
+      "latex": "\\text{s} = \\operatorname{sd}_{\\text{sample}}\\left(\\text{x}\\right) \\approx 40.4145188432738035156404146351\\,\\mathrm{mg}/\\mathrm{L}",
+      "node": "s",
+      "text": "s = sd_sample(x) ≈ 40.4145188432738035156404146351 mg/L"
+    },
+    {
+      "latex": "\\text{z} = \\frac{\\text{m} - \\text{m0}}{\\text{s0}} = \\frac{17}{15}",
+      "node": "z",
+      "text": "z = (m - m0) / s0 = 17/15"
+    },
+    {
+      "latex": "\\text{below} = \\operatorname{normal\\_cdf}\\left(\\text{m},\\ \\text{m0},\\ \\text{s0}\\right) \\approx 0.871462850657585033069765672569",
+      "node": "below",
+      "text": "below = normal_cdf(m, m0, s0) ≈ 0.871462850657585033069765672569"
+    },
+    {
+      "latex": "\\text{more} = \\operatorname{binomial\\_sf}\\left(\\text{k},\\ \\text{n},\\ \\text{p}\\right) = 0.001691655435",
+      "node": "more",
+      "text": "more = binomial_sf(k, n, p) = 0.001691655435"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "x",
+        "source": "three fasting readings, the person's own meter",
+        "value": {
+          "array": [
+            "1040",
+            "990",
+            "1070"
+          ],
+          "unit": "mg/L"
+        }
+      },
+      {
+        "args": [
+          "x"
+        ],
+        "id": "m",
+        "op": "mean"
+      },
+      {
+        "args": [
+          "x"
+        ],
+        "id": "v",
+        "op": "variance_sample"
+      },
+      {
+        "args": [
+          "x"
+        ],
+        "id": "s",
+        "op": "sd_sample"
+      },
+      {
+        "id": "m0",
+        "source": "published reference population: mean",
+        "value": "920 mg/L"
+      },
+      {
+        "id": "s0",
+        "source": "published reference population: between-person sd",
+        "value": "100 mg/L"
+      },
+      {
+        "args": [
+          "d",
+          "s0"
+        ],
+        "id": "z",
+        "op": "div"
+      },
+      {
+        "args": [
+          "m",
+          "m0"
+        ],
+        "id": "d",
+        "op": "sub"
+      },
+      {
+        "args": [
+          "m",
+          "m0",
+          "s0"
+        ],
+        "id": "below",
+        "op": "normal_cdf"
+      },
+      {
+        "id": "k",
+        "source": "good weeks",
+        "value": "8"
+      },
+      {
+        "id": "n",
+        "source": "weeks on the supplement",
+        "value": "12"
+      },
+      {
+        "id": "p",
+        "source": "assumed rate of a good week by chance",
+        "value": "3/10"
+      },
+      {
+        "args": [
+          "k",
+          "n",
+          "p"
+        ],
+        "id": "more",
+        "op": "binomial_sf"
+      }
+    ],
+    "result": [
+      "m",
+      "v",
+      "s",
+      "z",
+      "below",
+      "more"
+    ]
+  },
+  "inputs": [
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:1bd6e93540c5a62354cff70d1128b7ba4caf314dcba6c3bc725675775bc5d24c",
+        "shape": [
+          3
+        ],
+        "unit": "mg/L"
+      },
+      "id": "x",
+      "source": "three fasting readings, the person's own meter",
+      "unit": "mg/L",
+      "value": "array 3 (exact, mg/L)"
+    },
+    {
+      "id": "m0",
+      "source": "published reference population: mean",
+      "unit": "mg/L",
+      "value": "920 mg/L"
+    },
+    {
+      "id": "s0",
+      "source": "published reference population: between-person sd",
+      "unit": "mg/L",
+      "value": "100 mg/L"
+    },
+    {
+      "id": "k",
+      "source": "good weeks",
+      "unit": "",
+      "value": "8"
+    },
+    {
+      "id": "n",
+      "source": "weeks on the supplement",
+      "unit": "",
+      "value": "12"
+    },
+    {
+      "id": "p",
+      "source": "assumed rate of a good week by chance",
+      "unit": "",
+      "value": "0.3"
+    }
+  ],
+  "max_exact_elements": 65536,
+  "name": "statistics-before-0-8-0",
+  "produced_by": {
+    "flo2_calc": "0.7.0",
+    "numpy": "2.5.3",
+    "pint": "0.26.1",
+    "python_flint": "0.9.0"
+  },
+  "record_format": "flo2-calc computation record",
+  "results": [
+    {
+      "exact": "3100/3 mg/L",
+      "node": "m",
+      "value": "1033.33333333333333333333333333 mg/L"
+    },
+    {
+      "exact": "4900/3 mg^2/L^2",
+      "node": "v",
+      "value": "1633.33333333333333333333333333 mg^2/L^2"
+    },
+    {
+      "node": "s",
+      "rounded": {
+        "correctly_rounded": true,
+        "digits": 30,
+        "error_at_most": "5e-29 mg/L",
+        "from": [
+          "s"
+        ]
+      },
+      "value": "40.4145188432738035156404146351 mg/L"
+    },
+    {
+      "exact": "17/15",
+      "node": "z",
+      "value": "1.13333333333333333333333333333"
+    },
+    {
+      "node": "below",
+      "rounded": {
+        "correctly_rounded": true,
+        "digits": 30,
+        "error_at_most": "5e-31",
+        "from": [
+          "below"
+        ]
+      },
+      "value": "0.871462850657585033069765672569"
+    },
+    {
+      "node": "more",
+      "value": "0.001691655435"
+    }
+  ],
+  "schema_version": 7,
+  "status": "computed",
+  "supports": "flo2-calc 0.8.0's test that a version 7 record still re-runs",
+  "values": [
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:1bd6e93540c5a62354cff70d1128b7ba4caf314dcba6c3bc725675775bc5d24c",
+        "shape": [
+          3
+        ],
+        "unit": "mg/L",
+        "values": [
+          "1040",
+          "990",
+          "1070"
+        ]
+      },
+      "node": "x",
+      "value": "array 3 (exact, mg/L)"
+    },
+    {
+      "exact": "3100/3 mg/L",
+      "node": "m",
+      "value": "1033.33333333333333333333333333 mg/L"
+    },
+    {
+      "exact": "4900/3 mg^2/L^2",
+      "node": "v",
+      "value": "1633.33333333333333333333333333 mg^2/L^2"
+    },
+    {
+      "node": "s",
+      "rounded": {
+        "correctly_rounded": true,
+        "digits": 30,
+        "error_at_most": "5e-29 mg/L",
+        "from": [
+          "s"
+        ]
+      },
+      "value": "40.4145188432738035156404146351 mg/L"
+    },
+    {
+      "node": "m0",
+      "value": "920 mg/L"
+    },
+    {
+      "node": "s0",
+      "value": "100 mg/L"
+    },
+    {
+      "exact": "340/3 mg/L",
+      "node": "d",
+      "value": "113.333333333333333333333333333 mg/L"
+    },
+    {
+      "exact": "17/15",
+      "node": "z",
+      "value": "1.13333333333333333333333333333"
+    },
+    {
+      "node": "below",
+      "rounded": {
+        "correctly_rounded": true,
+        "digits": 30,
+        "error_at_most": "5e-31",
+        "from": [
+          "below"
+        ]
+      },
+      "value": "0.871462850657585033069765672569"
+    },
+    {
+      "node": "k",
+      "value": "8"
+    },
+    {
+      "node": "n",
+      "value": "12"
+    },
+    {
+      "node": "p",
+      "value": "0.3"
+    },
+    {
+      "node": "more",
+      "value": "0.001691655435"
+    }
+  ],
+  "working": [
+    {
+      "label": "given",
+      "latex": "\\text{x} = \\text{array 3 (exact, mg/L)}",
+      "node": "x",
+      "step": 1,
+      "text": "x = array 3 (exact, mg/L)"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{m} = \\overline{\\text{x}} = \\frac{3100}{3}\\,\\mathrm{mg}/\\mathrm{L}",
+      "node": "m",
+      "step": 2,
+      "text": "m = mean(x) = 3100/3 mg/L"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{v} = \\operatorname{Var}_{\\text{sample}}\\left(\\text{x}\\right) = \\frac{4900}{3}\\,\\mathrm{mg}^{2}/\\mathrm{L}^{2}",
+      "node": "v",
+      "step": 3,
+      "text": "v = variance_sample(x) = 4900/3 mg^2/L^2"
+    },
+    {
+      "label": "rounded: 30 significant digits, correctly rounded, error at most 5e-29 mg/L",
+      "latex": "\\text{s} = \\operatorname{sd}_{\\text{sample}}\\left(\\text{x}\\right) \\approx 40.4145188432738035156404146351\\,\\mathrm{mg}/\\mathrm{L}",
+      "node": "s",
+      "step": 4,
+      "text": "s = sd_sample(x) ≈ 40.4145188432738035156404146351 mg/L"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{m0} = 920\\,\\mathrm{mg}/\\mathrm{L}",
+      "node": "m0",
+      "step": 5,
+      "text": "m0 = 920 mg/L"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{s0} = 100\\,\\mathrm{mg}/\\mathrm{L}",
+      "node": "s0",
+      "step": 6,
+      "text": "s0 = 100 mg/L"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{d} = \\text{m} - \\text{m0} = \\frac{3100}{3}\\,\\mathrm{mg}/\\mathrm{L} - 920\\,\\mathrm{mg}/\\mathrm{L} = \\frac{340}{3}\\,\\mathrm{mg}/\\mathrm{L}",
+      "node": "d",
+      "step": 7,
+      "text": "d = m - m0 = 3100/3 mg/L - 920 mg/L = 340/3 mg/L"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{z} = \\frac{\\text{d}}{\\text{s0}} = \\frac{\\frac{340}{3}\\,\\mathrm{mg}/\\mathrm{L}}{100\\,\\mathrm{mg}/\\mathrm{L}} = \\frac{17}{15}",
+      "node": "z",
+      "step": 8,
+      "text": "z = d / s0 = 340/3 mg/L / (100 mg/L) = 17/15"
+    },
+    {
+      "label": "rounded: 30 significant digits, correctly rounded, error at most 5e-31",
+      "latex": "\\text{below} = \\operatorname{normal\\_cdf}\\left(\\text{m},\\ \\text{m0},\\ \\text{s0}\\right) = \\operatorname{normal\\_cdf}\\left(\\frac{3100}{3}\\,\\mathrm{mg}/\\mathrm{L},\\ 920\\,\\mathrm{mg}/\\mathrm{L},\\ 100\\,\\mathrm{mg}/\\mathrm{L}\\right) \\approx 0.871462850657585033069765672569",
+      "node": "below",
+      "step": 9,
+      "text": "below = normal_cdf(m, m0, s0) = normal_cdf(3100/3 mg/L, 920 mg/L, 100 mg/L) ≈ 0.871462850657585033069765672569"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{k} = 8",
+      "node": "k",
+      "step": 10,
+      "text": "k = 8"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{n} = 12",
+      "node": "n",
+      "step": 11,
+      "text": "n = 12"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{p} = 0.3",
+      "node": "p",
+      "step": 12,
+      "text": "p = 0.3"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{more} = \\operatorname{binomial\\_sf}\\left(\\text{k},\\ \\text{n},\\ \\text{p}\\right) = \\operatorname{binomial\\_sf}\\left(8,\\ 12,\\ 0.3\\right) = 0.001691655435",
+      "node": "more",
+      "step": 13,
+      "text": "more = binomial_sf(k, n, p) = binomial_sf(8, 12, 0.3) = 0.001691655435"
+    }
+  ]
+}

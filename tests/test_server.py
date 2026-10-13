@@ -243,7 +243,7 @@ def test_rounded_values_reach_the_agent_labelled_and_a_decided_comparison_is_ans
 def test_a_record_with_rounded_values_is_made_and_re_runs_over_the_client():
     made, = anyio.run(calls, [("record_computation", {"graph": ROUNDED, "name": "ci-half-width"})])
     rec = json.loads(made.content[1].resource.text)
-    assert rec["schema_version"] == 7 and rec["produced_by"]["python_flint"] and rec["produced_by"]["numpy"]
+    assert rec["schema_version"] == 8 and rec["produced_by"]["python_flint"] and rec["produced_by"]["numpy"]
     assert {v["node"] for v in rec["values"] if "rounded" in v} == {"sd", "t", "half", "rad", "s", "pi"}
     again, = anyio.run(calls, [("rerun_record", {"record": made.content[1].resource.text})])
     assert json.loads(text_of(again))["reproduces"] is True
@@ -369,3 +369,40 @@ def test_the_instructions_say_where_an_empirical_formulas_constants_come_from():
     hello = anyio.run(_instructions)
     assert "NEVER FROM YOUR MEMORY" in hello.instructions and "IPC-2221" in hello.instructions
     assert "They are the only limits on a calculation" in hello.instructions
+
+
+# ---------------------------------------------------------------- flo2-calc 0.8.0: Bayesian updating, the randomization test, Shapley values, skewed distributions
+
+
+def test_0_8_0_reaches_the_agent_over_the_client():
+    """Round 4's kinds of question, asked of the server as an agent asks it: CI's image job asks
+    the confined image the same, under flo2.io's limits."""
+    prior = graph(inp("m0", "28 ug/L", "national survey"), inp("s0", "8 ug/L", "national survey"), inp("x", "19 ug/L", "lab"),
+                  inp("s", "3 ug/L", "assay"), op("mean", "posterior_normal_mean", "m0", "s0", "x", "s"))
+    unsourced = graph(inp("m0", "28 ug/L"), inp("s0", "8 ug/L", "survey"), inp("x", "19 ug/L"), inp("s", "3 ug/L"),
+                      op("mean", "posterior_normal_mean", "m0", "s0", "x", "s"))
+    unsourced["nodes"][0].pop("source")
+    trial = graph(inp("y", {"array": ["6", "4", "3", "7", "2", "6", "5", "3"]}, "pain"),
+                  inp("on", {"array": [False, True, True, False, True, False, False, True]}, "draw"),
+                  op("p", "randomization_test", "y", "on", scheme="every_arrangement", statistic="mean_difference", alternative="less"))
+    credit = graph(inp("v", {"array": ["10", "14", "12", "18"], "unit": "d"}, "days"),
+                   op("phi", "shapley_values", "v", factors=["sleep", "diet"], combinations=[[], ["sleep"], ["diet"], ["sleep", "diet"]]))
+    missing = graph(inp("v", {"array": ["10", "14", "12"]}, "days"),
+                    op("phi", "shapley_values", "v", factors=["sleep", "diet"], combinations=[[], ["sleep"], ["diet"]]))
+    skewed = graph(inp("x", "31 ug/L", "lab"), inp("m", "20 ug/L", "reference"), inp("sg", "0.4", "reference"),
+                   op("above", "lognormal_sf", "x", "m", "sg"))
+    got = anyio.run(calls, [("evaluate_graph", {"graph": g}) for g in (prior, unsourced, trial, credit, missing, skewed)])
+    assert answer_of(got[0])["result"]["exact"] == "1468/73 ug/L"
+    assert '"m0"' in reason_of(got[1]) and "published population" in reason_of(got[1])
+    assert answer_of(got[2])["result"]["exact"] == "1/70"
+    assert answer_of(got[3])["result"]["array"]["values"] == ["5", "3"]
+    assert "diet and sleep present" in reason_of(got[4]) or "sleep and diet present" in reason_of(got[4])
+    above = answer_of(got[5])["result"]
+    assert above["value"].startswith("0.13") and above["rounded"]["correctly_rounded"] is True
+
+
+def test_the_instructions_name_0_8_0s_operators_and_rules():
+    hello = anyio.run(_instructions)
+    for words in ("posterior_normal_mean", "randomization_test", "shapley_values", "lognormal_cdf", "gamma_quantile",
+                  "beta_quantile", "never defaulted", "the prior's source", "every combination"):
+        assert words in hello.instructions, words

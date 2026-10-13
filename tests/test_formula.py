@@ -280,10 +280,10 @@ def test_an_array_line_ends_with_its_description_and_a_rounded_one_with_approx()
     assert {f["node"]: f["text"] for f in r["formula"]}["r"] == "r = sqrt(x) ≈ 1.41421356237309504880168872421"
 
 
-def test_a_version_7_record_holds_the_same_lines_as_the_reply():
+def test_a_current_record_holds_the_same_lines_as_the_reply():
     ev = evaluate(read_graph(Q002))
     rec = R.build(ev, "q002", None)
-    assert rec["schema_version"] == 7
+    assert rec["schema_version"] == 8
     values = {v["node"]: v for v in rec["values"]}
     assert all(_ends_with_its_value(line, values) for line in rec["formula"])
     assert rec["formula"] == run(Q002)["formula"], "reply and record show the same equations"

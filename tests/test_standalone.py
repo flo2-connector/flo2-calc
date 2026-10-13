@@ -234,7 +234,7 @@ def test_the_package_imports_nothing_of_flo2_reflow2_or_another_helper():
     allowed = {
         "__future__", "argparse", "ast", "contextlib", "contextvars", "dataclasses", "decimal", "fractions", "functools",
         "hashlib", "importlib",
-        "json", "math", "os", "pathlib", "re", "sys", "tempfile", "threading", "time", "typing",
+        "itertools", "json", "math", "os", "pathlib", "re", "sys", "tempfile", "threading", "time", "typing",
         "flo2_calc", "mcp", "pydantic", "pint", "jsonschema", "flint", "numpy", "io",
     }
     package = Path(flo2_calc.__file__).parent

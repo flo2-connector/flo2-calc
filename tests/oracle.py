@@ -128,3 +128,33 @@ def brackets_quantile(cdf: Callable[[mp.mpf], mp.mpf], value: Fraction, p: Fract
         below = c - h if value else -mp.mpf(10) ** (-DPS // 2)
         above = c + h if value else mp.mpf(10) ** (-DPS // 2)
         return cdf(below) < mpq(p) < cdf(above)
+
+
+# ---------------------------------------------------------------- the skewed distributions (flo2-calc 0.8.0)
+
+
+def lognormal_cdf(x: mp.mpf, median: mp.mpf, sigma: mp.mpf) -> mp.mpf:
+    """P(X <= x) for ln X normal with mean ln(median) and sd sigma, through erfc."""
+    return mp.erfc(-mp.log(x / median) / sigma / mp.sqrt(2)) / 2
+
+
+def lognormal_sf(x: mp.mpf, median: mp.mpf, sigma: mp.mpf) -> mp.mpf:
+    return mp.erfc(mp.log(x / median) / sigma / mp.sqrt(2)) / 2
+
+
+def gamma_cdf(x: mp.mpf, shape: mp.mpf, scale: mp.mpf) -> mp.mpf:
+    """The regularized lower incomplete gamma P(shape, x / scale), by mpmath's own gammainc."""
+    return mp.gammainc(shape, 0, x / scale, regularized=True)
+
+
+def gamma_sf(x: mp.mpf, shape: mp.mpf, scale: mp.mpf) -> mp.mpf:
+    return mp.gammainc(shape, x / scale, mp.inf, regularized=True)
+
+
+def beta_cdf(x: mp.mpf, a: mp.mpf, b: mp.mpf) -> mp.mpf:
+    """The regularized incomplete beta I_x(a, b), by mpmath's own betainc."""
+    return mp.betainc(a, b, 0, x, regularized=True)
+
+
+def beta_sf(x: mp.mpf, a: mp.mpf, b: mp.mpf) -> mp.mpf:
+    return mp.betainc(a, b, x, 1, regularized=True)

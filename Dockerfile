@@ -32,7 +32,10 @@ RUN python -m venv /opt/flo2-calc \
 # 2 MiB (the most flo2's door keeps of a calcfile in one reply), and at most
 # 16 MiB of arrays in one call (a 256 x 256 grid's FFT workflow is a few MiB),
 # and exact arrays of up to 4,096 elements (a 64 x 64 grid; an exact element
-# costs about 128 bytes, a float64 one 16), past which an array is float64.
+# costs about 128 bytes, a float64 one 16), past which an array is float64;
+# at most 1,000,000 arrangements in one randomization test (about 0.6 s at
+# 0.6 us each, on one CPU a few times that), and Shapley values of at most 12
+# factors (2^12 = 4,096 outcomes, the exact-array limit).
 # Inside a 128m cap a runaway calculation is then stopped by flo2-calc, with
 # its reason, long before the sandbox would kill it. Anyone running the image elsewhere sets
 # their own: docker run -e FLO2_CALC_MAX_DIGITS=20000 ... (or the flags).
@@ -40,7 +43,7 @@ FROM python:3.12-slim
 COPY --from=build /opt/flo2-calc /opt/flo2-calc
 ENV PATH=/opt/flo2-calc/bin:$PATH HOME=/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
     FLO2_CALC_DEADLINE=20 FLO2_CALC_MAX_DIGITS=2000 FLO2_CALC_MAX_REPLY_BYTES=2097152 FLO2_CALC_MAX_ARRAY_BYTES=16777216 \
-    FLO2_CALC_MAX_EXACT_ELEMENTS=4096
+    FLO2_CALC_MAX_EXACT_ELEMENTS=4096 FLO2_CALC_MAX_ARRANGEMENTS=1000000 FLO2_CALC_MAX_SHAPLEY_FACTORS=12
 RUN flo2-calc --version
 USER 65534:65534
 WORKDIR /tmp
