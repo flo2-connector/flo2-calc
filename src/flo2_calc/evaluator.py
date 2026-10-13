@@ -97,6 +97,15 @@ distribution (binomial_pmf, binomial_cdf, binomial_sf), exact for an exact p;
 to_number (true is 1, false is 0); length (an array's elements); a whole
 power of a rounded base for any exponent, and of an exact base past the
 digits budget as a correctly rounded value when the node asks for "digits".
+
+FLO2-CALC 0.8.0 (dec:v0-8-0-bayes-randomization-shapley-choices): Bayesian
+updating (bayes.py: normal-normal and beta-binomial, the prior's source
+required at reading), the randomization test of an on/off trial (trials.py:
+"scheme", "statistic" and "alternative", never defaulted), Shapley values
+(shapley.py: "factors" and "combinations", every combination named), and the
+lognormal, gamma and beta distributions in the rounded class (realmath.py).
+An operation may give its value with a DETAIL (Detailed): the named
+intermediate values its working step shows, kept beside the value.
 """
 
 from __future__ import annotations
@@ -109,12 +118,15 @@ from fractions import Fraction
 from typing import Any
 
 from flo2_calc import arrays as A
+from flo2_calc import bayes as BY
 from flo2_calc import decibels as D
 from flo2_calc import formula as FM
 from flo2_calc import limits as L
 from flo2_calc import numbers as N
 from flo2_calc import realmath as RM
+from flo2_calc import shapley as SH
 from flo2_calc import temperature as T
+from flo2_calc import trials as TR
 from flo2_calc import units as U
 from flo2_calc.errors import CallError, LimitExceeded, Refusal, at
 from flo2_calc.numbers import (
@@ -163,6 +175,7 @@ ARITHMETIC, FUNCTIONS, CONSTANTS, TRIG, ROUNDING, STATISTICS = (
 )
 UNITS_OPS, DECIBELS, COUNTING = "units", "decibels", "counting"  # dec:round-2-fixes
 COMBINATORICS = "combinatorics"  # round 3
+BAYES, TRIALS, CREDIT = "Bayesian updating", "randomization tests", "credit among factors"  # 0.8.0
 REDUCTION, DATA, TRANSFORM, COMPLEX, ARRAY = (
     "reductions", "statistics over data", "transforms", "complex values", "making and shaping arrays",
 )
@@ -226,6 +239,57 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "binomial_cdf": (STATISTICS, 3, 3, "P(X <= k), at most k successes, for args [k, n, p] as binomial_pmf; exact for an exact p"),
     "binomial_sf": (STATISTICS, 3, 3, "P(X > k), MORE than k successes, for args [k, n, p] as binomial_pmf (\"at least 3 of 5\" "
                     "is binomial_sf of k = 2); exact for an exact p"),
+    # 0.8.0: the skewed distributions (req:skewed-distributions), in the rounded class
+    "lognormal_cdf": (STATISTICS, 3, 3, "P(X <= x) for X lognormal, args [x, median, sigma]: x and the median (> 0) in one unit, "
+                      "sigma the sd of ln X (a plain number > 0; ln of a geometric sd); Phi(ln(x / median) / sigma); rounded, "
+                      "exactly 1/2 at the median and 0 at x <= 0"),
+    "lognormal_sf": (STATISTICS, 3, 3, "P(X > x), the upper tail, args [x, median, sigma] as lognormal_cdf; rounded"),
+    "lognormal_quantile": (STATISTICS, 3, 3, "the x with P(X <= x) = p, args [p, median, sigma], p in (0, 1): median * "
+                           "exp(sigma z(p)), in the median's unit; rounded, the median exactly at p = 1/2"),
+    "gamma_cdf": (STATISTICS, 3, 3, "P(X <= x) for X gamma, args [x, shape, scale]: shape a plain number > 0, scale > 0 in x's "
+                  "unit (1 / rate); the regularized incomplete gamma P(shape, x / scale); rounded, 0 at x <= 0"),
+    "gamma_sf": (STATISTICS, 3, 3, "P(X > x), the upper tail, args [x, shape, scale] as gamma_cdf; rounded"),
+    "gamma_quantile": (STATISTICS, 3, 3, "the x with P(X <= x) = p, args [p, shape, scale], p in (0, 1), in the scale's unit; "
+                       "correctly rounded (Newton's method on Arb, its rounding then decided)"),
+    "beta_cdf": (STATISTICS, 3, 3, "P(X <= x) for X beta, args [x, a, b], all plain, a and b > 0: the regularized incomplete "
+                 "beta I_x(a, b); rounded, EXACT when a and b are whole numbers (a binomial tail), 0 at x <= 0, 1 at x >= 1"),
+    "beta_sf": (STATISTICS, 3, 3, "P(X > x), the upper tail, args [x, a, b] as beta_cdf; exact where beta_cdf is"),
+    "beta_quantile": (STATISTICS, 3, 3, "the x with P(X <= x) = p, args [p, a, b], p in (0, 1); correctly rounded, exact where "
+                      "rational (Beta(1, 1) gives p)"),
+    # 0.8.0: Bayesian updating (req:bayesian-update-of-an-estimate)
+    "posterior_normal_mean": (BAYES, 4, 4, "the updated estimate, args [prior_mean, prior_sd, data, data_sd]: a normal prior "
+                              "from a published population (every input it rests on needs a \"source\"), data one value or a "
+                              "1-D exact array, data_sd the known sd of one observation, all in the prior mean's unit; "
+                              "(m0 s^2 + s0^2 sum(x)) / (s^2 + n s0^2); exact for exact inputs"),
+    "posterior_normal_variance": (BAYES, 4, 4, "the updated estimate's variance, args as posterior_normal_mean: s0^2 s^2 / "
+                                  "(s^2 + n s0^2), in the unit squared; exact for exact inputs"),
+    "posterior_normal_sd": (BAYES, 4, 4, "the updated estimate's sd, the root of posterior_normal_variance; rounded, exact where "
+                            "rational (its interval: normal_quantile([p, posterior mean, posterior sd]))"),
+    "posterior_beta_a": (BAYES, 4, 4, "a + k, the posterior beta's first parameter, args [a, b, k, n]: a Beta(a, b) prior from a "
+                         "published population (a, b plain > 0, each input they rest on with a \"source\") and k successes "
+                         "in n trials (exact whole numbers, 0 <= k <= n); exact"),
+    "posterior_beta_b": (BAYES, 4, 4, "b + n - k, the posterior beta's second parameter, args [a, b, k, n]; exact"),
+    "posterior_beta_mean": (BAYES, 4, 4, "the updated rate, (a + k) / (a + b + n), args [a, b, k, n]; exact"),
+    "posterior_beta_variance": (BAYES, 4, 4, "its variance a'b' / ((a' + b')^2 (a' + b' + 1)), a' = a + k, b' = b + n - k, "
+                                "args [a, b, k, n]; exact"),
+    "posterior_beta_sd": (BAYES, 4, 4, "its sd, the root of posterior_beta_variance; rounded, exact where rational"),
+    "posterior_beta_interval_lower": (BAYES, 5, 5, "the lower end of the EQUAL-TAILED credible interval, args [a, b, k, n, level], "
+                                      "level a plain number in (0, 1) (never defaulted): beta_quantile((1 - level) / 2, a', b'); "
+                                      "rounded"),
+    "posterior_beta_interval_upper": (BAYES, 5, 5, "its upper end: beta_quantile((1 + level) / 2, a', b'), args [a, b, k, n, "
+                                      "level]; rounded"),
+    # 0.8.0: the randomization test (req:randomization-test-for-on-off-trials)
+    "randomization_test": (TRIALS, 2, 2, "the p-value of an on/off trial, args [outcomes, on]: a 1-D exact array, one outcome per "
+                           "period in order, and a true/false array of the same length (true: on). Needs \"scheme\" "
+                           "(every_arrangement: any arrangement of this many on periods; within_pairs: periods in consecutive "
+                           "pairs, one on and one off each), \"statistic\" (mean_difference: mean on minus mean off) and "
+                           "\"alternative\" (greater, less or two_sided), none ever defaulted. EXACT: the share of every "
+                           "arrangement the scheme allows that is at least as extreme as the observed one, never sampled"),
+    # 0.8.0: Shapley values (req:shapley-credit-over-few-factors)
+    "shapley_values": (CREDIT, 1, 1, "each factor's Shapley value, args [outcomes]: a 1-D exact array of the 2^k outcomes, with "
+                       "\"factors\" (the k names, in order) and \"combinations\" (for each outcome, the list of factors "
+                       "present: every combination exactly once). An exact 1-D array of the k values, in the order of "
+                       "factors; they sum to v(all) - v(none)"),
     "and": ("logic", 2, None, "true when every argument is true"),
     "or": ("logic", 2, None, "true when any argument is true"),
     "not": ("logic", 1, 1, "true when the argument is false"),
@@ -302,6 +366,7 @@ ROUNDED_OPS = frozenset(
     k for k, v in OPS.items() if v[0] in (FUNCTIONS, CONSTANTS, TRIG, STATISTICS, DECIBELS)
 ) | {"pow", "convert", "magnitude", "sd_sample", "sd_population", "fit_slope_se", "fit_intercept_se", "fit_residual_se"}
 UNIT_OPS = frozenset({"convert", "asin", "acos", "atan", "atan2", "magnitude", "with_unit", "phase"})
+ROUNDED_OPS = ROUNDED_OPS | {"posterior_normal_sd", "posterior_beta_sd", "posterior_beta_interval_lower", "posterior_beta_interval_upper"}
 ANGLE_UNIT_OPS = frozenset({"asin", "acos", "atan", "atan2", "phase"})
 KIND_OPS = frozenset({"db_to_ratio", "ratio_to_db"})  # each must be told "kind"
 SOURCED_OPS = frozenset({"with_unit"})  # each must say, in "source", where what it asserts comes from
@@ -311,7 +376,20 @@ PER_ELEMENT = frozenset({"choose", "factorial", "binomial_pmf", "binomial_cdf", 
 ROUND_MODES = ("half_even", "half_away_from_zero", "half_toward_zero", "half_up", "half_down")
 
 INPUT_KEYS = ("id", "value", "source", "note")
-OP_KEYS = ("id", "op", "args", "unit", "digits", "places", "mode", "kind", "source", "axis", "note")
+OP_KEYS = ("id", "op", "args", "unit", "digits", "places", "mode", "kind", "source", "axis", "note",
+           "scheme", "statistic", "alternative", "factors", "combinations")
+TRIAL_FIELDS = {  # randomization_test's fields: each required, each never defaulted (0.8.0)
+    "scheme": {
+        "every_arrangement": "any arrangement of this many on periods among all the periods, each equally likely",
+        "within_pairs": "the periods taken in consecutive pairs (1-2, 3-4, ...), each pair one on and one off, its order random",
+    },
+    "statistic": {"mean_difference": "the mean of the on periods minus the mean of the off periods"},
+    "alternative": {
+        "greater": "on minus off at least the observed (on raises the outcome)",
+        "less": "on minus off at most the observed (on lowers it)",
+        "two_sided": "a difference at least as large either way",
+    },
+}
 GRAPH_KEYS = ("nodes", "result")
 SOURCE_KEYS = ("design_node", "design")
 
@@ -339,9 +417,23 @@ class OpNode:
     kind: str | None = None  # db_to_ratio, ratio_to_db: "power" or "amplitude"
     source: str | dict[str, str] | None = None  # with_unit: where the unit it states comes from
     axis: int | None = None  # a reduction over a grid: 0 down each column, 1 along each row
+    scheme: str | None = None  # randomization_test (0.8.0)
+    statistic: str | None = None
+    alternative: str | None = None
+    factors: tuple[str, ...] | None = None  # shapley_values (0.8.0): the factors, in order
+    combinations: tuple[tuple[str, ...], ...] | None = None  # for each outcome, the factors present, as given
 
 
 Node = InputNode | OpNode
+
+
+@dataclass(frozen=True)
+class Detailed:
+    """An operation's value with the named intermediate values its working step
+    shows (0.8.0): a randomization test's counts, a Shapley table's check."""
+
+    value: Any
+    detail: tuple[tuple[str, Any], ...]
 
 
 @dataclass(frozen=True)
@@ -371,9 +463,12 @@ class Graph:
                 d = {"id": n.id, "op": n.op, "args": list(n.args)}
                 if n.unit_text is not None:
                     d["unit"] = n.unit_text
-                for key in ("digits", "places", "mode", "kind", "source", "axis"):
+                for key in ("digits", "places", "mode", "kind", "source", "axis", "scheme", "statistic", "alternative"):
                     if getattr(n, key) is not None:
                         d[key] = getattr(n, key)
+                if n.factors is not None:
+                    d["factors"] = list(n.factors)
+                    d["combinations"] = [list(c) for c in n.combinations or ()]
             if n.note is not None:
                 d["note"] = n.note
             out.append(d)
@@ -392,6 +487,7 @@ class Evaluation:
     order: list[str] = field(default_factory=list)
     values: dict[str, Value] = field(default_factory=dict)
     refusal: dict[str, Any] | None = None
+    details: dict[str, tuple[tuple[str, Value], ...]] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -714,7 +810,33 @@ def _node(obj: Any, path: str, data_root: Any = None, exact_limit: int | None = 
         axis = obj["axis"]
         if axis not in (0, 1) or isinstance(axis, bool):
             raise CallError(at(path, "axis"), 'a grid\'s "axis" is 0 (down each column) or 1 (along each row).')
-    return OpNode(nid, op, tuple(args), unit, unit_text, _note(obj, path), digits_, places, mode, kind, source, axis)
+    trial = _trial_fields(obj, op, path)
+    factors, combinations = SH.read_table(obj, op, path) if (op == "shapley_values" or "factors" in obj or "combinations" in obj) else (None, None)
+    return OpNode(nid, op, tuple(args), unit, unit_text, _note(obj, path), digits_, places, mode, kind, source, axis,
+                  *trial, factors, combinations)
+
+
+def _trial_fields(obj: dict[str, Any], op: str, path: str) -> tuple[str | None, str | None, str | None]:
+    """randomization_test's scheme, statistic and alternative: each required and
+    named from its list, never defaulted; no other operator takes them."""
+    out: list[str | None] = []
+    for key, allowed in TRIAL_FIELDS.items():
+        if op != "randomization_test":
+            if key in obj:
+                raise CallError(at(path, key), f'only randomization_test takes "{key}"; "{op}" does not.')
+            out.append(None)
+            continue
+        listed = "; ".join(f'"{k}" ({v})' for k, v in allowed.items())
+        if key not in obj:
+            raise CallError(
+                at(path, key),
+                f'randomization_test needs "{key}": {listed}. It is never defaulted: the p-value depends on it, and only '
+                "the person and the agent know how the trial was run and what it asks.",
+            )
+        if obj[key] not in allowed:
+            raise CallError(at(path, key), f'{obj[key]!r} is not a {key} randomization_test has. It has: {listed}.')
+        out.append(obj[key])
+    return out[0], out[1], out[2]
 
 
 def read_nodes(
@@ -768,7 +890,46 @@ def read_nodes(
         result_id = result
     graph = Graph(tuple(nodes), result_id, named, results)
     evaluation_order(graph)  # refuses a cycle now, as a malformed call
+    _check_prior_sources(graph, {n.id: p for n, (_obj, p) in zip(nodes, items, strict=True)})
     return graph
+
+
+def _check_prior_sources(graph: Graph, paths: dict[str, str]) -> None:
+    """A Bayesian update's prior comes from a published population, and that
+    source must be kept (0.8.0, req:bayesian-update-of-an-estimate): every input
+    a prior argument rests on, directly or through other nodes, carries a
+    "source". flo2-calc cannot check one; it records it."""
+    nodes = graph.by_id()
+    position = {n.id: i for i, n in enumerate(graph.nodes)}
+    for n in graph.nodes:
+        if not isinstance(n, OpNode) or n.op not in BY.PRIOR_ARGS:
+            continue
+        for i, role in BY.PRIOR_ARGS[n.op]:
+            found: set[str] = set()
+            stack = [n.args[i]]
+            while stack:
+                here = nodes[stack.pop()]
+                if here.id in found:
+                    continue
+                found.add(here.id)
+                if isinstance(here, OpNode):
+                    stack.extend(here.args)
+            inputs = sorted((x for x in found if isinstance(nodes[x], InputNode)), key=position.__getitem__)
+            if not inputs:
+                raise CallError(
+                    at(at(paths[n.id], "args"), i),
+                    f'{n.op} at node "{n.id}" takes its {role} from "{n.args[i]}", which rests on no input, so nothing names '
+                    "the published population the prior comes from. Give the prior as inputs, each with a \"source\".",
+                )
+            for x in inputs:
+                if nodes[x].source is None:  # type: ignore[union-attr]
+                    raise CallError(
+                        at(paths[x], "source"),
+                        f'"{x}" is part of the prior that {n.op} at node "{n.id}" updates (its {role}), and a prior is taken '
+                        f'from a published population: give "{x}" a "source" naming it (the study, survey or reference '
+                        "range, with its year or edition), so the prior's source is kept with the update. flo2-calc "
+                        "cannot check a source; it records it.",
+                    )
 
 
 def read_graph(obj: Any, path: str = "graph", data_root: Any = None, exact_limit: int | None = None) -> Graph:
@@ -1210,12 +1371,11 @@ def _trigonometry(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
     return _outcome(RM.evaluate(fn, [x], places, guard), node.unit, node, qs, places)  # type: ignore[arg-type]
 
 
-def _probability(op: str, q: Quantity, name: str) -> RM.Ball:
+def _probability(op: str, q: Quantity, name: str, why: str = "at 0 and 1 the quantile is infinite") -> RM.Ball:
     p = _ball(_plain(op, q, name, "a probability, a plain number"))
     if (p.exact and not 0 < p.mid < 1) or p.hi <= 0 or p.lo >= 1:
         raise Refusal(
-            f'{op}: "{name}" is {value_text(q)}; a probability for {op} is strictly between 0 and 1 (at 0 and 1 the '
-            "quantile is infinite).",
+            f'{op}: "{name}" is {value_text(q)}; a probability for {op} is strictly between 0 and 1 ({why}).',
             kind="out_of_domain",
         )
     if p.lo <= 0 or p.hi >= 1:
@@ -1282,7 +1442,79 @@ def _statistics(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
         return _outcome(RM.t_quantile(p, dof, places, guard), U.PLAIN, node, qs, places)  # type: ignore[arg-type]
     if op in BINOMIAL:
         return _binomial(node, qs, guard)
+    if op in SKEWED:
+        return _skewed(node, qs, guard)
     raise AssertionError(op)  # pragma: no cover
+
+
+# ---------------------------------------------------------------- the skewed distributions (0.8.0, req:skewed-distributions)
+
+SKEWED = ("lognormal_cdf", "lognormal_sf", "lognormal_quantile", "gamma_cdf", "gamma_sf", "gamma_quantile",
+          "beta_cdf", "beta_sf", "beta_quantile")
+
+
+def _side_of_zero(op: str, q: Quantity, name: str, ball: RM.Ball) -> int:
+    """-1 when the whole ball is at or below 0, +1 when above it; refused as undecidable when it holds 0 and more."""
+    if ball.hi <= 0:
+        return -1
+    if ball.lo > 0:
+        return 1
+    raise _undecidable(f'{op}: "{name}" may be either side of 0 within its error bound', q)
+
+
+def _skewed(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
+    """The lognormal (median, sigma), gamma (shape, scale) and beta (a, b): the
+    cdf and tail at x, or the quantile at p. In the rounded class: exact where
+    rational, correctly rounded otherwise, from rounded arguments bounded."""
+    op, names = node.op, node.args
+    places = _places(node, qs)
+    family, what = op.split("_")
+    quantile = what == "quantile"
+    if quantile:
+        p = _probability(op, qs[0], names[0], "at 0 and 1 the quantile is an end of the support, or infinite")
+    if family == "beta":
+        x = None if quantile else _ball(_plain(op, qs[0], names[0], "a plain number (the beta's x, from 0 to 1)"))
+        a = _plain(op, qs[1], names[1], "a, a plain number")
+        b = _plain(op, qs[2], names[2], "b, a plain number")
+        _positive(op, a, names[1], "a")
+        _positive(op, b, names[2], "b")
+        params = [_ball(a), _ball(b)]
+        unit: U.Unit = U.PLAIN
+        if quantile:
+            return _outcome(RM.skewed_quantile("beta", p, params, places, guard), unit, node, qs, places)
+        fn = RM.beta_fn(guard, upper=what == "sf")
+        return _outcome(RM.evaluate(fn, [x, *params], places, guard), unit, node, qs, places)  # type: ignore[list-item]
+    if family == "lognormal":
+        middle, spread = qs[1], qs[2]
+        sigma = _plain(op, spread, names[2], "sigma, the sd of ln X, a plain number (ln of a geometric sd)")
+        _positive(op, sigma, names[2], "sigma, the sd of ln X,")
+        if quantile:
+            _positive(op, middle, names[1], "the median")
+            out = RM.evaluate(RM.LOGNORMAL_QUANTILE, [p, _ball(middle), _ball(sigma)], places, guard)
+            return _outcome(out, middle.unit, node, qs, places)
+        first = qs[0]
+        m = _ball(middle, U.conversion(middle.unit, first.unit, op))
+        _positive(op, middle, names[1], "the median", m)
+        x = _ball(first)
+        if _side_of_zero(op, first, names[0], x) < 0:  # no lognormal value is 0 or less
+            return Quantity(Fraction(0 if what == "cdf" else 1))
+        fn = RM.LOGNORMAL_CDF if what == "cdf" else RM.LOGNORMAL_SF
+        return _outcome(RM.evaluate(fn, [x, m, _ball(sigma)], places, guard), U.PLAIN, node, qs, places)
+    # gamma
+    shape, scale = qs[1], qs[2]
+    k = _plain(op, shape, names[1], "the shape, a plain number")
+    _positive(op, k, names[1], "the shape")
+    if quantile:
+        _positive(op, scale, names[2], "the scale")
+        return _outcome(RM.skewed_quantile("gamma", p, [_ball(k), _ball(scale)], places, guard), scale.unit, node, qs, places)
+    first = qs[0]
+    t = _ball(scale, U.conversion(scale.unit, first.unit, op))
+    _positive(op, scale, names[2], "the scale", t)
+    x = _ball(first)
+    if _side_of_zero(op, first, names[0], x) < 0:  # a gamma variable is never below 0
+        return Quantity(Fraction(0 if what == "cdf" else 1))
+    fn = RM.GAMMA_CDF if what == "cdf" else RM.GAMMA_SF
+    return _outcome(RM.evaluate(fn, [x, _ball(k), t], places, guard), U.PLAIN, node, qs, places)
 
 
 # ---------------------------------------------------------------- combinatorics and the binomial (round 3)
@@ -1684,11 +1916,17 @@ def _counting(node: OpNode, args: list[Value]) -> Value:
 # ---------------------------------------------------------------- one node
 
 
-def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value:
+def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value | Detailed:
     op, names = node.op, node.args
+    family = OPS[op][0]
+    if family == BAYES:
+        return BY.apply(node, args, guard)  # the data may be an array: never element by element
+    if family == TRIALS:
+        return TR.apply(node, args, guard)
+    if family == CREDIT:
+        return SH.apply(node, args, guard)
     if A.uses_arrays(op, args):
         return A.apply(node, args, guard)  # an array among the arguments, or an operator only arrays have
-    family = OPS[op][0]
     if family == COUNTING:
         return _counting(node, args)
     if family == COMBINATORICS:
@@ -1753,6 +1991,9 @@ def evaluate(graph: Graph, guard: L.Guard | None = None) -> Evaluation:
                 ev.values[nid] = node.value
                 continue
             value = _apply(node, [ev.values[a] for a in node.args], guard)
+            if isinstance(value, Detailed):
+                ev.details[nid] = value.detail
+                value = value.value
             if isinstance(value, Quantity):
                 guard.check_number(value.magnitude)
             elif isinstance(value, A.Array):
@@ -1793,6 +2034,8 @@ def values_json(ev: Evaluation, style: Style = CURRENT) -> list[dict[str, Any]]:
     for nid in ev.order:
         if nid in ev.values:
             entry = {"node": nid, **value_json(ev.values[nid], style, _unit_chosen_by_rule(nodes[nid]))}
+            if nid in ev.details:
+                entry["detail"] = [{"name": name, **value_json(v, style)} for name, v in ev.details[nid]]
             ev.guard.spend_reply(_entry_bytes(entry))
             out.append(entry)
     return out
@@ -1819,7 +2062,10 @@ def shown_back(ev: Evaluation, values: list[dict[str, Any]] | None, style: Style
     in `style`'s rendering (a record of version 4 to 6 ends only a result's
     formula line with its value; version 7 and every reply end every line so)."""
     shown = {
-        v["node"]: FM.Shown(v["value"], v.get("exact"), v.get("rounded"), v.get("float64"), "array" in v)
+        v["node"]: FM.Shown(
+            v["value"], v.get("exact"), v.get("rounded"), v.get("float64"), "array" in v,
+            tuple((d["name"], d.get("exact") or d["value"]) for d in v["detail"]) if "detail" in v else None,
+        )
         for v in values or []
     }
     graph = ev.graph

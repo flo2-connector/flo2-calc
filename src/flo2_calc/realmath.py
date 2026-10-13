@@ -687,3 +687,330 @@ def t_quantile(p: Ball, nu: Fraction, places: int, guard: L.Guard) -> Outcome:
     hi = top + (half_unit(top, finer) if top else 0)
     lo = bottom - (half_unit(bottom, finer) if bottom else 0)
     return Outcome(c, round_up_significant(max(hi - c, c - lo), 2), False)
+
+
+# ---------------------------------------------------------------- the skewed distributions (flo2-calc 0.8.0)
+#
+# req:skewed-distributions, dec:v0-8-0-bayes-randomization-shapley-choices (choice 8). The lognormal
+# by its median and the sd of ln X; the gamma by its shape and scale; the beta by a and b. The cdf
+# and tail go through erfc and Arb's regularized incomplete gamma and beta, so a far tail keeps its
+# relative accuracy. Their values are irrational in general, but not proven so: as for the other
+# distributions, the rounding loop is held to the host's digits budget. Every case where a value
+# is known to be rational is answered exactly first: the lognormal's centre, the ends of each
+# support, and the beta with whole parameters, which is a binomial tail (a polynomial in x).
+
+
+def _log_ratio(x: Any, m: Any) -> Any:
+    return (x / m).log()
+
+
+LOGNORMAL_CDF = Fn(
+    "lognormal_cdf",
+    lambda x, m, s: (-_log_ratio(x, m) / (s * _sqrt2())).erfc() / 2,
+    lambda x, m, s: HALF if x == m else None,
+)
+LOGNORMAL_SF = Fn(
+    "lognormal_sf",
+    lambda x, m, s: (_log_ratio(x, m) / (s * _sqrt2())).erfc() / 2,
+    lambda x, m, s: HALF if x == m else None,
+)
+
+
+def _lognormal_quantile_exact(p: Fraction, m: Fraction, s: Fraction) -> Any:
+    """median exp(sigma z(p)), z from the exact p as _normal_quantile_exact finds it."""
+    return _arb(m) * (_arb(s) * _normal_quantile_exact(p, Fraction(0), Fraction(1))).exp()
+
+
+LOGNORMAL_QUANTILE = Fn(
+    "lognormal_quantile",
+    lambda p, m, s: m * (-s * _sqrt2() * (2 * p).erfcinv()).exp(),
+    lambda p, m, s: m if p == HALF else None,
+    _lognormal_quantile_exact,
+)
+
+GAMMA_CDF = Fn(
+    "gamma_cdf",
+    lambda x, k, t: (x / t).gamma_lower(k, regularized=1),
+    lambda x, k, t: _F(0) if x == 0 else None,
+)
+GAMMA_SF = Fn(
+    "gamma_sf",
+    lambda x, k, t: (x / t).gamma_upper(k, regularized=1),
+    lambda x, k, t: _F(1) if x == 0 else None,
+)
+
+
+def _beta_tail_exact(x: Fraction, a: Fraction, b: Fraction, guard: L.Guard) -> Fraction | None:
+    """I_x(a, b) where it is rational: 0 and 1 at the ends, 1/2 at the centre of
+    a symmetric beta, and for whole a and b the binomial tail P(Bin(a + b - 1, x) >= a),
+    a polynomial in x, when its exact value fits the digits budget (else None:
+    it is then correctly rounded like any other value)."""
+    if x <= 0:
+        return _F(0)
+    if x >= 1:
+        return _F(1)
+    if a == b and x == HALF:
+        return HALF
+    if a.denominator != 1 or b.denominator != 1:
+        return None
+    n = int(a + b - 1)
+    u, v = x.numerator, x.denominator
+    if L.power_digits_at_most(v, n) > guard.limits.max_digits:
+        return None
+    from flo2_calc import evaluator as E  # the binomial's own exact sum, in whole numbers
+
+    return Fraction(E._binomial_sum(n, u, v - u, int(a), n, guard), v**n)
+
+
+def beta_fn(guard: L.Guard, upper: bool = False) -> Fn:
+    """beta_cdf (I_x(a, b)) or beta_sf (1 - I_x(a, b) = I_{1-x}(b, a), so the upper
+    tail is computed from 1 - x, which an exact x keeps exactly)."""
+
+    def exact(x: Fraction, a: Fraction, b: Fraction) -> Fraction | None:
+        v = _beta_tail_exact(x, a, b, guard)
+        return None if v is None else (1 - v if upper else v)
+
+    if upper:
+        return Fn("beta_sf", lambda x, a, b: (1 - x).beta_lower(b, a, regularized=1), exact)
+    return Fn("beta_cdf", lambda x, a, b: x.beta_lower(a, b, regularized=1), exact)
+
+
+# The gamma and beta quantiles have no closed form. Each is found in two steps:
+#   1. APPROXIMATE: Newton's method on Arb's midpoints, kept inside a bracket (a bisection, geometric
+#      across decades, where a step would leave it), its working precision raised as the digits it
+#      has agree, until the step is far below the digits asked for;
+#   2. VERIFY: the candidate c is the approximation rounded to the digits asked for; it IS the
+#      correctly rounded quantile when the cdf is decided, by Arb's enclosures, to lie below p at
+#      the lower edge of c's rounding cell and above p at its upper edge (the cdf is strictly
+#      monotone, so the true quantile is then inside the cell). Otherwise c moves to its neighbour.
+#      An edge that is the quantile itself (a tie) is never decided: the working precision grows
+#      until the host's digits budget stops it, never a guess.
+# For p > 1/2 the upper tail is solved for 1 - p, which an exact p keeps exactly.
+
+
+@dataclass(frozen=True)
+class _Tails:
+    """A distribution for the quantile solver, at exact parameters: its cdf, its upper
+    tail and its density, as Arb functions of x, and its support (hi None: unbounded)."""
+
+    name: str
+    cdf: Callable[[Any], Any]
+    sf: Callable[[Any], Any]
+    pdf: Callable[[Any], Any]
+    hi: Fraction | None
+    start: Fraction
+
+
+def _gamma_tails(k: Fraction, t: Fraction) -> _Tails:
+    def cdf(x: Any) -> Any:
+        return (x / _arb(t)).gamma_lower(_arb(k), regularized=1)
+
+    def sf(x: Any) -> Any:
+        return (x / _arb(t)).gamma_upper(_arb(k), regularized=1)
+
+    def pdf(x: Any) -> Any:
+        y = x / _arb(t)
+        return ((_arb(k) - 1) * y.log() - y - _arb(k).lgamma()).exp() / _arb(t)
+
+    return _Tails("gamma_quantile", cdf, sf, pdf, None, k * t)
+
+
+def _beta_tails(a: Fraction, b: Fraction) -> _Tails:
+    def cdf(x: Any) -> Any:
+        return x.beta_lower(_arb(a), _arb(b), regularized=1)
+
+    def sf(x: Any) -> Any:
+        return (1 - x).beta_lower(_arb(b), _arb(a), regularized=1)
+
+    def pdf(x: Any) -> Any:
+        lbeta = _arb(a).lgamma() + _arb(b).lgamma() - _arb(a + b).lgamma()
+        return ((_arb(a) - 1) * x.log() + (_arb(b) - 1) * (1 - x).log() - lbeta).exp()
+
+    return _Tails("beta_quantile", cdf, sf, pdf, _F(1), a / (a + b))
+
+
+def _mid(y: Any) -> Fraction:
+    man, exp = y.mid().man_exp()
+    man, exp = int(man), int(exp)
+    return Fraction(man) * Fraction(2) ** exp if exp >= 0 else Fraction(man, 1 << -exp)
+
+
+def _with_prec(digits_: int, compute: Callable[[], Any]) -> Any:
+    F = flint()
+    with _LOCK:
+        saved = F.ctx.prec
+        F.ctx.prec = _bits(digits_)
+        try:
+            return compute()
+        finally:
+            F.ctx.prec = saved
+
+
+def _cell(c: Fraction, places: int) -> tuple[Fraction, Fraction]:
+    """The edges of the rounding cell of c > 0 at `places` digits: halfway to the
+    decimals either side (below a power of ten the digits are ten times finer)."""
+    u = 2 * half_unit(c, places)
+    below = u / 10 if c == Fraction(10) ** decade(c) else u
+    return c - below / 2, c + u / 2
+
+
+def _approximate(d: _Tails, q: Fraction, upper: bool, places: int, guard: L.Guard) -> Fraction:
+    """Step 1: the quantile to well past `places` digits, by Newton's method in a bracket.
+    Only its accuracy, not its correctness, rests on this: step 2 decides the rounding."""
+    tail = d.sf if upper else d.cdf
+    sign = -1 if upper else 1  # the cdf rises with x, the sf falls: tail' = sign * pdf
+    goal = places + 12
+
+    def excess(x: Fraction, w: int) -> tuple[Fraction, Fraction, Fraction] | None:
+        """(tail(x) - q, the radius of that, the density at x), at w digits; None where Arb gives no finite ball."""
+        guard.check_precision(w, f"the {d.name}")
+
+        def compute() -> Any:
+            ax = _arb(x)
+            return tail(ax), d.pdf(ax)
+
+        y, f = _with_prec(w, compute)
+        if not (y.is_finite() and f.is_finite()):
+            return None
+        return _mid(y) - q, _mid(y.rad()), _mid(f)
+
+    lo, hi = Fraction(0), d.hi  # the quantile lies in (lo, hi); hi None: unbounded
+    x = d.start
+    w = 20
+    for _ in range(4000):
+        guard.check_rounded_size(decade(x), places, d.name)
+        got = excess(x, w)
+        if got is None:
+            if w >= guard.limits.max_digits:
+                break
+            w = _next(w, guard)
+            continue
+        e, rad, f = got
+        if abs(e) <= rad:  # the quantile, to this precision
+            if w >= goal:
+                return x
+            w = min(2 * w, goal)
+            continue
+        if sign * e > 0:
+            hi = x  # past the quantile
+        else:
+            lo = x
+        nxt = x - e / (sign * f) if f > 0 else None  # Newton's step
+        if nxt is None or not (lo < nxt and (hi is None or nxt < hi)):
+            if hi is None:
+                nxt = x * 4
+            elif lo > 0 and hi / lo > 4:
+                nxt = round_significant(_mid(_with_prec(30, lambda: (_arb(lo) * _arb(hi)).sqrt())), 20)
+            else:
+                nxt = (lo + hi) / 2
+        moved = abs(nxt - x)
+        x = round_significant(nxt, w + 8)
+        if moved == 0 or moved < x * Fraction(1, 10 ** (places + 8)):
+            if w >= goal:
+                return x
+            w = min(2 * w, goal)
+            continue
+        # Newton doubles the digits that agree each step: work at twice them, and a margin.
+        agreed = max(0, -decade(moved / x))
+        w = max(w, min(2 * agreed + 10, goal))
+    raise Refusal(f"{d.name}: the quantile could not be approximated, so flo2-calc gives none.", kind="undecidable")
+
+
+def _decide(d: _Tails, x: Fraction, q: Fraction, upper: bool, places: int, guard: L.Guard) -> int:
+    """The sign of tail(x) - q (tail the cdf, or the sf when `upper`), DECIDED by
+    Arb's enclosure; the working precision grows until it is, held to the
+    host's digits budget. Outside the support it is known."""
+    if x <= 0 or (d.hi is not None and x >= d.hi):
+        at_top = x > 0
+        value = (0 if at_top else 1) if upper else (1 if at_top else 0)
+        return 1 if value > q else -1
+    tail = d.sf if upper else d.cdf
+    working = places + 10
+    while True:
+        guard.check_precision(working, f"the correctly rounded {d.name}")
+        found = _at(working, lambda: tail(_arb(x)))
+        if found is not None:
+            m, r, e = found
+            guard.check_rounded_size(e + L.digits(max(abs(m), 1)) - 1, places, d.name)
+            scale = Fraction(10) ** e
+            if Fraction(m - r) * scale > q:
+                return 1
+            if Fraction(m + r) * scale < q:
+                return -1
+        working = _next(working, guard)
+
+
+def _quantile_cr(d: _Tails, p: Fraction, places: int, guard: L.Guard) -> Fraction:
+    """Step 2: the quantile at the exact p, correctly rounded and verified."""
+    upper = p > HALF
+    q = 1 - p if upper else p
+    x = _approximate(d, q, upper, places, guard)
+    c = round_significant(x, places)
+    for _ in range(64):
+        low, high = _cell(c, places)
+        s_low = _decide(d, low, q, upper, places, guard)
+        s_high = _decide(d, high, q, upper, places, guard)
+        # the cdf rises through p inside the cell; the sf falls through 1 - p
+        below = s_low < 0 if not upper else s_low > 0  # the quantile is above the low edge
+        above = s_high > 0 if not upper else s_high < 0  # and below the high edge
+        if below and above:
+            return c
+        u = 2 * half_unit(c, places)
+        if not below:
+            c = c - (u / 10 if c == Fraction(10) ** decade(c) else u)
+        else:
+            c = c + u
+    raise Refusal(f"{d.name}: the correctly rounded quantile could not be settled, so flo2-calc gives none.", kind="undecidable")
+
+
+def _exact_beta_quantile(p: Fraction, a: Fraction, b: Fraction) -> Fraction | None:
+    """The beta quantile where it is rational: p itself for the uniform Beta(1, 1); p^(1/a)
+    for Beta(a, 1) and 1 - (1 - p)^(1/b) for Beta(1, b) when the root is rational; and 1/2
+    at the centre of a symmetric beta."""
+    if a == b and p == HALF:
+        return HALF
+    if a == 1 and b == 1:
+        return p
+    if b == 1 and a.denominator == 1:
+        return exact_root(p, int(a))
+    if a == 1 and b.denominator == 1:
+        r = exact_root(1 - p, int(b))
+        return None if r is None else 1 - r
+    return None
+
+
+def skewed_quantile(kind: str, p: Ball, params: list[Ball], places: int, guard: L.Guard) -> Outcome:
+    """The gamma ([shape, scale]) or beta ([a, b]) quantile at p (the evaluator has
+    checked p inside (0, 1) and the parameters > 0, over their whole balls).
+    Exact where rational, correctly rounded at exact arguments, and from rounded
+    arguments the correctly rounded value at their decimals with a bound from the
+    quantiles at the corners of their balls: each quantile rises with p, with the
+    gamma's shape and scale and the beta's a, and falls with the beta's b."""
+
+    def at(pp: Fraction, ps: list[Fraction], digits_: int) -> Fraction:
+        if kind == "beta":
+            v = _exact_beta_quantile(pp, *ps)
+            if v is not None:
+                return v
+            return _quantile_cr(_beta_tails(*ps), pp, digits_, guard)
+        return _quantile_cr(_gamma_tails(*ps), pp, digits_, guard)
+
+    mids = [a.mid for a in params]
+    exact_value = _exact_beta_quantile(p.mid, *mids) if kind == "beta" else None
+    if p.exact and all(a.exact for a in params):
+        if exact_value is not None:
+            guard.check_number(exact_value)
+            return Outcome(exact_value, Fraction(0), False)
+        c = at(p.mid, mids, places)
+        return Outcome(c, half_unit(c, places), True)
+    c = round_significant(exact_value, places) if exact_value is not None else at(p.mid, mids, places)
+    finer = places + 5
+    if kind == "beta":
+        a, b = params
+        low_args, high_args = [a.lo, b.hi], [a.hi, b.lo]
+    else:
+        low_args, high_args = [x.lo for x in params], [x.hi for x in params]
+    bottom, top = at(p.lo, low_args, finer), at(p.hi, high_args, finer)
+    hi = top + (half_unit(top, finer) if top else 0)
+    lo = bottom - (half_unit(bottom, finer) if bottom else 0)
+    return Outcome(c, round_up_significant(max(hi - c, c - lo, Fraction(0)), 2), False)

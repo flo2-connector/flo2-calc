@@ -106,7 +106,7 @@ def test_the_normal_interval_is_the_posteriors_normal_quantile():
     answer = ok(*HEART, *NORMAL_OPS, inp("lo_p", "0.025"), op("lo", "normal_quantile", "lo_p", "mean", "sd"), result="lo")
     with O.mp.workdps(O.DPS):
         mean, var = Fraction(5472, 85), Fraction(324, 85)
-        true = O.mpq(mean) + O.mp.sqrt(O.mpq(var)) * O.mp.sqrt(2) * O.mp.erfinv(O.mp.mpf(-0.95))
+        true = O.mpq(mean) + O.mp.sqrt(O.mpq(var)) * O.mp.sqrt(2) * O.mp.erfinv(O.mpq(Fraction(-95, 100)))
         lo = by_node(answer)["lo"]
         assert abs(O.mpq(number(lo)) - true) <= O.mpq(parse_number(lo["rounded"]["error_at_most"]))
 

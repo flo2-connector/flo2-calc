@@ -89,7 +89,7 @@ def test_random_tables_match_the_average_over_every_order(k, seed):
 
 def test_the_working_shows_each_value_and_that_they_sum_to_all_minus_none():
     answer = run(*table_nodes(THREE, S1))
-    detail = {d["name"]: d["value"] for d in answer["result"]["detail"]}
+    detail = {d["name"]: d.get("exact", d["value"]) for d in answer["result"]["detail"]}
     expected = by_orders(THREE, S1)
     assert parse_number(detail["phi(sleep)"].split()[0]) == expected["sleep"]
     assert detail["v(all)"] == "21 d" and detail["v(none)"] == "10 d"

@@ -14,7 +14,8 @@ when a question set or a real design needs them, never for parity (`dec:idea-wha
   exact. A result is exact for the inputs as written, and no more accurate than they are: a typed `3.14159` is taken
   as that decimal, not as pi, and every reply and record says so.
 - **Or correctly rounded, and labelled so.** pi, e, roots, `exp`, `ln`, `log10`, non-whole powers, trigonometry,
-  deg-rad conversion and the normal, chi-square and Student-t distributions are irrational in general. Their results
+  deg-rad conversion and the normal, chi-square, Student-t, lognormal, gamma and beta distributions are irrational in
+  general. Their results
   are **correctly rounded** to 30 significant digits (or as many as a node asks, up to 1000), labelled `rounded` with
   a rigorous `error_at_most`, and never called exact. Where the result is rational it stays exact: `sqrt(9/4)` is
   `3/2`, and `sin(30 deg)` is `1/2`.
@@ -23,6 +24,11 @@ when a question set or a real design needs them, never for parity (`dec:idea-wha
   population, and a least-squares fit with standard errors) and the FFT. An exact array stays exact; an FFT, a
   function over an array or a large grid is computed in float64 and labelled `float64`, with a rigorous bound on every
   element.
+- **The math of a decision from data** (0.8.0, from the cure design's requirements). A starting estimate from a
+  published population updated with a person's own observations (normal-normal and beta-binomial, with the prior's
+  source kept and a beta credible interval); the exact p-value of an on/off trial's randomization test, over every
+  arrangement its stated scheme allows; Shapley values sharing an outcome's credit among a few factors, from a table
+  naming every combination. Exact for exact inputs, the standard deviations and intervals correctly rounded.
 - **Units, checked.** A value can carry a unit, spelled as reflow2 designs spell it (`mm`, `g`, `V`, `mA`, ...).
   Units that measure different things are refused, naming the operation and both units, never stripped. A unit
   flo2-calc does not know is refused, never guessed, and a hint never offers a unit of another size or kind.
@@ -35,8 +41,9 @@ when a question set or a real design needs them, never for parity (`dec:idea-wha
   with LaTeX beside it: `t = C / I = 450/13 h`. You can check it is the computation you meant.
 - **Re-runnable.** A computation comes back as a **computation record**, a `.calc.json` file a decision can cite.
   Anyone can re-run it and get the same values, and an edited record is caught.
-- **Never runs away.** Each host sets limits at start-up: a deadline per call, and a budget for the digits of any
-  exact number and for the reply. They are the only limits. A calculation past one is stopped cleanly, with its reason. A recorded one comes
+- **Never runs away.** Each host sets limits at start-up: a deadline per call, budgets for the digits of any exact
+  number, for the reply and for arrays, and the most arrangements a randomization test counts and factors a Shapley
+  table has. They are the only limits. A calculation past one is stopped cleanly, with its reason. A recorded one comes
   back as a **not-yet-computed record** that flo2-calc on a machine with more room completes.
 
 It stands alone. Nothing in it imports, calls or assumes flo2, reflow2 or another helper, and no feature needs them.
@@ -100,8 +107,9 @@ flo2 has no door for flo2-calc yet. What it needs is listed under "What flo2 nee
 ## Limits
 
 flo2-calc's arithmetic is exact, and exact numbers can grow without bound: a high power, or a long chain of
-divisions, gives numerators and denominators of thousands of digits. So each host sets three limits at start-up,
-the same way as `--root`: a flag, or its environment variable. A calculation past one is **stopped cleanly, with its
+divisions, gives numerators and denominators of thousands of digits; a randomization test's arrangements and a
+Shapley table's combinations grow just as fast. So each host sets its limits at start-up, the same way as `--root`: a
+flag, or its environment variable. A calculation past one is **stopped cleanly, with its
 reason**. It is never cut short, never guessed, and never killed by a sandbox as if it had crashed.
 
 | Limit | Flag | Variable | Laptop (the default) | flo2.io's sandbox (the image) |
@@ -111,6 +119,8 @@ reason**. It is never cut short, never guessed, and never killed by a sandbox as
 | bytes in a reply, its record included | `--max-reply-bytes N` | `FLO2_CALC_MAX_REPLY_BYTES` | 8,388,608 (8 MiB) | 2,097,152 (2 MiB) |
 | bytes the arrays of one call may hold | `--max-array-bytes N` | `FLO2_CALC_MAX_ARRAY_BYTES` | 536,870,912 (512 MiB) | 16,777,216 (16 MiB) |
 | elements an exact array may have (past it: float64, labelled) | `--max-exact-elements N` | `FLO2_CALC_MAX_EXACT_ELEMENTS` | 65,536 (a 256 x 256 grid) | 4,096 (a 64 x 64 grid) |
+| arrangements one randomization test counts | `--max-arrangements N` | `FLO2_CALC_MAX_ARRANGEMENTS` | 10,000,000 | 1,000,000 |
+| factors of one Shapley table (2^k outcomes) | `--max-shapley-factors N` | `FLO2_CALC_MAX_SHAPLEY_FACTORS` | 16 | 12 |
 
 Why each value:
 
@@ -143,8 +153,18 @@ Why each value:
   anywhere; a version 5 record (0.6.0) was made with a fixed 4,096 and re-runs with it.
 - **Arrays, 16 MiB on flo2.io.** A 256 x 256 grid's discretised integral and 2-D FFT hold about 7 MiB; the image's
   measured peak with them is 105 MiB under the 128m cap (Measurements, below).
+- **Arrangements, 10,000,000 on a laptop and 1,000,000 on flo2.io** (`dec:v0-8-0-bayes-randomization-shapley-choices`,
+  choice 5). A randomization test's p-value is exact only over every arrangement its scheme allows, and each one is
+  counted: about 0.6 us each on the laptop that measured it, so 10,000,000 is about 6 s, well inside its 45 s
+  deadline, and 1,000,000 well inside flo2.io's 20 s on one shared CPU. That is 22 periods with any 11 on (705,432
+  arrangements), or 19 pairs within pairs (524,288). The count is exact (C(N, k), or 2^(N/2)) and checked BEFORE any
+  arrangement is listed; past it the test is stopped, never sampled. The deadline is checked while counting too.
+- **Shapley factors, 16 on a laptop and 12 on flo2.io.** A table of k factors holds 2^k outcomes, every one named, and
+  the values take k 2^(k-1) steps. 2^16 and 2^12 are each host's `max_exact_elements`, so the table stays exact. A host
+  may set from 1 to 21 (2^21 is the most elements any array has).
 
-**These are the only limits on a calculation.** A power has no exponent cap of its own: flo2-calc 0.1.0 to 0.6.1
+**These are the only limits on a calculation.** A randomization test and a Shapley table are sized by theirs before any
+work (0.8.0); a power has no exponent cap of its own: flo2-calc 0.1.0 to 0.6.1
 also refused any whole exponent above 1000 (kind `too_large`), a cap none of the served limits named, which refused
 `2^1001` (302 digits) and gave `record_computation` no not-yet-computed record (round 3, q072 and q086). Since 0.7.0 a
 power is sized against the digits budget alone. How a graph may be written (at most 500 nodes, 100 arguments a
@@ -245,7 +265,10 @@ the same graph, and gives the same result, as the same nodes sent whole.
 | constants | `pi`, `e` (no `args`) |
 | trigonometry | `sin`, `cos`, `tan` (of an angle in `deg` or `rad`); `asin`, `acos`, `atan`, `atan2` (with `"unit"`: `"deg"` or `"rad"`, the unit of the angle they give) |
 | rounding | `ceil`, `floor`, `round` (with `"places"`, and for `round` a `"mode"`) |
-| statistics | `normal_cdf`, `normal_sf`, `normal_quantile`, `chi2_sf`, `t_quantile`, `binomial_pmf`, `binomial_cdf`, `binomial_sf` |
+| statistics | `normal_cdf`, `normal_sf`, `normal_quantile`, `chi2_sf`, `t_quantile`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`; `lognormal_cdf`, `lognormal_sf`, `lognormal_quantile`, `gamma_cdf`, `gamma_sf`, `gamma_quantile`, `beta_cdf`, `beta_sf`, `beta_quantile` (0.8.0) |
+| Bayesian updating | `posterior_normal_mean`, `posterior_normal_variance`, `posterior_normal_sd`; `posterior_beta_a`, `posterior_beta_b`, `posterior_beta_mean`, `posterior_beta_variance`, `posterior_beta_sd`, `posterior_beta_interval_lower`, `posterior_beta_interval_upper` (0.8.0) |
+| randomization tests | `randomization_test` (with `"scheme"`, `"statistic"` and `"alternative"`, none defaulted; 0.8.0) |
+| credit among factors | `shapley_values` (with `"factors"` and `"combinations"`; 0.8.0) |
 | logic | `and`, `or`, `not`, `nand`, `nor`, `xor` |
 | comparison | `eq`, `ne`, `lt`, `le`, `gt`, `ge` |
 | counting | `count_true`, `k_of_n`, `to_number` |
@@ -286,6 +309,68 @@ the same graph, and gives the same result, as the same nodes sent whole.
     numbers, `p` a plain number from 0 to 1. Exact for an exact `p` (`binomial_sf(2, 5, 0.8)` is `0.94208`); from a
     rounded `p`, rounded with a bound from the polynomial's values over `p`'s ball. Whether the trials are independent
     with one `p` is the agent's judgement.
+  - **Skewed distributions** (0.8.0, `req:skewed-distributions`), for a value placed against a population whose spread
+    is not symmetric, such as many lab values. Each is in the rounded class, correctly rounded and labelled, exact
+    where its value is rational:
+    - `lognormal_cdf`, `lognormal_sf` take `[x, median, sigma]`, and `lognormal_quantile` `[p, median, sigma]`: x and the
+      median (> 0) in one unit, `sigma` the plain standard deviation of ln X (> 0). A geometric mean is the median, and
+      sigma is ln of a geometric sd. P(X <= x) = Phi(ln(x / median) / sigma); exactly `1/2` at the median; `0` for
+      x <= 0. The quantile, median exp(sigma z(p)), is in the median's unit.
+    - `gamma_cdf`, `gamma_sf` take `[x, shape, scale]`, and `gamma_quantile` `[p, shape, scale]`: shape a plain number
+      above 0, scale above 0 in x's unit (1 / a rate). P(X <= x) is the regularized incomplete gamma P(shape, x /
+      scale); `0` for x <= 0. A chi-square of nu degrees of freedom is the gamma of shape nu/2 and scale 2.
+    - `beta_cdf`, `beta_sf` take `[x, a, b]`, and `beta_quantile` `[p, a, b]`, all plain, a and b above 0: the
+      regularized incomplete beta I_x(a, b). With whole a and b it is a binomial tail, a polynomial in x, so it is
+      EXACT (`beta_cdf(0.4, 2, 5)` is `0.76672`) where its exact value fits the digits budget; `0` for x <= 0, `1` for
+      x >= 1. The quantile is exact for Beta(1, 1) (it is p), for a whole a with b = 1 and for a = 1 with a whole b
+      where the root is rational, and 1/2 at the centre of a symmetric beta.
+    - The gamma and beta quantiles have no closed form. Newton's method on Arb approximates each, and then the rounding
+      is decided: the cdf is shown, by Arb's enclosures, to lie below p at the lower edge of the candidate's rounding
+      cell and above it at the upper edge. A quantile exactly on an edge (a tie) is never decided, only stopped at the
+      digits budget.
+    - Over an array they are refused for now ("apply it to single values"): no question has asked for them so.
+- **Bayesian updating** (0.8.0, `req:bayesian-update-of-an-estimate`): a starting estimate taken from a published
+  population (the prior), updated with a person's own observations.
+  - Normal-normal, with the known sd of one observation: `posterior_normal_mean`, `posterior_normal_variance` and
+    `posterior_normal_sd` take `[prior_mean, prior_sd, data, data_sd]`, the data one value or a 1-D exact array, all
+    in the prior mean's unit (converted into it exactly). The mean is (m0 s^2 + s0^2 sum(x)) / (s^2 + n s0^2) and the
+    variance s0^2 s^2 / (s^2 + n s0^2), the precision-weighted form rearranged: EXACT for exact inputs. The sd is its
+    square root, correctly rounded. An interval is `normal_quantile` on the posterior: `[0.025, mean, sd]`.
+  - Beta-binomial: `posterior_beta_a` (a + k), `posterior_beta_b` (b + n - k), `posterior_beta_mean`,
+    `posterior_beta_variance` and `posterior_beta_sd` take `[a, b, k, n]` (a, b plain and above 0; k successes in n
+    trials, exact whole numbers). All exact but the sd. `posterior_beta_interval_lower` and
+    `posterior_beta_interval_upper` take `[a, b, k, n, level]` and give the EQUAL-TAILED credible interval, the
+    posterior's beta quantiles at (1 - level) / 2 and (1 + level) / 2: `level` is never defaulted.
+  - **The prior's source is kept.** Every input the prior's arguments (prior_mean and prior_sd; a and b) rest on,
+    directly or through other nodes, must carry a `"source"` naming the published population (the study, survey or
+    reference range, with its year or edition). One without is a malformed call naming that input's `source`.
+    flo2-calc records a source; it cannot check one.
+  - The working shows the formula in the arguments' names, and for the normal case the count and the sum of the data:
+    `mean = (m0 * s^2 + s0^2 * sum(x)) / (s^2 + length(x) * s0^2) = 5472/85; where n = 4, sum(x) = 256`.
+- **The randomization test** (0.8.0, `req:randomization-test-for-on-off-trials`): `randomization_test` takes
+  `[outcomes, on]`, a 1-D exact array of one outcome per period, in the order the periods ran, and a true/false array of
+  the same length (true: the period was on). Three fields say what only the person and the agent know, and NONE is ever
+  defaulted:
+  - `"scheme"`, which assignments the randomization could have made: `"every_arrangement"` (any arrangement of this many
+    on periods, C(N, k) of them) or `"within_pairs"` (the periods in consecutive pairs, 1-2, 3-4 ..., each pair one on
+    and one off in a random order, 2^(N/2) of them). An A-B-A-B trial randomized pair by pair is the second; counting it
+    as the first gives a different, wrong p-value. The observed assignment must fit the scheme.
+  - `"statistic"`: `"mean_difference"`, the mean of the on periods minus the mean of the off periods.
+  - `"alternative"`: `"greater"` (on minus off at least the observed), `"less"`, or `"two_sided"`.
+
+  The p-value is EXACT: the arrangements at least as extreme as the observed one (it among them) over all of them,
+  every one counted, never sampled. The value's `detail` and its working step give the observed statistic and both
+  counts: `p = 1/70; where observed = -3, as_extreme = 1, arrangements = 70`. Whether the trial was randomized as the
+  scheme says is the person's to state; flo2-calc cannot know it.
+- **Shapley values** (0.8.0, `req:shapley-credit-over-few-factors`): `shapley_values` takes `[outcomes]`, a 1-D exact
+  array of the outcome of every combination of k factors present or absent, with `"factors"` (their names, in order)
+  and `"combinations"` (for each outcome in turn, the list of the factors present: `[]`, `["sleep"]`, `["sleep",
+  "diet"]` ...). The table must name every one of the 2^k combinations exactly once: a factor not among `factors`, one
+  twice in a combination, a combination named twice (both places named) or one not named (named with the factors
+  present and absent) is a malformed call. flo2-calc never fills an outcome in. The result is an exact 1-D array of
+  the k values in the order of `factors`, each phi_i = the sum over S without i of |S|! (k - |S| - 1)! / k! (v(S + i) -
+  v(S)); the working shows each factor's value, v(all), v(none), and that the values sum to v(all) - v(none), which is
+  checked exactly on every call.
 - **`digits`**: any rounded operator may take `"digits"`, from 1 to 1000 significant digits; 30 when left out.
 - **`count_true`** counts the true values among its arguments: an exact whole number. **`k_of_n`** takes `[k, b1, b2,
   ...]` and is true when at least `k` of the `b` are true (`k` an exact whole number from 0 to their count). `add` still
@@ -737,8 +822,12 @@ flo2's helper contract fixes the split.
 ## The computation record
 
 One JSON object, defined by
-[`src/flo2_calc/schemas/calc-record-7.schema.json`](src/flo2_calc/schemas/calc-record-7.schema.json) (JSON Schema
-draft 2020-12). Version 7 (0.7.0, round 3) ends every line of `formula` with its value, allows round 3's operators
+[`src/flo2_calc/schemas/calc-record-8.schema.json`](src/flo2_calc/schemas/calc-record-8.schema.json) (JSON Schema
+draft 2020-12). Version 8 (0.8.0) allows Bayesian updating, the randomization test (with `scheme`, `statistic` and
+`alternative`), Shapley values (with `factors` and `combinations`) and the lognormal, gamma and beta distributions; a
+value may carry `detail` (the named values its working step shows); and a host's limits gain `max_arrangements` and
+`max_shapley_factors`. A version 7 record re-runs as it was made (`tests/data/statistics.v7.calc.json`, made by 0.7.0,
+reproduces byte for byte). Version 7 (0.7.0, round 3) ends every line of `formula` with its value, allows round 3's operators
 (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`), and writes a `K` known to
 be a change of temperature as `delta_K`. A record of version 6 or older re-runs under the writing and the rules it was
 made with (`tests/data/temperature-and-formula.v6.calc.json`, made by 0.6.1, holds every path 0.7.0 changes and
@@ -762,7 +851,7 @@ version.
 
 | Field | Holds |
 |---|---|
-| `record_format`, `schema_version` | `"flo2-calc computation record"`, `7` |
+| `record_format`, `schema_version` | `"flo2-calc computation record"`, `8` |
 | `max_exact_elements` | a record that holds an array: the most elements an exact array had where it was made; re-running uses it |
 | `status` | `"computed"`, or `"not_computed"` (below) |
 | `name` | the record's name; its file is `<name>.calc.json` |
@@ -770,7 +859,7 @@ version.
 | `arithmetic` | what exactness means in this record: exact for these inputs, and no more accurate than they are |
 | `graph` | the graph exactly as read, every value as text |
 | `inputs` | each input's `id`, `value`, `unit` and `source` (free text or `{"design_node"}`) |
-| `values` | every node's value, in evaluation order, with `"exact"` (the exact value for these inputs) beside an exact value whose text is rounded, or the `"rounded"` label on a rounded value: which values were rounded, and at what precision; `"simplified_from"` where a computed unit is shown simpler; `"array"` (shape, kind, unit, sha256, the elements up to 1,024) on an array, `"float64"` (error_at_most, how, from) on a float64 value |
+| `values` | every node's value, in evaluation order, with `"exact"` (the exact value for these inputs) beside an exact value whose text is rounded, or the `"rounded"` label on a rounded value: which values were rounded, and at what precision; `"simplified_from"` where a computed unit is shown simpler; `"array"` (shape, kind, unit, sha256, the elements up to 1,024) on an array, `"float64"` (error_at_most, how, from) on a float64 value; `"detail"` (0.8.0) on a value whose working step shows named intermediate values |
 | `result` | `{"node", "value"}`, labelled the same way; or `results`, one each, when the graph names a list |
 | `formula` | the computation as equations, plain text with LaTeX beside it, every line ending with its value |
 | `working` | every step, numbered, with its formula, value and label |
@@ -907,8 +996,19 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
   next to a rounding tie, both sides; exact results that stay exact; the unit rules and domains of every new operator;
   the labels in the record; and the limits.
 - `tests/test_record.py`: the record is deterministic and fits its schema; it re-runs; tampering is caught; several
-  results; records of versions 1 to 3 and 6 reproduce under their own writing (and version 6's under its own
-  temperature rules); round 3's operators in a version 7 record.
+  results; records of versions 1 to 3, 6 and 7 reproduce under their own writing (and version 6's under its own
+  temperature rules); round 3's operators in a version 7 record; every operator in version 8's schema.
+- `tests/test_skewed.py` (0.8.0): the lognormal, gamma and beta cdf, sf and quantile against mpmath's own gammainc and
+  betainc at 120 digits, next to a rounding tie on both sides; exact cases; units; domains; rounded arguments; the
+  chi-square critical values NIST publishes, from the gamma quantile.
+- `tests/test_bayes.py` (0.8.0): the normal-normal update against the textbook precision-weighted form, the
+  beta-binomial against the beta's moments, its credible interval against mpmath; the prior's source required; the
+  refusals; the working; the record.
+- `tests/test_randomization.py` (0.8.0): every scheme and alternative against an enumeration written in the test;
+  nothing defaulted; the scheme's fit; `max_arrangements` and the deadline; a not-yet-computed record.
+- `tests/test_shapley.py` (0.8.0): against Shapley's own definition, the average over every order of adding the
+  factors, on random tables of 1 to 6 factors; a missing, repeated or unknown combination named; `max_shapley_factors`;
+  the record.
 - `tests/test_server.py`: the four tools over a real MCP client session. Every refusal's reason is read on the
   client's side. The served skill (prompt and resource) is read there too, and matches its file.
 - `tests/test_conformance.py`: flo2's helper contract, asked in raw JSON-RPC as flo2's plug asks it. It also holds
@@ -965,7 +1065,7 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    per record. **0.5.0 also offers an MCP prompt and a resource** (the skill, `initialize` now lists `prompts` and
    `resources` beside `tools`). They are not tools, so the door's allow-list of four is untouched; the door may ignore
    them, since hosted on flo2.io the skill is served by flo2 itself. The image's size is unchanged (209 MB), and its
-   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`. 0.7.0 (round 3's fixes) changes the skill's text again (an empirical formula's constants come from the person or a cited document, never the agent's memory; ambiguous expressions; troy weight; the new operators) and the server's instructions; adds `op` values inside a graph (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`) and the units `ozt`, `dwt`, `grain`, `week` and `delta_K`; and makes the record schema version 7. The four tools, their classes and their top-level arguments are unchanged; the image's limits are unchanged.
+   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`. 0.7.0 (round 3's fixes) changes the skill's text again (an empirical formula's constants come from the person or a cited document, never the agent's memory; ambiguous expressions; troy weight; the new operators) and the server's instructions; adds `op` values inside a graph (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`) and the units `ozt`, `dwt`, `grain`, `week` and `delta_K`; and makes the record schema version 7. The four tools, their classes and their top-level arguments are unchanged; the image's limits are unchanged. 0.8.0 (the cure design's four requirements) changes the skill's text again (Bayesian updating, the randomization test, Shapley values, the skewed distributions) and the server's instructions; adds `op` values and node fields inside a graph (`scheme`, `statistic`, `alternative`, `factors`, `combinations`) and a value's `detail` inside a reply; makes the record schema version 8; and adds two limits to the image's profile (`FLO2_CALC_MAX_ARRANGEMENTS=1000000`, `FLO2_CALC_MAX_SHAPLEY_FACTORS=12`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies the skill file unchanged.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.

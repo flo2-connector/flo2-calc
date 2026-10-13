@@ -95,6 +95,39 @@ def regression_graph(n: int) -> dict:
         {"id": "sd", "op": "sd_sample", "args": ["y"]}], "result": "se"}
 
 
+def trial_graph(periods: int) -> dict:
+    """flo2-calc 0.8.0: a randomization test of `periods` periods, half of them on, every arrangement counted."""
+    y = [str((7 * i) % 11 + i % 3) for i in range(periods)]
+    on = [i % 4 in (1, 2) for i in range(periods)]
+    on[-1] = sum(on) < periods // 2 or on[-1]
+    while sum(on) > periods // 2:
+        on[on.index(True)] = False
+    return {"nodes": [{"id": "y", "value": {"array": y}, "source": "measure.py"}, {"id": "on", "value": {"array": on}, "source": "measure.py"},
+                      {"id": "p", "op": "randomization_test", "args": ["y", "on"], "scheme": "every_arrangement",
+                       "statistic": "mean_difference", "alternative": "two_sided"}]}
+
+
+def shapley_graph(k: int) -> dict:
+    """flo2-calc 0.8.0: Shapley values of k factors from all 2^k outcomes."""
+    factors = [f"f{i}" for i in range(k)]
+    combos = [[f for j, f in enumerate(factors) if m >> j & 1] for m in range(1 << k)]
+    v = [str((m * 37) % 101) for m in range(1 << k)]
+    return {"nodes": [{"id": "v", "value": {"array": v, "unit": "d"}, "source": "measure.py"},
+                      {"id": "phi", "op": "shapley_values", "args": ["v"], "factors": factors, "combinations": combos}]}
+
+
+def skewed_graph(digits: int = 1000) -> dict:
+    """flo2-calc 0.8.0: the gamma and beta quantiles and a lognormal tail at `digits` digits."""
+    nodes = [{"id": "p", "value": "0.95", "source": "measure.py"}, {"id": "k", "value": "7/2", "source": "measure.py"},
+             {"id": "t", "value": "3/2", "source": "measure.py"}, {"id": "a", "value": "5/2", "source": "measure.py"},
+             {"id": "b", "value": "7/3", "source": "measure.py"}, {"id": "x", "value": "31", "source": "measure.py"},
+             {"id": "m", "value": "20", "source": "measure.py"}, {"id": "s", "value": "2/5", "source": "measure.py"}]
+    nodes += [{"id": "g", "op": "gamma_quantile", "args": ["p", "k", "t"], "digits": digits},
+              {"id": "bq", "op": "beta_quantile", "args": ["p", "a", "b"], "digits": digits},
+              {"id": "l", "op": "lognormal_sf", "args": ["x", "m", "s"], "digits": digits}]
+    return {"nodes": nodes, "result": ["g", "bq", "l"]}
+
+
 def runaway_graphs() -> dict[str, dict]:
     """Calculations past any sensible limit: each must be STOPPED, with its reason."""
     nines = "9" * 80
@@ -113,6 +146,8 @@ def runaway_graphs() -> dict[str, dict]:
                                 {"id": "x", "op": "linspace", "args": ["a", "b", "n"]}, {"id": "c", "op": "column", "args": ["x"]},
                                 {"id": "g", "op": "mul", "args": ["c", "x"]}]},
         "heaviest_allowed": {"nodes": heaviest},
+        "trial_past_arrangements": trial_graph(24),  # C(24, 12) = 2,704,156 arrangements
+        "shapley_past_factors": shapley_graph(13),
     }
 
 
@@ -150,7 +185,11 @@ async def drive(command: list[str], name: str) -> dict:
         array_seconds: dict[str, float] = {}
         for label, g, tool in (("grid_256", grid_graph(256), "evaluate_graph"), ("grid_256_record", grid_graph(256), "record_computation"),
                                ("grid_250_arb", grid_graph(250), "evaluate_graph"), ("fit_4000_exact", regression_graph(4000), "evaluate_graph"),
-                               ("fit_20000_float64", regression_graph(20000), "evaluate_graph")):
+                               ("fit_20000_float64", regression_graph(20000), "evaluate_graph"),
+                               ("trial_22_periods", trial_graph(22), "evaluate_graph"),
+                               ("trial_22_periods_record", trial_graph(22), "record_computation"),
+                               ("shapley_12_factors_record", shapley_graph(12), "record_computation"),
+                               ("skewed_1000_digits", skewed_graph(1000), "evaluate_graph")):
             t0 = time.perf_counter()
             args = {"graph": g} if tool == "evaluate_graph" else {"graph": g, "name": label}
             r = await s.call_tool(tool, args)

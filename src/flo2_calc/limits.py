@@ -16,6 +16,15 @@ THE LIMITS (cli.py reads them, like --root, from a flag or the environment):
   max_reply_bytes  --max-reply-bytes N       FLO2_CALC_MAX_REPLY_BYTES  a reply, its record included
   max_array_bytes  --max-array-bytes N       FLO2_CALC_MAX_ARRAY_BYTES  the arrays one call holds (arrays.py)
   max_exact_elements --max-exact-elements N  FLO2_CALC_MAX_EXACT_ELEMENTS  the most elements an exact array has
+  max_arrangements --max-arrangements N      FLO2_CALC_MAX_ARRANGEMENTS   the arrangements one randomization test counts
+  max_shapley_factors --max-shapley-factors N  FLO2_CALC_MAX_SHAPLEY_FACTORS  the factors of one Shapley table
+
+max_arrangements and max_shapley_factors (flo2-calc 0.8.0,
+dec:v0-8-0-bayes-randomization-shapley-choices, choice 5) are checked BEFORE
+the work, from its exact size: a randomization test counts every arrangement
+its scheme allows (C(N, k), or 2^(N/2) within pairs), and a Shapley table of k
+factors holds 2^k outcomes. Past either, the call is stopped like any other
+limit (exceeds_limits), never sampled and never cut short.
 
 max_exact_elements is not a stop: past it an array is carried in float64 and
 labelled so (dec:idea-how-arrays-are-computed's "large grids";
@@ -69,12 +78,18 @@ SETTINGS: dict[str, tuple[str, str]] = {
     "max_reply_bytes": ("--max-reply-bytes", "FLO2_CALC_MAX_REPLY_BYTES"),
     "max_array_bytes": ("--max-array-bytes", "FLO2_CALC_MAX_ARRAY_BYTES"),
     "max_exact_elements": ("--max-exact-elements", "FLO2_CALC_MAX_EXACT_ELEMENTS"),
+    "max_arrangements": ("--max-arrangements", "FLO2_CALC_MAX_ARRANGEMENTS"),
+    "max_shapley_factors": ("--max-shapley-factors", "FLO2_CALC_MAX_SHAPLEY_FACTORS"),
 }
+# What each count-like limit counts, as a not-yet-computed record says what it needs.
+COUNTS = {"max_digits": "digits", "max_arrangements": "arrangements", "max_shapley_factors": "factors"}
 DEADLINE_MS_RANGE = (1, 86_400_000)  # 0.001 s to a day
 MAX_DIGITS_RANGE = (10, 100_000)  # past 100,000 digits, one step on two such numbers takes most of a second
 MAX_REPLY_BYTES_RANGE = (1024, 256 * MIB)
 MAX_ARRAY_BYTES_RANGE = (64 * 1024, 64 * 1024 * MIB)
 MAX_EXACT_ELEMENTS_RANGE = (1, 1 << 21)  # up to the most elements any one array has (arrays.MAX_ELEMENTS)
+MAX_ARRANGEMENTS_RANGE = (1, 10**12)  # 10^12 arrangements at about 0.6 us each is a week of one CPU
+MAX_SHAPLEY_FACTORS_RANGE = (1, 21)  # 2^21 outcomes is the most elements any one array has (arrays.MAX_ELEMENTS)
 
 
 @dataclass(frozen=True)
@@ -86,6 +101,8 @@ class Limits:
     max_reply_bytes: int = 8 * MIB
     max_array_bytes: int = 512 * MIB
     max_exact_elements: int = 65_536  # a 256 x 256 grid stays exact on a laptop
+    max_arrangements: int = 10_000_000  # about 6 s of one randomization test at 0.6 us an arrangement
+    max_shapley_factors: int = 16  # 2^16 outcomes: max_exact_elements, so the table stays exact
 
     def describe(self) -> dict[str, Any]:
         """As replies and not-yet-computed records write them: the deadline in
@@ -96,6 +113,8 @@ class Limits:
             "max_reply_bytes": self.max_reply_bytes,
             "max_array_bytes": self.max_array_bytes,
             "max_exact_elements": self.max_exact_elements,
+            "max_arrangements": self.max_arrangements,
+            "max_shapley_factors": self.max_shapley_factors,
         }
 
     def value_of(self, name: str) -> Any:
@@ -105,15 +124,18 @@ class Limits:
         return (
             f"a deadline of {seconds_text(self.deadline_ms)} per call, at most {self.max_digits:,} digits in any exact "
             f"numerator or denominator, a reply of at most {self.max_reply_bytes:,} bytes, at most "
-            f"{self.max_array_bytes:,} bytes of arrays in one call, and exact arrays of up to "
-            f"{self.max_exact_elements:,} elements (larger ones are float64, labelled)"
+            f"{self.max_array_bytes:,} bytes of arrays in one call, exact arrays of up to "
+            f"{self.max_exact_elements:,} elements (larger ones are float64, labelled), at most "
+            f"{self.max_arrangements:,} arrangements in one randomization test, and Shapley values of at most "
+            f"{self.max_shapley_factors} factors"
         )
 
 
 # A laptop: the defaults. A workstation raises them; flo2.io lowers them.
 LAPTOP = Limits()
 # flo2.io's sandbox: a 128m memory cap, one CPU, and a gateway that stops a helper call at 60 s.
-FLO2_IO = Limits(deadline_ms=20_000, max_digits=2_000, max_reply_bytes=2 * MIB, max_array_bytes=16 * MIB, max_exact_elements=4_096)
+FLO2_IO = Limits(deadline_ms=20_000, max_digits=2_000, max_reply_bytes=2 * MIB, max_array_bytes=16 * MIB, max_exact_elements=4_096,
+                 max_arrangements=1_000_000, max_shapley_factors=12)
 
 
 def seconds_text(ms: int) -> str:
@@ -155,6 +177,8 @@ def from_settings(
     max_reply_bytes: str | None,
     max_array_bytes: str | None = None,
     max_exact_elements: str | None = None,
+    max_arrangements: str | None = None,
+    max_shapley_factors: str | None = None,
 ) -> Limits:
     """The limits from start-up settings (None or "" keeps the laptop default).
     Raises ValueError naming the setting and why."""
@@ -162,6 +186,7 @@ def from_settings(
     settings = (
         ("deadline", deadline), ("max_digits", max_digits), ("max_reply_bytes", max_reply_bytes),
         ("max_array_bytes", max_array_bytes), ("max_exact_elements", max_exact_elements),
+        ("max_arrangements", max_arrangements), ("max_shapley_factors", max_shapley_factors),
     )
     for name, raw in settings:
         if raw is None or raw.strip() == "":
@@ -176,8 +201,12 @@ def from_settings(
                 out["max_reply_bytes"] = parse_count(raw, "reply budget in bytes", MAX_REPLY_BYTES_RANGE)
             elif name == "max_array_bytes":
                 out["max_array_bytes"] = parse_count(raw, "budget for arrays in bytes", MAX_ARRAY_BYTES_RANGE)
-            else:
+            elif name == "max_exact_elements":
                 out["max_exact_elements"] = parse_count(raw, "limit on an exact array's elements", MAX_EXACT_ELEMENTS_RANGE)
+            elif name == "max_arrangements":
+                out["max_arrangements"] = parse_count(raw, "limit on a randomization test's arrangements", MAX_ARRANGEMENTS_RANGE)
+            else:
+                out["max_shapley_factors"] = parse_count(raw, "limit on a Shapley table's factors", MAX_SHAPLEY_FACTORS_RANGE)
         except ValueError as e:
             raise ValueError(f"{flag} (or {env}): {e}.") from None
     return Limits(**out)
@@ -430,6 +459,32 @@ class Guard:
             )
         self.check_time()
 
+    def check_arrangements(self, count: int, what: str) -> None:
+        """BEFORE a randomization test enumerates: refuse one whose scheme allows
+        more arrangements than this host counts in one test."""
+        self.check_time()
+        if count > self.limits.max_arrangements:
+            self._stop(
+                "max_arrangements",
+                f"{self._here()}{what} allows {count_text(count)} arrangements, past this host's limit of "
+                f"{self.limits.max_arrangements:,} arrangements in one randomization test, so none was counted: the "
+                "p-value is exact only over every arrangement, and flo2-calc never samples instead.",
+                needed=count,
+            )
+
+    def check_factors(self, k: int) -> None:
+        """BEFORE Shapley values are computed: refuse a table of more factors than
+        this host takes (its outcomes grow as 2^k)."""
+        self.check_time()
+        if k > self.limits.max_shapley_factors:
+            self._stop(
+                "max_shapley_factors",
+                f"{self._here()}the table has {k:,} factors, so 2^{k} = {count_text(2**k) if k <= 64 else 'more than 10^19'} "
+                f"combinations, past this host's limit of Shapley values of at most {self.limits.max_shapley_factors} "
+                "factors, so none was computed.",
+                needed=k,
+            )
+
     def spend_reply(self, nbytes: int) -> None:
         """Count bytes written into the reply as they are written, so a reply
         too large to send stops early instead of being built whole."""
@@ -489,6 +544,13 @@ class Guard:
                 "limits": self.limits.describe(),
             }
         )
+
+
+def count_text(n: int) -> str:
+    """A count in full with separators, or, past 10^18, as a power of ten."""
+    if n < 10**18:
+        return f"{n:,}"
+    return f"about 10^{digits(n) - 1}"
 
 
 def stopped_for_record(refusal: dict[str, Any]) -> dict[str, Any]:

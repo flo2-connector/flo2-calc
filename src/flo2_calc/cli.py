@@ -1,7 +1,7 @@
 """The `flo2-calc` command: an MCP server over stdio, and nothing else.
 
     flo2-calc [--root DIR] [--deadline SECONDS] [--max-digits N] [--max-reply-bytes N] [--max-array-bytes N]
-              [--max-exact-elements N]
+              [--max-exact-elements N] [--max-arrangements N] [--max-shapley-factors N]
     flo2-calc --version
 
 --root (or FLO2_CALC_ROOT) names the ONE folder flo2-calc may write records
@@ -14,8 +14,9 @@ pint, so it answers at once in any sandbox.
 The LIMITS (limits.py) are set the same way, each by a flag or its variable:
 --deadline (FLO2_CALC_DEADLINE), --max-digits (FLO2_CALC_MAX_DIGITS) and
 --max-reply-bytes (FLO2_CALC_MAX_REPLY_BYTES), --max-array-bytes
-(FLO2_CALC_MAX_ARRAY_BYTES) and --max-exact-elements
-(FLO2_CALC_MAX_EXACT_ELEMENTS). Unset, they are the laptop
+(FLO2_CALC_MAX_ARRAY_BYTES), --max-exact-elements
+(FLO2_CALC_MAX_EXACT_ELEMENTS), --max-arrangements (FLO2_CALC_MAX_ARRANGEMENTS)
+and --max-shapley-factors (FLO2_CALC_MAX_SHAPLEY_FACTORS). Unset, they are the laptop
 defaults; the image sets flo2.io's lower profile. A setting flo2-calc cannot
 use stops it at start-up with the reason, never silently replaced.
 """
@@ -103,10 +104,30 @@ def main(argv: list[str] | None = None) -> None:
             f"{L.FLO2_IO.max_exact_elements})"
         ),
     )
+    parser.add_argument(
+        "--max-arrangements",
+        default=os.environ.get("FLO2_CALC_MAX_ARRANGEMENTS"),
+        help=(
+            f"the most arrangements one randomization test counts; past it the test is stopped with its reason, never "
+            f"sampled (default: $FLO2_CALC_MAX_ARRANGEMENTS, else {defaults.max_arrangements}; flo2.io's sandbox: "
+            f"{L.FLO2_IO.max_arrangements})"
+        ),
+    )
+    parser.add_argument(
+        "--max-shapley-factors",
+        default=os.environ.get("FLO2_CALC_MAX_SHAPLEY_FACTORS"),
+        help=(
+            f"the most factors of one Shapley table (its outcomes grow as 2^k) (default: $FLO2_CALC_MAX_SHAPLEY_FACTORS, "
+            f"else {defaults.max_shapley_factors}; flo2.io's sandbox: {L.FLO2_IO.max_shapley_factors})"
+        ),
+    )
     args = parser.parse_args(argv)
     root = resolve_root(args.root)
     try:
-        limits = L.from_settings(args.deadline, args.max_digits, args.max_reply_bytes, args.max_array_bytes, args.max_exact_elements)
+        limits = L.from_settings(
+            args.deadline, args.max_digits, args.max_reply_bytes, args.max_array_bytes, args.max_exact_elements,
+            args.max_arrangements, args.max_shapley_factors,
+        )
     except ValueError as e:
         sys.exit(f"flo2-calc: {e}")
 

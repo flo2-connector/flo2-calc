@@ -41,9 +41,18 @@ says "float64" with its bound. The array operators have renderings of their
 own: sum and product as sigma and pi, mean as a bar, fft as script F, an
 element as a subscript, and the rest as named functions.
 
-The renderings are part of the record's format (schema version 4, and 7 for
-every line's value): a change to them is a change of schema version, because a
-record re-runs to exactly the fields it holds.
+flo2-calc 0.8.0's operators show the formula they compute: a Bayesian update
+its closed form in its arguments' names (the normal-normal's without values
+written in, since its data may be an array: the step's DETAIL gives n and the
+sum instead), the randomization test and Shapley values their fields. A step
+whose operation gave a DETAIL (evaluator.Detailed) ends with it: "; where
+n = 4, sum(x) = 256", or a randomization test's observed statistic and its two
+counts, or each Shapley value and their check against v(all) - v(none).
+
+The renderings are part of the record's format (schema version 4, 7 for every
+line's value, and 8 for 0.8.0's operators and the detail): a change to them is
+a change of schema version, because a record re-runs to exactly the fields it
+holds.
 """
 
 from __future__ import annotations
@@ -62,6 +71,10 @@ VIEW_TAIL = 10
 RUN_AT = 4  # a run of this many steps of one shape, or more, is collapsed in a view
 
 OR, XOR, AND, NOT, CMP, ADD, MUL, NEG, FRAC, POW, CALL, ATOM = 10, 15, 20, 30, 40, 50, 60, 70, 75, 80, 90, 100
+# Operators whose step does not write its arguments' values into its formula (0.8.0): the
+# normal-normal update's data may be one value or an array, and its formula takes their sum
+# and count, which the step's detail gives instead.
+NOT_WRITTEN_IN = frozenset({"posterior_normal_mean", "posterior_normal_variance", "posterior_normal_sd"})
 
 
 @dataclass(frozen=True)
@@ -73,6 +86,7 @@ class Shown:
     rounded: dict[str, Any] | None = None  # its rounded label
     float64: dict[str, Any] | None = None  # its float64 label (arrays.py)
     array: bool = False  # an array: named by its description, never written in
+    detail: tuple[tuple[str, str], ...] | None = None  # 0.8.0: named intermediate values, each as written
 
 
 @dataclass(frozen=True)
@@ -208,12 +222,72 @@ def array_expression(node: Any, args: list[Expr]) -> Expr | None:
     return None
 
 
+def _op(op: str, *args: Expr) -> Expr:
+    """An arithmetic operation's rendering, for an operator shown as its formula."""
+    return expression(_Bare(op), list(args))
+
+
+@dataclass(frozen=True)
+class _Bare:
+    op: str
+    unit_text: None = None
+
+
+def _sq(e: Expr) -> Expr:
+    return _op("pow", e, value_expr("2"))
+
+
+def bayes_expression(node: Any, args: list[Expr]) -> Expr | None:
+    """A Bayesian update's closed form, in its arguments (flo2-calc 0.8.0, bayes.py)."""
+    op = node.op
+    if op.startswith("posterior_normal_"):
+        m0, s0, x, s = args
+        sum_x = Expr(f"sum({x.text})", CALL, r"\sum " + _pl(x, CALL), MUL)
+        n_x = Expr(f"length({x.text})", CALL, r"n_{" + x.latex + "}", ATOM)
+        denominator = _op("add", _sq(s), _op("mul", n_x, _sq(s0)))
+        if op == "posterior_normal_mean":
+            return _op("div", _op("add", _op("mul", m0, _sq(s)), _op("mul", _sq(s0), sum_x)), denominator)
+        variance = _op("div", _op("mul", _sq(s0), _sq(s)), denominator)
+        return variance if op == "posterior_normal_variance" else _op("sqrt", variance)
+    if not op.startswith("posterior_beta_"):
+        return None
+    a, b, k, n = args[:4]
+    a2, b2 = _op("add", a, k), _op("sub", _op("add", b, n), k)
+    if op == "posterior_beta_a":
+        return a2
+    if op == "posterior_beta_b":
+        return b2
+    total = _op("add", a, b, n)
+    if op == "posterior_beta_mean":
+        return _op("div", a2, total)
+    if op in ("posterior_beta_variance", "posterior_beta_sd"):
+        variance = _op("div", _op("mul", a2, b2), _op("mul", _sq(total), _op("add", total, value_expr("1"))))
+        return variance if op == "posterior_beta_variance" else _op("sqrt", variance)
+    level = args[4]
+    sign = "sub" if op == "posterior_beta_interval_lower" else "add"
+    p = _op("div", _op(sign, value_expr("1"), level), value_expr("2"))
+    return _call("beta_quantile", _op_tex("beta_quantile"), [p, a2, b2])
+
+
 def expression(node: Any, args: list[Expr]) -> Expr:
     """One operation over its arguments' expressions."""
     op = node.op
     shaped = array_expression(node, args)
     if shaped is not None:
         return shaped
+    formula = bayes_expression(node, args)
+    if formula is not None:
+        return formula
+    if op == "randomization_test":
+        fields = [f"scheme={node.scheme}", f"statistic={node.statistic}", f"alternative={node.alternative}"]
+        text = f"randomization_test({args[0].text}, {args[1].text}; {', '.join(fields)})"
+        tex = (_op_tex("randomization_test") + r"\left(" + args[0].latex + r",\ " + args[1].latex + r";\ "
+               + r",\ ".join(r"\text{" + f.replace("_", r"\_") + "}" for f in fields) + r"\right)")
+        return Expr(text, CALL, tex, CALL)
+    if op == "shapley_values":
+        names = ", ".join(node.factors)
+        tex = r"\phi\left(" + args[0].latex + r";\ " + r",\ ".join(tex_name(f) for f in node.factors) + r"\right)"
+        return Expr(f"shapley_values({args[0].text}; factors={names})", CALL, tex, CALL)
     if op in ("add", "sub"):
         if op == "sub":
             a, b = args
@@ -411,7 +485,7 @@ def render(
                 text += " = " + step.text
                 tex += " = " + step.latex
             given = [shown.get(a) for a in n.args]
-            if n.args and all(g is not None and not g.array for g in given):
+            if n.args and n.op not in NOT_WRITTEN_IN and all(g is not None and not g.array for g in given):
                 parts = [g.exact if g.exact is not None else g.text for g in given]  # type: ignore[union-attr]
                 if all(len(p) <= SUBSTITUTE_AT for p in parts):
                     sub = expression(n, [value_expr(p) for p in parts])
@@ -421,6 +495,9 @@ def render(
             sign, said, said_tex = _value_part(here)
             text += sign + said
             tex += said_tex
+            if here.detail:
+                text += "; where " + ", ".join(f"{k} = {v}" for k, v in here.detail)
+                tex += r";\ \text{where }" + r",\ ".join(r"\text{" + k.replace("_", r"\_") + "} = " + value_expr(v).latex for k, v in here.detail)
         entry: dict[str, Any] = {"step": i, "node": nid, "text": text, "latex": tex, "label": _label(here, is_input)}
         if nid == stop and here is None:
             entry["label"] = f"refused: {refused['kind']}"  # type: ignore[index]

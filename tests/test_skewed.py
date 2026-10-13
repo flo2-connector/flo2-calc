@@ -76,7 +76,7 @@ CDFS = [
     ("gamma_cdf", lambda x: O.gamma_cdf(x, O.mpq(SHAPE), O.mpq(SCALE)), "4.4", [SHAPE, SCALE]),
     ("gamma_sf", lambda x: O.gamma_sf(x, O.mpq(SHAPE), O.mpq(SCALE)), "13.9", [SHAPE, SCALE]),
     ("beta_cdf", lambda x: O.beta_cdf(x, O.mpq(A), O.mpq(B)), "0.37", [A, B]),
-    ("beta_sf", lambda x: O.beta_sf(x, O.mpq(A), O.mpq(B)), "0.81", [A, B]),
+    ("beta_sf", lambda x: O.beta_sf(x, O.mpq(A), O.mpq(B)), "0.62", [A, B]),
 ]
 
 
@@ -276,8 +276,8 @@ def test_a_rounded_argument_gives_a_skewed_value_with_a_bound_that_holds():
 
 @pytest.mark.parametrize("p, k, critical", [
     # NIST/SEMATECH e-Handbook 1.3.6.7.4: the chi-square with nu degrees of freedom is the gamma of
-    # shape nu/2 and scale 2.
-    ("0.95", "5/2", "11.070"), ("0.99", "5", "23.209"), ("0.95", "1/2", "3.841"),
+    # shape nu/2 and scale 2. (An exact value is written without trailing zeros: 11.070 is "11.07".)
+    ("0.95", "5/2", "11.07"), ("0.99", "5", "23.209"), ("0.95", "1/2", "3.841"),
 ])
 def test_the_gamma_quantile_gives_the_published_chi_square_critical_values(p, k, critical):
     assert ok(inp("p", p), inp("k", k), inp("t", "2"), op("q", "gamma_quantile", "p", "k", "t"),
@@ -287,7 +287,7 @@ def test_the_gamma_quantile_gives_the_published_chi_square_critical_values(p, k,
 def test_the_lognormal_quantile_is_the_median_times_e_to_the_normal_quantile():
     """NIST 1.3.6.7.1: z(0.975) = 1.96, so the 97.5th percentile of a lognormal of median 1 and sigma 1 is e^1.96 to 2 places."""
     assert ok(inp("p", "0.975"), inp("m", "1"), inp("s", "1"), op("q", "lognormal_quantile", "p", "m", "s"),
-              op("r", "round", "q", places=2)) == {"node": "r", "value": "7.10"}
+              op("r", "round", "q", places=2)) == {"node": "r", "value": "7.1"}
 
 
 # ---------------------------------------------------------------- limits, labels and the record

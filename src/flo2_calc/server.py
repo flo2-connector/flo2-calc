@@ -94,7 +94,18 @@ INSTRUCTIONS = (
     "or \"amplitude\". Counting and combinatorics are exact: count_true, k_of_n, to_number (true is 1, false 0), "
     "choose, factorial, and the binomial distribution (binomial_pmf, binomial_cdf, binomial_sf, exact for an exact p). "
     "A change of temperature stays a change: converted to K it is delta_K, which never converts to degC or degF as a "
-    "temperature. ARRAYS (vectors and grids, one unit each, written {\"array\": [...], \"unit\": \"mm\"}) work "
+    "temperature. SKEWED DISTRIBUTIONS are rounded like the normal: lognormal_cdf, lognormal_sf and lognormal_quantile "
+    "([x or p, median, sigma], sigma the sd of ln X), gamma_cdf, gamma_sf and gamma_quantile ([x or p, shape, scale]), "
+    "beta_cdf, beta_sf and beta_quantile ([x or p, a, b]); exact where the value is rational. BAYESIAN UPDATING: "
+    "posterior_normal_mean, posterior_normal_variance and posterior_normal_sd ([prior_mean, prior_sd, data, data_sd], the "
+    "data one value or an array), and posterior_beta_a, posterior_beta_b, posterior_beta_mean, posterior_beta_variance, "
+    "posterior_beta_sd ([a, b, k, n]) and posterior_beta_interval_lower and _upper ([a, b, k, n, level]); the prior's source "
+    "is kept: every input a prior rests on must carry a \"source\" naming the published population. randomization_test "
+    "([outcomes, on]) gives an on/off trial's exact p-value over every arrangement its \"scheme\" allows "
+    "(every_arrangement or within_pairs), for its \"statistic\" (mean_difference) and \"alternative\" (greater, less or "
+    "two_sided): each is never defaulted, so state how the trial was randomized and what it asks. shapley_values "
+    "([outcomes], with \"factors\" and \"combinations\") shares an outcome's credit among a few factors, exactly; its table "
+    "must name every combination of the factors once, and flo2-calc never fills in a missing one. ARRAYS (vectors and grids, one unit each, written {\"array\": [...], \"unit\": \"mm\"}) work "
     "element by element with every operator, with numpy's broadcasting; they reduce (sum, mean, min, max, count_true, "
     "any, all, with an axis for a grid; length counts their elements), give statistics over data (variance and sd, sample or population, named; a "
     "least-squares fit with standard errors) and the FFT. An exact array stays exact through rational operations; an "
@@ -131,7 +142,10 @@ GRAPH_HELP = (
     'takes "unit", as do asin, acos, atan and atan2 ("deg" or "rad", the unit of the angle they give), phase (the '
     'same, for the angle of a complex value), magnitude (the unit to take a quantity\'s number in) and with_unit (the '
     'unit it states, with a "source" saying where that unit comes from). db_to_ratio and ratio_to_db need "kind": '
-    '"power" or "amplitude", never defaulted. A rounded operator may take "digits" (1 to 1000 significant digits; 30 '
+    '"power" or "amplitude", never defaulted. randomization_test needs "scheme" ("every_arrangement" or "within_pairs"), '
+    '"statistic" ("mean_difference") and "alternative" ("greater", "less" or "two_sided"), each never defaulted. '
+    'shapley_values needs "factors" (a list of names, e.g. ["sleep", "diet"]) and "combinations" (one list per outcome of '
+    'the factors present, e.g. [[], ["sleep"], ["diet"], ["sleep", "diet"]]). A rounded operator may take "digits" (1 to 1000 significant digits; 30 '
     'when left out). ceil, floor and round may take "places" (decimal places; 0 when left out), and round a "mode". '
     'A rounded value comes back with "rounded": {"digits", "correctly_rounded", "error_at_most", "from"}, never with '
     '"exact". An ARRAY input is {"id": "t", "value": {"array": ["0", "2", "4.5"], "unit": "s"}, "source": "..."}: one '

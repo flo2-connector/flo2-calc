@@ -295,6 +295,8 @@ def test_the_operator_families_are_the_accepted_ones():
         "reductions", "statistics over data", "transforms", "complex values", "making and shaping arrays",
         # 0.7.0, round 3: choose and factorial
         "combinatorics",
+        # 0.8.0, the cure design's requirements (dec:v0-8-0-bayes-randomization-shapley-choices)
+        "Bayesian updating", "randomization tests", "credit among factors",
     }
     assert {k for k, v in OPS.items() if v[0] == "logic"} == {"and", "or", "not", "nor", "nand", "xor"}
 

@@ -1,11 +1,11 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-7.schema.json; version 1 to
-6 records, schemas/calc-record-1.schema.json to calc-record-6.schema.json,
+A record is one JSON object (schemas/calc-record-8.schema.json; version 1 to
+7 records, schemas/calc-record-1.schema.json to calc-record-7.schema.json,
 still re-run):
 
     record_format   "flo2-calc computation record"
-    schema_version  7
+    schema_version  8
     status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
@@ -54,6 +54,14 @@ binomial_pmf, binomial_cdf, binomial_sf, to_number, length), and writes a K
 known to be a change of temperature as delta_K. A record of version 6 or
 older is re-run under the rules it was made with (units.before_delta_k), so a
 change it converted to K is still the bare K it holds, and it reproduces.
+
+VERSION 8 (flo2-calc 0.8.0, dec:v0-8-0-bayes-randomization-shapley-choices)
+allows Bayesian updating, the randomization test (with "scheme", "statistic"
+and "alternative"), Shapley values (with "factors" and "combinations") and the
+lognormal, gamma and beta distributions; a value may carry "detail", the
+named intermediate values its working step shows; and limits_in_force gains
+max_arrangements and max_shapley_factors. A version 7 record re-runs as it
+was made (tests/data/statistics.v7.calc.json, made by 0.7.0).
 
 DETERMINISTIC. There is no timestamp and no machine name, and the file is
 written with sorted keys, so the same graph (and name, and supports) gives a
@@ -134,7 +142,7 @@ from flo2_calc.evaluator import (
 from flo2_calc.numbers import ARITHMETIC_NOTE, ARRAYS_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 SCHEMA_FILES = {
     1: "calc-record-1.schema.json",
     2: "calc-record-2.schema.json",
@@ -143,6 +151,7 @@ SCHEMA_FILES = {
     5: "calc-record-5.schema.json",
     6: "calc-record-6.schema.json",
     7: "calc-record-7.schema.json",
+    8: "calc-record-8.schema.json",
 }
 DELTA_K_FROM = 7  # the first schema version whose rules write a K known to be a change as delta_K
 COMPUTED = "computed"
@@ -632,7 +641,7 @@ def needs_of(stopped: dict[str, Any]) -> str:
     name, value = limit["name"], limit["value"]
     flag, env = L.SETTINGS[name]
     if "needed_at_least" in limit:
-        what = f"{name} of at least {limit['needed_at_least']:,}" + (" digits" if name == "max_digits" else " bytes")
+        what = f"{name} of at least {limit['needed_at_least']:,} " + L.COUNTS.get(name, "bytes")
     else:
         what = f"a {name} longer than {value}"
     return f"{what} (it was stopped at {name} = {value}; set it with {flag} or {env})"

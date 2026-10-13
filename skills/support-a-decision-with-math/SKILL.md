@@ -1,6 +1,6 @@
 ---
 name: support-a-decision-with-math
-description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison against a limit, a root, a logarithm, a gain in dB or a power in dBm, an angle, a p-value or a critical value, a count of true conditions, a k-of-n vote or a binomial probability, an empirical formula whose formula and constants the person or a cited document gave, or a computation over data or a grid (a sum, a mean, a standard deviation, a fitted slope, an FFT) - especially one with units. It covers composing the computation, units, arrays, rounded and float64 results, where an empirical formula's constants must come from (never your memory), refusals, checking the formula and working it shows back, making the computation record, saving it, linking it to the decision, and checking it later.
+description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison with a limit, a root, a logarithm, a gain in dB, an angle, a p-value or a percentile (normal, lognormal, gamma, beta), a count or a binomial probability, an estimate updated from a published prior, an on/off trial's randomization test, Shapley credit among factors, an empirical formula whose formula and constants the person or a cited document gave, or a computation over data or a grid (a mean, a standard deviation, a fitted slope, an FFT) - especially one with units. It covers composing the computation, units, arrays, rounded and float64 results, where an empirical formula's constants must come from (never your memory), refusals, the working shown back, the computation record, saving it, linking it to the decision, and checking it later.
 compatibility: Needs the flo2-calc MCP server (evaluate_graph, add_node, record_computation, rerun_record), which also serves this skill as the MCP prompt support-a-decision-with-math and the resource skill://flo2-calc/support-a-decision-with-math/SKILL.md. Nothing else has to be running. Linking a record to a design uses the design tool's own tools (reflow2), when there is one.
 ---
 
@@ -29,6 +29,9 @@ Use flo2-calc when a decision, a trade or a limit turns on something computed:
   out of range, a discretised integral over a grid, the spectrum of a signal or an aperture (an FFT).
 - **a count or a vote:** how many of eight conditions hold, whether two of three sensors agree, the chance that at
   least 3 of 5 independent detections happen.
+- **a person's own data against what is known:** where a lab value sits in a skewed population (lognormal, gamma,
+  beta); a starting estimate from a published population updated with the person's readings; whether an on/off trial's
+  difference is more than chance; how to share an improvement among a few things tried together.
 
 You reason; flo2-calc calculates. Choosing which equation applies, whether an approximation holds, or which events
 to combine is yours (and the person's). flo2-calc does the calculation it is given and never decides that for you.
@@ -95,6 +98,11 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
      `"unit": "deg"` or `"rad"` for the angle they give. `convert` turns deg into rad.
    - `normal_cdf`, `normal_sf` (the upper tail), `normal_quantile`, `chi2_sf` (a p-value), `t_quantile` (a critical
      value). The normal ones take `[x]`, or `[x, mean, sd]` in one unit.
+   - **Skewed populations:** `lognormal_cdf`, `lognormal_sf`, `lognormal_quantile` with `[x or p, median, sigma]`
+     (sigma is the sd of ln X: a published geometric mean is the median, and sigma is the `ln` of its geometric sd);
+     `gamma_cdf`, `gamma_sf`, `gamma_quantile` with `[x or p, shape, scale]` (scale in x's unit; 1 / rate);
+     `beta_cdf`, `beta_sf`, `beta_quantile` with `[x or p, a, b]` (all plain). Which distribution a population follows,
+     and its parameters, come from the person or the publication that fits it: say which, as the inputs' sources.
    - `ceil`, `floor`, `round` (with `"places"`; `round`'s `"mode"` is `half_even` unless you say otherwise).
    - **dB to a ratio and back:** `db_to_ratio` and `ratio_to_db`, each with `"kind": "power"` (10 log10) or
      `"amplitude"` (20 log10). You must say which; flo2-calc never picks one. A power level converts with `convert`:
@@ -175,7 +183,47 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
      bound on every element) and `how` (what that bound rests on). Arrays of more than 1,024 elements come back as
      their first values, least, greatest and sha256: reduce them, or pick an element with `element`, rather than ask
      for every value.
-6. **Read a refusal and fix the cause; never work around it.**
+6. **Update an estimate, test a trial, share credit: say what only you and the person know.** flo2-calc never
+   defaults any of it.
+   - **A starting estimate from a published population, updated with the person's own readings** (Bayesian
+     updating). Every input the prior rests on needs a `source` naming that population (the study, survey or
+     reference range, and its year or edition); flo2-calc refuses a prior without one. For a normal prior and readings
+     with a known sd each, `posterior_normal_mean`, `posterior_normal_variance` and `posterior_normal_sd` take
+     `[prior_mean, prior_sd, data, data_sd]`, the data one reading or an array of them:
+
+     ```json
+     {"nodes": [
+       {"id": "m0", "value": "<population mean> <unit>", "source": "<the publication>: mean"},
+       {"id": "s0", "value": "<between-person sd> <unit>", "source": "<the publication>: sd"},
+       {"id": "x", "value": {"array": ["<reading>", "<reading>"], "unit": "<unit>"}, "source": "the person's readings"},
+       {"id": "s", "value": "<sd of one reading> <unit>", "source": "<the meter's or assay's datasheet>"},
+       {"id": "mean", "op": "posterior_normal_mean", "args": ["m0", "s0", "x", "s"]},
+       {"id": "sd", "op": "posterior_normal_sd", "args": ["m0", "s0", "x", "s"]},
+       {"id": "p_lo", "value": "0.025", "source": "a 95 % interval"},
+       {"id": "lo", "op": "normal_quantile", "args": ["p_lo", "mean", "sd"]}],
+      "result": ["mean", "sd", "lo"]}
+     ```
+
+     For a rate (k of n), a Beta(a, b) prior: `posterior_beta_a`, `posterior_beta_b`, `posterior_beta_mean`,
+     `posterior_beta_variance` and `posterior_beta_sd` take `[a, b, k, n]`, and `posterior_beta_interval_lower` and
+     `posterior_beta_interval_upper` take `[a, b, k, n, level]` (the equal-tailed interval; give the level). Whether
+     that population is a fair prior for this person, and whether the readings are independent with that sd, is your
+     judgement with the person: say it.
+   - **Whether an on/off trial's difference is real** (a randomization test). `randomization_test` takes `[outcomes,
+     on]`: an array of one outcome per period in the order they ran, and a true/false array, true where the period was
+     on. Ask how the on periods were chosen, and give `"scheme"`: `"every_arrangement"` when any set of that many
+     periods could have been on, `"within_pairs"` when each pair of periods (1-2, 3-4 ...) had one on and one off by a
+     coin flip. Give `"statistic": "mean_difference"` and `"alternative"`: `"greater"` or `"less"` for a question with
+     a direction, `"two_sided"` for "any difference". The p-value is exact, over every arrangement; its working says
+     how many were as extreme: "p = 1/70: 1 of the 70 possible arrangements is as low as yours". If the on periods were
+     not chosen at random, a randomization test does not apply: say so instead of computing one.
+   - **How to share credit among a few factors tried together** (Shapley values). `shapley_values` takes `[outcomes]`,
+     an array with the outcome of EVERY combination of the factors on or off, with `"factors"` (the names, in order)
+     and `"combinations"` (for each outcome, the list of the factors on in it): `{"op": "shapley_values", "args": ["v"],
+     "factors": ["sleep", "diet"], "combinations": [[], ["sleep"], ["diet"], ["sleep", "diet"]]}`. If a combination was
+     never tried, flo2-calc refuses, naming it: ask the person for its outcome; never estimate it yourself. The values
+     always sum to the outcome with every factor minus the outcome with none, and the working shows it.
+7. **Read a refusal and fix the cause; never work around it.**
    - A `"status": "refused"` reply names the node, the operation and why. For example, `add cannot combine mm and g`
      means the computation is wrong, not the calculator. Tell the person what did not add up.
    - A "Malformed call" error names the field to fix: an unknown unit, a missing node, a cycle.
@@ -197,26 +245,27 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
      names the element (`at element [3]`).
    - `"kind": "shape_mismatch"`: two arrays whose shapes do not combine. Say which way they meet (`column`,
      `transpose`), or fix the data.
-7. **Make the record** with `record_computation` once the computation is right. Give it a `name` such as
+8. **Make the record** with `record_computation` once the computation is right. Give it a `name` such as
    `fiber-bend-margin`, and `supports`: the decision it backs, as `{"design_node": "dec:..."}` or in words.
    - It returns the result and the record as a file: `calcfile:///<name>.calc.json`.
    - To save the record beside the work, add `output_path` (for example `decisions/fiber-bend-margin.calc.json`). The
      path is inside the folder flo2-calc was started in. It never writes outside that folder, and never over a
      different file.
-8. **Link the record to the decision, and quote the result there.** In a reflow2 design, register the file as an
+9. **Link the record to the decision, and quote the result there.** In a reflow2 design, register the file as an
    Artifact that documents the decision, with its sha256 as the checksum, and put the result into the decision's
    text: "margin 0.6 mm, needed 0.5 mm: fits (fiber-bend-margin.calc.json)". flo2-calc never writes to the design.
    Linking is your step, done with the design tool's own tools.
-9. **Check it later** with `rerun_record`. Pass the record itself, or its `path` when it was saved.
+10. **Check it later** with `rerun_record`. Pass the record itself, or its `path` when it was saved.
    - `reproduces: true` means the record is intact and its graph still gives every value it holds.
    - `reproduces: "within_bound"` (`outcome: "reproduced_within_bound"`) means it was re-run on another processor and an
      FFT's values (and what was computed from them) moved in their last bits, each within the bound the record states;
      everything else reproduced byte for byte. The number stands; say it was confirmed within its stated bound, not
      identically, and quote `largest_difference` if asked.
    - Anything else names each difference. Say so before relying on the number.
-10. **When a calculation passes the host's limits**, the reply is `"status": "refused"` with
+11. **When a calculation passes the host's limits**, the reply is `"status": "refused"` with
    `"kind": "exceeds_limits"`.
-   - The refusal names the limit (a deadline, `max_digits`, `max_reply_bytes` or `max_array_bytes`), its value, the node reached and how
+   - The refusal names the limit (a deadline, `max_digits`, `max_reply_bytes`, `max_array_bytes`, `max_arrangements`
+     for a randomization test or `max_shapley_factors` for a Shapley table), its value, the node reached and how
      large the numbers grew. It is the machine's limit, not a fault in the math. Never shrink the inputs, round them
      or split the computation to slip under it.
    - From `record_computation` the record still comes back, marked `"status": "not_computed"`. It holds the graph,
@@ -235,12 +284,13 @@ When flo2-calc is reached through flo2's `use_helper_tool`, the steps are the sa
 
 - There is no folder to write in, so leave `output_path` out. flo2 keeps the record that `record_computation` returns
   as a file in the person's design, every version, and hands you its name and a link. Give the person the link.
-- Link that kept file to the decision with the design tools (`use_design_tool`), as in step 8.
+- Link that kept file to the decision with the design tools (`use_design_tool`), as in step 9.
 - To re-check a record, pass its content to `rerun_record`.
 - flo2.io's limits are lower than a laptop's: 20 s a call, 2,000 digits, 2 MiB a reply, 16 MiB of arrays a call (a
-  256 x 256 grid's FFT fits). Arrays come inline there: no data files. A calculation past them
+  256 x 256 grid's FFT fits), 1,000,000 arrangements in one randomization test and Shapley values of at most 12
+  factors. Arrays come inline there: no data files. A calculation past them
   comes back as a not-yet-computed record, kept in the design like any other. The person, or an agent on their
-  machine, completes it there with the standalone flo2-calc (step 10). Then link the completed record to the decision
+  machine, completes it there with the standalone flo2-calc (step 11). Then link the completed record to the decision
   in its place.
 
 ## Talking about it

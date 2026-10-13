@@ -145,7 +145,7 @@ def test_a_value_past_the_digits_budget_is_stopped_naming_the_node_the_limit_and
     assert r["reached"]["nodes_done"] == 3 and r["reached"]["nodes"] == 7
     assert r["reached"]["largest_digits"] == 233
     assert r["limits"] == {"deadline": "45 s", "max_digits": 200, "max_reply_bytes": 8388608, "max_array_bytes": 536870912,
-                           "max_exact_elements": 65536}
+                           "max_exact_elements": 65536, "max_arrangements": 10000000, "max_shapley_factors": 16}
     assert 'mul at node "x3": the product has a numerator of 233 digits' in r["reason"]
     assert "budget of 200 digits" in r["reason"] and "stopped cleanly" in r["reason"]
 

@@ -58,7 +58,7 @@ def validator():
 def test_a_record_holds_what_a_decision_needs():
     rec = make(supports={"design_node": "dec:fiber-route"})
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 7
+    assert rec["schema_version"] == 8
     assert rec["status"] == "computed"
     assert "stopped" not in rec and "limits_in_force" not in rec, "a computed record carries no host limits"
     assert rec["graph"] == FIBER
@@ -309,7 +309,7 @@ def test_a_version_6_record_re_runs_under_the_rules_and_writing_it_was_made_with
 def test_the_same_graph_recorded_now_writes_delta_k_and_every_line_s_value():
     old = json.loads((DATA / "temperature-and-formula.v6.calc.json").read_text())
     now = make(old["graph"], old["name"], old["supports"])
-    assert now["schema_version"] == 7
+    assert now["schema_version"] == 8
     validator().validate(now)
     values = {v["node"]: v for v in now["values"]}
     assert values["rise_k"]["value"] == "10 delta_K" and values["diff"]["value"] == "1.85 delta_K"
