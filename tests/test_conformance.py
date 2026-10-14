@@ -27,12 +27,15 @@ import json
 import re
 import subprocess
 import tempfile
+from pathlib import Path
 
 import pytest
 from conftest import server_command
 
 from flo2_calc import __version__
 from flo2_calc.server import READ_ONLY, TOOLS
+
+REFERENCES = Path(__file__).resolve().parent.parent / "skills" / "support-a-decision-with-math" / "references"
 
 FLO2_REVISION = "2025-11-25"  # TOOL_SERVER_PROTOCOL_VERSION in flo2's tool-servers.ts
 
@@ -117,7 +120,9 @@ def test_initialize_offers_the_served_skill_as_a_prompt_and_a_resource_beside_th
     prompts = plug.send("prompts/list", {})["result"]["prompts"]
     assert [p["name"] for p in prompts] == ["support-a-decision-with-math"]
     resources = plug.send("resources/list", {})["result"]["resources"]
-    assert [r["uri"] for r in resources] == ["skill://flo2-calc/support-a-decision-with-math/SKILL.md"]
+    base = "skill://flo2-calc/support-a-decision-with-math/"
+    assert [r["uri"] for r in resources] == [base + "SKILL.md"] + [
+        base + "references/" + p.name for p in sorted(REFERENCES.glob("*.md"))], "0.8.1: the skill and its reference files"
 
 
 def test_the_four_tools_and_their_classes_are_the_ones_flo2s_door_holds():

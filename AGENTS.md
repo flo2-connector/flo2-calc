@@ -99,6 +99,11 @@
 - **The skill is served, from one file** (`dec:round-2-fixes`, fix 7): `skills/support-a-decision-with-math/SKILL.md`
   is the only copy. `pyproject.toml` maps that folder into the wheel, and `skill.py` serves it as an MCP prompt and a
   resource. Never copy its text into code.
+  - **SKILL.md holds the rules, under 15,000 bytes** (0.8.1), so that flo2 serves it whole in one reply (30,000
+    characters with its wrapper). Each operator's arguments, examples and edge cases live in `references/*.md` beside
+    it, each sentence in one place, each file named by SKILL.md and served as a resource of its path
+    (`tests/test_manifests.py` holds all of this). A rule (a never, a refusal to heed, a judgement only the agent or
+    the person can make) stays in SKILL.md; detail moves to a reference file.
 - **Results reach reflow2 through the agent** (`dec:agent-carries-results`): flo2-calc never writes to reflow2. The
   record comes back as a file (`calcfile:///<name>.calc.json`), which flo2 keeps when hosted.
 - **Generic math only:** no jewelry, building or other domain formula belongs here.
@@ -182,7 +187,7 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | `src/flo2_calc/temperature.py` | degC and degF: what a temperature with an offset may do | `cmp:units` |
 | `src/flo2_calc/decibels.py` | dB, and the power levels dBm and dBW: what a level may do | `cmp:units`, `cap:decibels-are-their-own-kind-and-their-ratio-is-stated` |
 | `src/flo2_calc/formula.py` | the computation shown back: its formula and its numbered working, plain text and LaTeX | `cmp:computation-record`, `cap:every-reply-shows-its-formula-and-working` |
-| `src/flo2_calc/skill.py` | the served skill: an MCP prompt and a resource, read from `skills/` | `cap:serve-over-mcp` |
+| `src/flo2_calc/skill.py` | the served skill: an MCP prompt and a resource, and its reference files as resources, read from `skills/` | `cap:serve-over-mcp` |
 | `src/flo2_calc/record.py`, `src/flo2_calc/schemas/` | the computation record (computed or not yet computed), its schemas, the root folder | `cmp:computation-record`, `cap:a-not-yet-computed-record-is-completed-on-a-larger-machine` |
 | `src/flo2_calc/server.py`, `cli.py`, `errors.py` | the four MCP tools, the command line, the two kinds of no | `cmp:mcp-server` |
 | `plugin.json`, `mcp.json`, `.claude-plugin/`, `.mcp.json`, `skills/` | the plugin package | `cap:serve-over-mcp` |

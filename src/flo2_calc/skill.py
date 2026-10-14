@@ -12,7 +12,16 @@ prefix, never deciding what a rounded value cannot):
     its front matter's description as the prompt's description;
   - an MCP RESOURCE, RESOURCE_URI, text/markdown: the file as it is.
 
-Nothing here copies its text: both are read from the file.
+ITS REFERENCE FILES (flo2-calc 0.8.1). SKILL.md holds the rules and stays
+under 15,000 bytes (tests/test_manifests.py), so that flo2 can serve it whole
+in one reply (its budget is 30,000 characters with its own wrapper); each
+operator's arguments, examples and edge cases are in references/*.md beside
+it, which SKILL.md names and an agent reads only when a step points to one
+(the Agent Skills spec's progressive disclosure). Each is served as a resource too, at the same path
+under skill://flo2-calc/support-a-decision-with-math/, so a plain-command
+client reaches everything a plugin install does.
+
+Nothing here copies their text: each is read from its file.
 """
 
 from __future__ import annotations
@@ -23,23 +32,45 @@ from importlib import resources
 from pathlib import Path
 
 NAME = "support-a-decision-with-math"
-RESOURCE_URI = f"skill://flo2-calc/{NAME}/SKILL.md"
+BASE_URI = f"skill://flo2-calc/{NAME}/"
+RESOURCE_URI = f"{BASE_URI}SKILL.md"
 MIME_TYPE = "text/markdown"
+REFERENCES = "references"
 
 
 def _candidates() -> list[Path]:
-    packaged = resources.files("flo2_calc").joinpath("skills", NAME, "SKILL.md")  # an installed wheel
-    source = Path(__file__).resolve().parents[2] / "skills" / NAME / "SKILL.md"  # a checkout, or an editable install
+    packaged = resources.files("flo2_calc").joinpath("skills", NAME)  # an installed wheel
+    source = Path(__file__).resolve().parents[2] / "skills" / NAME  # a checkout, or an editable install
     return [Path(str(packaged)), source]
+
+
+@cache
+def folder() -> Path:
+    """The skill's folder: SKILL.md and its references/."""
+    for path in _candidates():
+        if (path / "SKILL.md").is_file():
+            return path
+    raise FileNotFoundError(f"the served skill {NAME}/SKILL.md is not installed with flo2-calc")
 
 
 @cache
 def text() -> str:
     """The skill's file, exactly."""
-    for path in _candidates():
-        if path.is_file():
-            return path.read_text(encoding="utf-8")
-    raise FileNotFoundError(f"the served skill {NAME}/SKILL.md is not installed with flo2-calc")
+    return (folder() / "SKILL.md").read_text(encoding="utf-8")
+
+
+@cache
+def references() -> tuple[str, ...]:
+    """Each reference file's path in the skill's folder (`references/<name>.md`), in order."""
+    found = sorted((folder() / REFERENCES).glob("*.md"))
+    return tuple(f"{REFERENCES}/{path.name}" for path in found)
+
+
+def reference_text(path: str) -> str:
+    """A reference file, exactly; `path` is one of references()."""
+    if path not in references():
+        raise FileNotFoundError(f"{NAME} has no reference file {path}")
+    return (folder() / path).read_text(encoding="utf-8")
 
 
 def front_matter() -> dict[str, str]:

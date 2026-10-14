@@ -281,9 +281,31 @@ def test_the_skill_is_served_as_a_prompt_and_a_resource_read_from_its_one_file()
     assert prompts.prompts[0].description and prompts.prompts[0].description in front
     assert got.messages[0].role == "user" and got.messages[0].content.text == body.lstrip("\n")
     assert [(str(r.uri), r.mime_type) for r in resources.resources] == [
-        ("skill://flo2-calc/support-a-decision-with-math/SKILL.md", "text/markdown")]
+        ("skill://flo2-calc/support-a-decision-with-math/SKILL.md", "text/markdown")] + [
+        (f"skill://flo2-calc/support-a-decision-with-math/references/{p.name}", "text/markdown")
+        for p in sorted(SKILL_FILE.parent.glob("references/*.md"))], "0.8.1: the skill, then each reference file"
     assert read.contents[0].text == text, "the file itself, as it is"
     assert "flo2-cad" in read.contents[0].text, "it carries the routing rule"
+
+
+async def _references_over_mcp():
+    async with session() as s:
+        resources = await s.list_resources()
+        return {str(r.uri): (await s.read_resource(r.uri)).contents[0].text for r in resources.resources[1:]}
+
+
+def test_each_reference_file_the_skill_names_is_served_as_it_is():
+    """flo2-calc 0.8.1 keeps SKILL.md within flo2's budget by moving each
+    operator's detail to references/. A plain-command client must still reach
+    every sentence a plugin install has: each file is a resource beside the
+    skill, at the path SKILL.md names it by, read from its one file."""
+    served = anyio.run(_references_over_mcp)
+    files = sorted(SKILL_FILE.parent.glob("references/*.md"))
+    assert files, "the skill has reference files"
+    for path in files:
+        uri = f"skill://flo2-calc/support-a-decision-with-math/references/{path.name}"
+        assert served[uri] == path.read_text(encoding="utf-8"), f"{uri} is its file, as it is"
+        assert f"references/{path.name}" in SKILL_FILE.read_text(encoding="utf-8"), "SKILL.md names it"
 
 
 async def _instructions():
