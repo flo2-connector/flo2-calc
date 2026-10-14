@@ -11,7 +11,7 @@ other helper: it runs as a plugin, a uvx command or a container, by itself.
 
 from __future__ import annotations
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 
 
 def main(argv: list[str] | None = None) -> None:

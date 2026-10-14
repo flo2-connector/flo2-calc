@@ -76,10 +76,13 @@ uvx --from git+https://github.com/flo2-connector/flo2-calc flo2-calc --root .
 **The skill comes with the server.** An agent that uses flo2-calc should read
 [skills/support-a-decision-with-math/SKILL.md](skills/support-a-decision-with-math/SKILL.md): when to use it, what to
 route to a domain's own helper, and the rules against typing constants, changing prefixes or deciding what a rounded
-value cannot. A plugin install brings it. A client that starts flo2-calc as a plain command gets it from the server
-itself, as the MCP prompt `support-a-decision-with-math` and the resource
-`skill://flo2-calc/support-a-decision-with-math/SKILL.md` (`text/markdown`). Both are read from that one file; the
-wheel and the image carry it.
+value cannot. SKILL.md holds those rules, and stays under 15,000 bytes so that flo2 can serve it whole; each
+operator's arguments, examples and edge cases are in the reference files beside it, `references/*.md`, which it names
+and an agent reads when a step points to one (since 0.8.1). A plugin install brings them all. A client that starts
+flo2-calc as a plain command gets them from the server itself: the skill as the MCP prompt
+`support-a-decision-with-math` and the resource `skill://flo2-calc/support-a-decision-with-math/SKILL.md`, and each
+reference file as the resource of its path beside it (`.../references/operators.md`), all `text/markdown`. Each is
+read from its one file; the wheel and the image carry them.
 
 ### Saving records
 
@@ -1015,7 +1018,8 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
   factors, on random tables of 1 to 6 factors; a missing, repeated or unknown combination named; `max_shapley_factors`;
   the record.
 - `tests/test_server.py`: the four tools over a real MCP client session. Every refusal's reason is read on the
-  client's side. The served skill (prompt and resource) is read there too, and matches its file.
+  client's side. The served skill (prompt and resource) and each of its reference files are read there too, and each
+  matches its file.
 - `tests/test_conformance.py`: flo2's helper contract, asked in raw JSON-RPC as flo2's plug asks it. It also holds
   the four tool names and their read/write classes to the ones flo2's door holds.
 - `tests/test_limits.py`: each limit trips with its reason; a huge power is refused before it stalls; the server
@@ -1033,8 +1037,9 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
 - `tests/test_standalone.py`: the server alone, with a clean environment. It checks the root's edges, and that the
   package imports nothing of flo2 or reflow2.
 - `tests/test_manifests.py`, `tests/test_dependency_currency.py`: both plugin formats, the skill (and that it and the
-  server's instructions say an empirical formula's constants come from the person or a cited document, never memory),
-  and the dependency check.
+  server's instructions say an empirical formula's constants come from the person or a cited document, never memory;
+  that SKILL.md stays under 15,000 bytes, and that every reference file it names exists and is packaged), and the
+  dependency check.
 
 Set `FLO2_CALC_SERVER` to a command line, such as a confined `docker run` of the image, to ask the image the
 conformance, server, limit and not-yet-computed questions instead (CI's `image` job does).
@@ -1070,7 +1075,7 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    per record. **0.5.0 also offers an MCP prompt and a resource** (the skill, `initialize` now lists `prompts` and
    `resources` beside `tools`). They are not tools, so the door's allow-list of four is untouched; the door may ignore
    them, since hosted on flo2.io the skill is served by flo2 itself. The image's size is unchanged (209 MB), and its
-   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`. 0.7.0 (round 3's fixes) changes the skill's text again (an empirical formula's constants come from the person or a cited document, never the agent's memory; ambiguous expressions; troy weight; the new operators) and the server's instructions; adds `op` values inside a graph (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`) and the units `ozt`, `dwt`, `grain`, `week` and `delta_K`; and makes the record schema version 7. The four tools, their classes and their top-level arguments are unchanged; the image's limits are unchanged. 0.8.0 (the cure design's four requirements) changes the skill's text again (Bayesian updating, the randomization test, Shapley values, the skewed distributions) and the server's instructions; adds `op` values and node fields inside a graph (`scheme`, `statistic`, `alternative`, `factors`, `combinations`) and a value's `detail` inside a reply; makes the record schema version 8; and adds two limits to the image's profile (`FLO2_CALC_MAX_ARRANGEMENTS=1000000`, `FLO2_CALC_MAX_SHAPLEY_FACTORS=12`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies the skill file unchanged.
+   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`. 0.7.0 (round 3's fixes) changes the skill's text again (an empirical formula's constants come from the person or a cited document, never the agent's memory; ambiguous expressions; troy weight; the new operators) and the server's instructions; adds `op` values inside a graph (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`) and the units `ozt`, `dwt`, `grain`, `week` and `delta_K`; and makes the record schema version 7. The four tools, their classes and their top-level arguments are unchanged; the image's limits are unchanged. 0.8.0 (the cure design's four requirements) changes the skill's text again (Bayesian updating, the randomization test, Shapley values, the skewed distributions) and the server's instructions; adds `op` values and node fields inside a graph (`scheme`, `statistic`, `alternative`, `factors`, `combinations`) and a value's `detail` inside a reply; makes the record schema version 8; and adds two limits to the image's profile (`FLO2_CALC_MAX_ARRANGEMENTS=1000000`, `FLO2_CALC_MAX_SHAPLEY_FACTORS=12`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies the skill file unchanged. 0.8.1 splits the skill for size, and nothing else changes: 0.8.0's SKILL.md, 27,693 bytes, came to 31,894 characters in flo2's served reply, past its 30,000, so SKILL.md now keeps the rules (under 15,000 bytes, which a test holds) and each operator's arguments, examples and edge cases move to `skills/support-a-decision-with-math/references/` (`when-to-use.md`, `units.md`, `operators.md`, `arrays.md`, `records.md`), each sentence in one place and none changed in meaning, served as resources beside the skill. The four tools, their behaviour and the record schema (version 8) are unchanged, and the image's profile too. flo2 copies SKILL.md unchanged, and the reference files beside it if it serves them.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.

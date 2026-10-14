@@ -24,8 +24,9 @@ each in plain text with LaTeX beside it; a record holds every step.
 
 THE SKILL, SERVED (skill.py). Beside the four tools, the server offers
 skills/support-a-decision-with-math/SKILL.md as an MCP prompt of that name and
-as a resource, so a client that starts flo2-calc as a plain command gets the
-same guidance a plugin install does. Prompts and resources are not tools:
+as a resource, and each reference file it names (references/*.md, 0.8.1) as a
+resource beside it, so a client that starts flo2-calc as a plain command gets
+the same guidance a plugin install does. Prompts and resources are not tools:
 flo2's door, which holds exactly the four tools, is unchanged by them.
 
 LIMITS (limits.py). Every call runs under the host's limits, set at start-up:
@@ -223,6 +224,15 @@ def _guarded(fn: Callable[..., CallToolResult]) -> Callable[..., CallToolResult]
     return call
 
 
+def _reference_reader(path: str) -> Callable[[], str]:
+    """A resource's reader for one of the skill's reference files (skill.py)."""
+
+    def served_reference_file() -> str:
+        return SK.reference_text(path)
+
+    return served_reference_file
+
+
 def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPServer:
     """The server. `root` is the one folder it may write records in and read
     them from (None: no files at all, as when hosted). `limits` are the host's
@@ -248,6 +258,12 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                      description="How and when to use flo2-calc: skills/support-a-decision-with-math/SKILL.md, as it is.")
     def served_skill_file() -> str:
         return SK.text()
+
+    for path in SK.references():
+        server.resource(SK.BASE_URI + path, name=f"{SK.NAME}/{path}", title=f"The skill's reference file {path}",
+                        mime_type=SK.MIME_TYPE,
+                        description=f"skills/support-a-decision-with-math/{path}, as it is: detail SKILL.md points to.")(
+            _reference_reader(path))
 
     @server.tool(
         name="evaluate_graph",

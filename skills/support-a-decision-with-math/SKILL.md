@@ -16,22 +16,10 @@ result is exact for your decimal, not for pi. Say so when you quote it.
 
 ## When to use it
 
-Use flo2-calc when a decision, a trade or a limit turns on something computed:
-
-- **a margin or a fit:** does the fiber's bend radius fit the cavity, with 0.5 mm to spare?
-- **a budget or a run time:** how many hours does a 2400 mAh cell give at 180 mA?
-- **a comparison against a limit:** is the part's mass under the 12 g budget?
-- **a conversion** a reader will rely on: 0.25 in in mm;
-- **a yes/no built from several conditions:** it fits AND it lasts the night AND it is under budget;
-- **a root, a logarithm, an angle or a statistic:** a standard deviation, a loss in dB, a great-circle angle, a normal
-  tail probability, a chi-square p-value, a Student-t critical value;
-- **data or a grid:** the mean and spread of measurements, a fitted rate with its standard error, how many readings are
-  out of range, a discretised integral over a grid, the spectrum of a signal or an aperture (an FFT).
-- **a count or a vote:** how many of eight conditions hold, whether two of three sensors agree, the chance that at
-  least 3 of 5 independent detections happen.
-- **a person's own data against what is known:** where a lab value sits in a skewed population (lognormal, gamma,
-  beta); a starting estimate from a published population updated with the person's readings; whether an on/off trial's
-  difference is more than chance; how to share an improvement among a few things tried together.
+Use flo2-calc when a decision, a trade or a limit turns on something computed: a margin or a fit, a budget or a run
+time, a comparison against a limit, a conversion a reader will rely on, a yes/no built from several conditions, a
+root, a logarithm, an angle or a statistic, data or a grid, a count or a vote, or a person's own data against what is
+known. An example of each: `references/when-to-use.md`.
 
 You reason; flo2-calc calculates. Choosing which equation applies, whether an approximation holds, or which events
 to combine is yours (and the person's). flo2-calc does the calculation it is given and never decides that for you.
@@ -68,161 +56,47 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
    `"20 mA"`, `"12 g"`. Write a plain number as text too (`"0.1"`, `"1/3"`), because a JSON `0.1` is refused: it
    arrives as a binary float.
    - A value is **one** number. Never type arithmetic inside it (`"3 + 4"`, `"2^10"`): make each operation a node.
-   - **Temperatures:** `"25 degC"`, `"77 degF"` or `"298.15 K"`. A change of temperature is `"5 delta_degC"`,
-     `"5 delta_K"`, or a degree inside a compound unit (`"2.5 degC/W"`). A change converted to K comes back as
-     `delta_K`, so it is never read as a temperature later: converting it to `degC` is refused; convert it to
-     `delta_degC` instead. Never write a bare `C` or `F`: flo2-calc refuses them, because they could be coulombs or
-     farads. Write `coulomb` or `farad` when you mean those.
-   - **Money:** the ISO 4217 code, `"987.50 USD"`. flo2-calc holds no exchange rates, so it refuses to add USD to
-     EUR. To convert, give the rate as an input with its date and source,
-     `{"id": "rate", "value": "0.92 EUR/USD", "source": "ECB reference rate, 2026-10-02"}`, and multiply by it.
-   - **Gallons:** `gal_us` or `gal_imp`. A bare `gal` is refused, because it is two different units.
-   - **Precious metals:** `ozt` (the troy ounce), `dwt` (the pennyweight) and `grain`. `oz` is the avoirdupois ounce,
-     a different mass. A bare `gr` is refused, because it is written for both the grain and the gram.
-   - **Decibels:** a gain or loss is `"6 dB"` (`"0.2 dB/m"` per length); a power level is `"-30 dBm"` or `"10 dBW"`.
-     Never type a dB value as a plain number, and never type the 10 or 20 of a decibel formula yourself (step 4).
-3. **Evaluate it.**
-   - `evaluate_graph` takes the whole graph in one call. It returns the result and every node's value.
-   - `add_node` builds the graph one node at a time, when you want to see each value as you go. Pass back the
-     `graph` it returns. The result is the same either way.
-   - When the answer has several parts (a verdict and its margin, an interval's two ends, a count and its rows),
-     name them all: `"result": ["margin", "fits"]`. They come back by name, as `results`.
-   - **Read the `formula` and the `working` it shows back, and check they are the computation you meant.** The formula
-     is the equation (`t = C / I = 450/13 h`); the working is every step, numbered, with its value and label. Your
-     translation of the problem into a graph is the weak point, and this is where you catch a wrong one. Both come in
-     plain text and in LaTeX.
-4. **Use the built-in operators for anything that is not exact; never type a constant or a result in.**
-   - `{"id": "pi", "op": "pi"}` and `{"id": "e", "op": "e"}` are the constants. Do not type pi to 30 digits as an input.
-   - `sqrt`, `exp`, `ln`, `log10`, and `pow` with a non-whole exponent (`"1/3"`, `"2.5"`).
-   - `sin`, `cos`, `tan` take an angle WITH its unit (`"37.5 deg"`). `asin`, `acos`, `atan`, `atan2` need
-     `"unit": "deg"` or `"rad"` for the angle they give. `convert` turns deg into rad.
-   - `normal_cdf`, `normal_sf` (the upper tail), `normal_quantile`, `chi2_sf` (a p-value), `t_quantile` (a critical
-     value). The normal ones take `[x]`, or `[x, mean, sd]` in one unit.
-   - **Skewed populations:** `lognormal_cdf`, `lognormal_sf`, `lognormal_quantile` with `[x or p, median, sigma]`
-     (sigma is the sd of ln X: a published geometric mean is the median, and sigma is the `ln` of its geometric sd);
-     `gamma_cdf`, `gamma_sf`, `gamma_quantile` with `[x or p, shape, scale]` (scale in x's unit; 1 / rate);
-     `beta_cdf`, `beta_sf`, `beta_quantile` with `[x or p, a, b]` (all plain). Which distribution a population follows,
-     and its parameters, come from the person or the publication that fits it: say which, as the inputs' sources.
-   - `ceil`, `floor`, `round` (with `"places"`; `round`'s `"mode"` is `half_even` unless you say otherwise).
-   - **dB to a ratio and back:** `db_to_ratio` and `ratio_to_db`, each with `"kind": "power"` (10 log10) or
-     `"amplitude"` (20 log10). You must say which; flo2-calc never picks one. A power level converts with `convert`:
-     `"10 dBm"` to `"mW"`, or a power in `mW` to `"dBm"`. A level plus a gain in dB is a level; two levels never add.
-   - **Counting:** `count_true` counts the true values; `k_of_n` with args `[k, b1, b2, ...]` is true when at least k
-     are; `to_number` turns true into 1 and false into 0. Never add true/false values, and never tally them yourself.
-   - **Combinatorics and the binomial:** `choose` (`[n, k]`), `factorial` (`[n]`), and `binomial_pmf`, `binomial_cdf`,
-     `binomial_sf` with args `[k, n, p]`: P(X = k), P(X <= k) and P(X > k). "At least 3 of 5" is `binomial_sf` with
-     k = 2. All exact for an exact p. Whether the trials are independent with one p is your judgement; say so.
-   - **Powers:** `pow` with a whole exponent is exact however large the exponent, until the exact number passes the
-     host's digits budget; then it is refused with how many digits it would have. Add `"digits"` to that node for its
-     correctly rounded value instead: `(1 - 1e-6)^(10^6)` with `"digits": 30`.
-   - **An empirical formula with stated units** (a datasheet's fit, a standard's relation, its formula and constants
-     given as above): put each constant in as an input whose source says where it was given, take each input's number
-     in the unit the formula states with `magnitude` (`{"op": "magnitude", "args": ["I"], "unit": "A"}`), compute on
-     the plain numbers, then put the stated unit on the result with `with_unit` and say which document states it:
-
-     ```json
-     {"nodes": [
-       {"id": "k", "value": "<the constant, as given>", "source": "given by the person: <document, edition, clause>"},
-       {"id": "b", "value": "<the exponent, as given>", "source": "given by the person: <document, edition, clause>"},
-       {"id": "x", "value": "<the input> <its unit>", "source": "the design's own quantity"},
-       {"id": "x_num", "op": "magnitude", "args": ["x"], "unit": "<the unit the formula takes x in>"},
-       {"id": "y", "op": "with_unit", "args": ["y_num"], "unit": "<the unit the formula gives y in>",
-        "source": "<document, edition, clause>: y in that unit"}]}
-     ```
-
-     (the nodes that compute `y_num` from `x_num`, `k` and `b` are the formula as given). Never multiply by a typed
-     `"1 mm^2"` to get a unit back, and never fill in a constant the person did not give.
-   - Their results come back labelled `"rounded"`: correctly rounded to 30 significant digits (ask for more with
-     `"digits"`, up to 1000), with `error_at_most`, and never with an `exact` fraction. Anything computed from a rounded
-     value is labelled rounded too, with its bound. Where the result is rational it stays exact (`sqrt(9/4)` is `1.5`).
-5. **Give data as an array, not as one node per number.**
-   - An array is an input whose value is `{"array": [...], "unit": "..."}`: a list of numbers as text, or a list of
-     rows for a grid, with ONE unit given once. `{"id": "t", "value": {"array": ["0", "2", "4"], "unit": "s"},
-     "source": "frame times"}`.
-   - Every operator works element by element on arrays, and a single value meets every element: `sub` of an array and
-     its mean is every deviation. A column (`column`) meets a row as a grid.
-   - Reduce with `sum`, `mean`, `min`, `max`, `product`, `count_true`, `any`, `all` (add `"axis": 0` or `1` for each
-     column or row of a grid). Compare and combine for "how many are out of range": `lt`, `gt`, `or`, `count_true`.
+   - Temperatures, money, gallons, troy weight and decibels are spelled as `references/units.md` says.
+3. **Evaluate it** with `evaluate_graph` (the whole graph in one call) or `add_node` (one node at a time, when you
+   want to see each value as you go; pass back the `graph` it returns). The result is the same either way. What a
+   reply holds: `references/operators.md`.
+   - When the answer has several parts, name them all: `"result": ["margin", "fits"]`.
+   - **Read the `formula` and the `working` it shows back, and check they are the computation you meant.** Your
+     translation of the problem into a graph is the weak point, and this is where you catch a wrong one.
+4. **Use the built-in operators for anything that is not exact; never type a constant or a result in.** Each
+   family's arguments, examples and edge cases: `references/operators.md`.
+   - **Constants, roots, logarithms, powers:** `pi`, `e`, `sqrt`, `exp`, `ln`, `log10`, `pow`. Do not type pi to
+     30 digits as an input.
+   - **Trigonometry:** `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`. **Rounding:** `ceil`, `floor`, `round`.
+   - **Distributions:** normal, chi-square, Student-t, lognormal, gamma, beta. Which distribution a population
+     follows, and its parameters, come from the person or the publication that fits it: say which, as the inputs'
+     sources.
+   - **Decibels:** `db_to_ratio`, `ratio_to_db`, each with `"kind"` power or amplitude. You must say which; flo2-calc
+     never picks one. Never type a dB value as a plain number, and never type the 10 or 20 of a decibel formula
+     yourself.
+   - **Counting:** `count_true`, `k_of_n`, `to_number`. Never add true/false values, and never tally them yourself.
+   - **Combinatorics and the binomial:** `choose`, `factorial`, `binomial_pmf`, `_cdf`, `_sf`. Whether the trials
+     are independent with one p is your judgement; say so.
+   - **An empirical formula's units:** `magnitude`, `with_unit`. Never multiply by a typed `"1 mm^2"` to get a unit
+     back, and never fill in a constant the person did not give.
+5. **Give data as an array, not as one node per number:** `{"array": [...], "unit": "..."}`, one unit for the
+   whole array. Every operator works element by element; reductions, the straight-line fit, the FFT, grids, data
+   files and the `"float64"` label are in `references/arrays.md`.
    - `length` counts an array's elements (`"axis"` for a grid's columns or rows). Use it for n, never a typed count:
      `sqrt(n)` and degrees of freedom then rest on the data, not on your counting.
    - Statistics over data are named, with no default: `variance_sample` or `variance_population`, `sd_sample` or
      `sd_population`. Choose the one the question means (n - 1 for a sample, n for a whole population).
-   - A straight-line fit is `fit_slope`, `fit_intercept`, `fit_slope_se`, `fit_intercept_se` and `fit_residual_se`,
-     each with args `[x, y]`. For example, a rate with its standard error, in four nodes:
-
-     ```json
-     {"nodes": [
-       {"id": "t", "value": {"array": ["0", "2", "4", "6", "8", "10"], "unit": "s"}, "source": "frame times"},
-       {"id": "y", "value": {"array": ["0.0000", "0.0291", "0.0574", "0.0868", "0.1152", "0.1447"], "unit": "deg"},
-        "source": "along-track angle, frames 1 to 6"},
-       {"id": "slope", "op": "fit_slope", "args": ["t", "y"]},
-       {"id": "slope_se", "op": "fit_slope_se", "args": ["t", "y"]}]}
-     ```
-
-     The slope comes back exact (`316/21875 deg/s`, 0.014446 deg/s) and its standard error correctly rounded
-     (0.0000374983 deg/s).
-   - The FFT is `fft` and `ifft` (1-D), `fft2` and `ifft2` (a grid), numpy's convention. Take a spectrum apart with
-     `abs` (the modulus), `phase` (with `"unit": "deg"` or `"rad"`), `real`, `imag`. A small 2-D example:
-
-     ```json
-     {"nodes": [
-       {"id": "g", "value": {"array": [["1", "2", "1", "0"], ["2", "4", "2", "0"], ["1", "2", "1", "0"],
-         ["0", "0", "0", "0"]], "unit": "V"}, "source": "a 4 x 4 aperture"},
-       {"id": "spectrum", "op": "fft2", "args": ["g"]},
-       {"id": "power", "op": "abs", "args": ["spectrum"]},
-       {"id": "dc", "op": "max", "args": ["power"]}]}
-     ```
-
-   - A grid over two axes is `linspace` on each, `column` on one, and their element-wise product or sum: the
-     discretised integral of f(x, y) exp(...) is a few nodes ending in one `sum`.
-   - Large data, run locally, can come from a file inside the folder flo2-calc was started in:
-     `{"file": "data/readings.csv", "unit": "mm"}`. The record keeps the file's sha256, so keep the file with it. On
-     flo2.io, give the array inline.
-   - An exact array stays exact. An FFT, a function over an array (`exp`, `sqrt`, `sin` ...), an array of more than
-     the host's exact limit (65,536 elements on a laptop, 4,096 on flo2.io), or anything mixed with one, comes back labelled `"float64"`, with `error_at_most` (a rigorous
-     bound on every element) and `how` (what that bound rests on). Arrays of more than 1,024 elements come back as
-     their first values, least, greatest and sha256: reduce them, or pick an element with `element`, rather than ask
-     for every value.
 6. **Update an estimate, test a trial, share credit: say what only you and the person know.** flo2-calc never
-   defaults any of it.
-   - **A starting estimate from a published population, updated with the person's own readings** (Bayesian
-     updating). Every input the prior rests on needs a `source` naming that population (the study, survey or
-     reference range, and its year or edition); flo2-calc refuses a prior without one. For a normal prior and readings
-     with a known sd each, `posterior_normal_mean`, `posterior_normal_variance` and `posterior_normal_sd` take
-     `[prior_mean, prior_sd, data, data_sd]`, the data one reading or an array of them:
-
-     ```json
-     {"nodes": [
-       {"id": "m0", "value": "<population mean> <unit>", "source": "<the publication>: mean"},
-       {"id": "s0", "value": "<between-person sd> <unit>", "source": "<the publication>: sd"},
-       {"id": "x", "value": {"array": ["<reading>", "<reading>"], "unit": "<unit>"}, "source": "the person's readings"},
-       {"id": "s", "value": "<sd of one reading> <unit>", "source": "<the meter's or assay's datasheet>"},
-       {"id": "mean", "op": "posterior_normal_mean", "args": ["m0", "s0", "x", "s"]},
-       {"id": "sd", "op": "posterior_normal_sd", "args": ["m0", "s0", "x", "s"]},
-       {"id": "p_lo", "value": "0.025", "source": "a 95 % interval"},
-       {"id": "lo", "op": "normal_quantile", "args": ["p_lo", "mean", "sd"]}],
-      "result": ["mean", "sd", "lo"]}
-     ```
-
-     For a rate (k of n), a Beta(a, b) prior: `posterior_beta_a`, `posterior_beta_b`, `posterior_beta_mean`,
-     `posterior_beta_variance` and `posterior_beta_sd` take `[a, b, k, n]`, and `posterior_beta_interval_lower` and
-     `posterior_beta_interval_upper` take `[a, b, k, n, level]` (the equal-tailed interval; give the level). Whether
-     that population is a fair prior for this person, and whether the readings are independent with that sd, is your
-     judgement with the person: say it.
-   - **Whether an on/off trial's difference is real** (a randomization test). `randomization_test` takes `[outcomes,
-     on]`: an array of one outcome per period in the order they ran, and a true/false array, true where the period was
-     on. Ask how the on periods were chosen, and give `"scheme"`: `"every_arrangement"` when any set of that many
-     periods could have been on, `"within_pairs"` when each pair of periods (1-2, 3-4 ...) had one on and one off by a
-     coin flip. Give `"statistic": "mean_difference"` and `"alternative"`: `"greater"` or `"less"` for a question with
-     a direction, `"two_sided"` for "any difference". The p-value is exact, over every arrangement; its working says
-     how many were as extreme: "p = 1/70: 1 of the 70 possible arrangements is as low as yours". If the on periods were
-     not chosen at random, a randomization test does not apply: say so instead of computing one.
-   - **How to share credit among a few factors tried together** (Shapley values). `shapley_values` takes `[outcomes]`,
-     an array with the outcome of EVERY combination of the factors on or off, with `"factors"` (the names, in order)
-     and `"combinations"` (for each outcome, the list of the factors on in it): `{"op": "shapley_values", "args": ["v"],
-     "factors": ["sleep", "diet"], "combinations": [[], ["sleep"], ["diet"], ["sleep", "diet"]]}`. If a combination was
-     never tried, flo2-calc refuses, naming it: ask the person for its outcome; never estimate it yourself. The values
-     always sum to the outcome with every factor minus the outcome with none, and the working shows it.
+   defaults any of it. Arguments and examples: `references/operators.md`.
+   - **Bayesian updating** (`posterior_normal_*`, `posterior_beta_*`). Every input the prior rests on needs a
+     `source` naming that population (the study, survey or reference range, and its year or edition); flo2-calc
+     refuses a prior without one. Whether that population is a fair prior for this person, and whether the readings
+     are independent with that sd, is your judgement with the person: say it.
+   - **A randomization test** (`randomization_test`). Ask how the on periods were chosen, and give its `"scheme"`,
+     `"statistic"` and `"alternative"`. If the on periods were not chosen at random, a randomization test does not
+     apply: say so instead of computing one.
+   - **Shapley values** (`shapley_values`). If a combination was never tried, flo2-calc refuses, naming it: ask the
+     person for its outcome; never estimate it yourself.
 7. **Read a refusal and fix the cause; never work around it.**
    - A `"status": "refused"` reply names the node, the operation and why. For example, `add cannot combine mm and g`
      means the computation is wrong, not the calculator. Tell the person what did not add up.
@@ -234,49 +108,30 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
    - An unknown unit that pint reads (`"mile"`) is named for what it is, with the units of that kind flo2-calc knows.
      Nothing is substituted: give the value in one of those units, from a source that states it, never a conversion
      factor you recall.
-   - A near-miss unit may say what to write instead (`khz` gives `Write "kHz"`). Units are case-sensitive, and a
-     prefix's case is its size: `mJ` is a millijoule and `MJ` a megajoule. When flo2-calc gives no hint, write the
-     unit you mean yourself. Never change its prefix to get past the refusal.
+   - A near-miss unit may say what to write instead (`khz` gives `Write "kHz"`). When flo2-calc gives no hint, write
+     the unit you mean yourself. Never change its prefix to get past the refusal.
    - `"kind": "undecidable"` means a rounded value's error bound straddles the answer: `sqrt(2) * sqrt(2) = 2` cannot be
      told. Ask for more `digits`, or compute it another way (compare the exact squares instead). Never decide it
      yourself.
-   - `"kind": "out_of_domain"` or `"undefined"`: the argument is outside what the function takes (`sqrt(-1)`, a
-     probability of 1, `tan(90 deg)`). The computation, not the calculator, needs fixing. For an array, the reason
-     names the element (`at element [3]`).
-   - `"kind": "shape_mismatch"`: two arrays whose shapes do not combine. Say which way they meet (`column`,
-     `transpose`), or fix the data.
+   - `out_of_domain`, `undefined`: `references/operators.md`; `shape_mismatch`: `references/arrays.md`.
 8. **Make the record** with `record_computation` once the computation is right. Give it a `name` such as
-   `fiber-bend-margin`, and `supports`: the decision it backs, as `{"design_node": "dec:..."}` or in words.
-   - It returns the result and the record as a file: `calcfile:///<name>.calc.json`.
-   - To save the record beside the work, add `output_path` (for example `decisions/fiber-bend-margin.calc.json`). The
-     path is inside the folder flo2-calc was started in. It never writes outside that folder, and never over a
-     different file.
+   `fiber-bend-margin`, and `supports`: the decision it backs, as `{"design_node": "dec:..."}` or in words. It
+   returns the result and the record as a file: `calcfile:///<name>.calc.json` (saving it to disk:
+   `references/records.md`).
 9. **Link the record to the decision, and quote the result there.** In a reflow2 design, register the file as an
    Artifact that documents the decision, with its sha256 as the checksum, and put the result into the decision's
    text: "margin 0.6 mm, needed 0.5 mm: fits (fiber-bend-margin.calc.json)". flo2-calc never writes to the design.
    Linking is your step, done with the design tool's own tools.
 10. **Check it later** with `rerun_record`. Pass the record itself, or its `path` when it was saved.
    - `reproduces: true` means the record is intact and its graph still gives every value it holds.
-   - `reproduces: "within_bound"` (`outcome: "reproduced_within_bound"`) means it was re-run on another processor and an
-     FFT's values (and what was computed from them) moved in their last bits, each within the bound the record states;
-     everything else reproduced byte for byte. The number stands; say it was confirmed within its stated bound, not
-     identically, and quote `largest_difference` if asked.
+   - `reproduces: "within_bound"` (an FFT re-run on another processor): `references/records.md`.
    - Anything else names each difference. Say so before relying on the number.
 11. **When a calculation passes the host's limits**, the reply is `"status": "refused"` with
-   `"kind": "exceeds_limits"`.
-   - The refusal names the limit (a deadline, `max_digits`, `max_reply_bytes`, `max_array_bytes`, `max_arrangements`
-     for a randomization test or `max_shapley_factors` for a Shapley table), its value, the node reached and how
-     large the numbers grew. It is the machine's limit, not a fault in the math. Never shrink the inputs, round them
-     or split the computation to slip under it.
-   - From `record_computation` the record still comes back, marked `"status": "not_computed"`. It holds the graph,
-     the inputs with their sources and the limit it passed, but no result. Keep it and link it to the decision as you
-     would any record. Tell the person the number is not computed yet, and what it needs (the reply's `next` says).
-   - To complete it, pass it as `record` to `record_computation` on a flo2-calc with more room, such as one started
-     with a higher `--max-digits` or `--deadline`. The completed record has the same name, graph and inputs, now
-     with the result. It is exactly the record a direct computation would give. Link it in place of the
-     not-yet-computed one.
-   - `rerun_record` on a not-yet-computed record says it has no result yet, and whether this flo2-calc has the room to
-     complete it.
+   `"kind": "exceeds_limits"`. It is the machine's limit, not a fault in the math. Never shrink the inputs, round
+   them or split the computation to slip under it.
+   - From `record_computation` the record still comes back, marked `"status": "not_computed"`. Keep it and link it
+     to the decision as you would any record. Tell the person the number is not computed yet, and what it needs (the
+     reply's `next` says). Completing it on a flo2-calc with more room: `references/records.md`.
 
 ## On flo2.io (a helper beside the person's design)
 
@@ -286,12 +141,10 @@ When flo2-calc is reached through flo2's `use_helper_tool`, the steps are the sa
   as a file in the person's design, every version, and hands you its name and a link. Give the person the link.
 - Link that kept file to the decision with the design tools (`use_design_tool`), as in step 9.
 - To re-check a record, pass its content to `rerun_record`.
-- flo2.io's limits are lower than a laptop's: 20 s a call, 2,000 digits, 2 MiB a reply, 16 MiB of arrays a call (a
-  256 x 256 grid's FFT fits), 1,000,000 arrangements in one randomization test and Shapley values of at most 12
-  factors. Arrays come inline there: no data files. A calculation past them
-  comes back as a not-yet-computed record, kept in the design like any other. The person, or an agent on their
-  machine, completes it there with the standalone flo2-calc (step 11). Then link the completed record to the decision
-  in its place.
+- flo2.io's limits are lower than a laptop's (`references/records.md`). Arrays come inline there: no data files. A
+  calculation past them comes back as a not-yet-computed record, kept in the design like any other. The person, or
+  an agent on their machine, completes it there with the standalone flo2-calc (step 11). Then link the completed
+  record to the decision in its place.
 
 ## Talking about it
 
@@ -305,9 +158,10 @@ Say what was computed in the person's terms: "the fiber needs 1.4 mm to bend, th
 - A value labelled `"rounded"` is not exact, and the reply's `exactness` says so. Say so too, with its precision: "the
   standard deviation is 0.2302 mm (rounded; correct to 30 digits)". Quote no more digits than the person needs, and
   never call it exact. Every digit it was asked for is written, trailing zeros included.
-- A computed value may come back in a simpler unit than it was computed in (`mAh/mA` shown as `h`); `simplified_from`
-  says so. The value is the same. A whole number is written in full.
-- Show the person the formula when it helps them check the reasoning: "run time t = C / I = 450 mAh / 13 mA, about
-  34.6 h". The LaTeX form renders where their client renders math.
 - A value labelled `"float64"` was computed in double precision. Say so with its bound: "the peak of the spectrum is
   16.0 V (float64, within 3e-13 V)". Quote no more digits than its bound supports.
+
+## Where the details live
+
+Each `references/` file named above is in this skill's folder: read one when a step points to it. flo2-calc also
+serves each as an MCP resource, `skill://flo2-calc/support-a-decision-with-math/references/<file>`.

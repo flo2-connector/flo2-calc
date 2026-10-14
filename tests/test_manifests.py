@@ -25,6 +25,13 @@ SERVER = "flo2-calc"
 COMMAND = "uvx"
 ARGS = ["--from", "git+https://github.com/flo2-connector/flo2-calc", "flo2-calc", "--root", "."]
 SKILL = REPO / "skills" / "support-a-decision-with-math" / "SKILL.md"
+REFERENCES = SKILL.parent / "references"
+# flo2 serves a helper's skill whole in one reply of at most 30,000 characters,
+# its own wrapper included (flo2's budget.ts). 0.8.0's SKILL.md, 27,693 bytes,
+# came to 31,894 there and was refused as reply_too_large; 0.8.1 keeps the rules
+# in SKILL.md and moves the detail to references/ (the Agent Skills spec's
+# progressive disclosure), and this holds it there.
+SKILL_BUDGET_BYTES = 15_000
 
 
 def load(rel: str) -> dict:
@@ -93,6 +100,36 @@ def test_the_skill_is_a_well_formed_agent_skill():
     assert body.index("Standalone") < body.index("On flo2.io"), "standalone use first, hosted use second"
 
 
+def _named_references(text: str) -> set[str]:
+    return set(re.findall(r"references/[a-z0-9-]+\.md", text))
+
+
+def test_the_skill_stays_within_flo2s_budget_and_every_reference_file_it_names_exists():
+    """flo2-calc 0.8.1: SKILL.md stays small enough for flo2 to serve whole, and
+    every reference file it points to is there; every file in references/ is
+    named by SKILL.md, one level deep, so none is out of an agent's reach."""
+    size = SKILL.stat().st_size
+    assert size < SKILL_BUDGET_BYTES, (
+        f"SKILL.md is {size} bytes, past its {SKILL_BUDGET_BYTES}: move detail to a reference file, keep the rules")
+    named = _named_references(SKILL.read_text(encoding="utf-8"))
+    assert named, "SKILL.md says where the details live"
+    for path in sorted(named):
+        assert (SKILL.parent / path).is_file(), f"SKILL.md names {path}, which does not exist"
+    present = {f"references/{p.name}" for p in REFERENCES.iterdir()}
+    assert present == named, f"in references/ but never named by SKILL.md: {sorted(present - named)}"
+    for path in sorted(present):
+        assert (SKILL.parent / path).stat().st_size < SKILL_BUDGET_BYTES, f"{path} can be served whole too"
+        assert "references/" not in (SKILL.parent / path).read_text(encoding="utf-8").replace(path, ""), (
+            f"{path} points only back to SKILL.md: references stay one level deep")
+
+
+def test_the_reference_files_are_packaged_with_the_skill():
+    """The wheel (and so the image) carries references/ beside SKILL.md, so the
+    server can serve them over MCP wherever it is installed (skill.py)."""
+    data = tomllib.loads((REPO / "pyproject.toml").read_text())["tool"]["setuptools"]["package-data"]
+    assert "*/SKILL.md" in data["flo2_calc.skills"] and "*/references/*.md" in data["flo2_calc.skills"]
+
+
 def test_the_readme_puts_standalone_use_before_hosted_use():
     readme = (REPO / "README.md").read_text(encoding="utf-8")
     assert readme.index("## Standalone") < readme.index("## Hosted on flo2.io")
@@ -133,11 +170,14 @@ def test_the_skill_says_where_an_empirical_formulas_constants_come_from():
 
 
 def test_the_skills_example_supplies_no_constant_of_any_standard():
-    text = SKILL.read_text(encoding="utf-8")
-    for c in RECALLED:
-        assert c not in text, f"the skill must not carry a standard's constant ({c}) for an agent to copy"
+    for path in [SKILL, *sorted(REFERENCES.glob("*.md"))]:
+        text = path.read_text(encoding="utf-8")
+        for c in RECALLED:
+            assert c not in text, f"the skill must not carry a standard's constant ({c}) for an agent to copy: {path.name}"
+    # The example's nodes are in the operators' reference file since 0.8.1.
+    text = (REFERENCES / "operators.md").read_text(encoding="utf-8")
     example = text[text.index("**An empirical formula with stated units**"):]
-    example = example[: example.index("**Give data as an array")]
+    example = example[: example.index("\n## ")]
     sources = re.findall(r'"id": "(k|b)", "value": "([^"]*)", "source": "([^"]*)"', example)
     assert {s[0] for s in sources} == {"k", "b"}
     for _id, value, source in sources:
