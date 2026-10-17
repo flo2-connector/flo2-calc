@@ -1023,7 +1023,12 @@ eight more calls (42 in 133 s): a randomization test of 22 periods with any 11 o
 image's 1,000,000 allows at that size: 0.62 s, recorded and re-run 1.24 s), Shapley values of 12 factors from 4,096
 outcomes, recorded and re-run (1.62 s), the gamma and beta quantiles and a lognormal tail at 1,000 digits (0.08 s), and
 two more runaway calls, 24 periods (2,704,156 arrangements) and 13 factors, stopped at `max_arrangements` and
-`max_shapley_factors`. It peaked at 103.5 MiB under 128m, every runaway call stopped and the container alive after. 0.5.0 peaked at 91.3 MiB and 0.4.0 at 78.2 MiB in their 27-call sessions; numpy, loaded and
+`max_shapley_factors`. It peaked at 103.5 MiB under 128m, every runaway call stopped and the container alive after. 0.9.0 ran it on
+2026-10-17 with six more calls (48 in 151 s): the integer work at the image's limits (n^2 + n + 41 over the longest
+exact range, 4,096, through `is_prime`; a 200-digit prime proven; a 40-digit semiprime of two 20-digit primes and
+2^1000 3^500 factored: 1.94 s, recorded and re-run 3.66 s), and three more runaway calls, a 201-digit prime, a 50-digit
+semiprime and a range of 4,097, stopped at `max_prime_digits`, `max_factor_digits` and `max_exact_elements`. It peaked
+at 106.0 MiB under 128m, every runaway call stopped and the container alive after. 0.5.0 peaked at 91.3 MiB and 0.4.0 at 78.2 MiB in their 27-call sessions; numpy, loaded and
 working on the arrays above, costs about 14 MiB more than 0.5.0. A cap of **128m** is still above the peak, with 22 MiB to spare,
 and the array budget (16 MiB in the image) keeps a call's arrays inside it. CI runs the image under 128m, and asks it
 every limit's questions there (`tests/test_limits.py`, `tests/test_pending_record.py`) and the arrays' questions
