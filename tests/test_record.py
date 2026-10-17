@@ -58,7 +58,7 @@ def validator():
 def test_a_record_holds_what_a_decision_needs():
     rec = make(supports={"design_node": "dec:fiber-route"})
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 8
+    assert rec["schema_version"] == 9
     assert rec["status"] == "computed"
     assert "stopped" not in rec and "limits_in_force" not in rec, "a computed record carries no host limits"
     assert rec["graph"] == FIBER
@@ -309,7 +309,7 @@ def test_a_version_6_record_re_runs_under_the_rules_and_writing_it_was_made_with
 def test_the_same_graph_recorded_now_writes_delta_k_and_every_line_s_value():
     old = json.loads((DATA / "temperature-and-formula.v6.calc.json").read_text())
     now = make(old["graph"], old["name"], old["supports"])
-    assert now["schema_version"] == 8
+    assert now["schema_version"] == 9
     validator().validate(now)
     values = {v["node"]: v for v in now["values"]}
     assert values["rise_k"]["value"] == "10 delta_K" and values["diff"]["value"] == "1.85 delta_K"
@@ -339,9 +339,10 @@ def test_round_3_operators_are_in_a_version_7_record_and_re_run():
     assert R.rerun(rec)["reproduces"] is True
 
 
-def test_every_published_schema_is_kept_and_version_8_is_current():
-    assert R.SCHEMA_VERSION == 8 and sorted(R.SCHEMA_FILES) == [1, 2, 3, 4, 5, 6, 7, 8]
-    assert R.schema(8)["properties"]["schema_version"] == {"const": 8}
+def test_every_published_schema_is_kept_and_version_9_is_current():
+    assert R.SCHEMA_VERSION == 9 and sorted(R.SCHEMA_FILES) == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert R.schema(9)["properties"]["schema_version"] == {"const": 9}
+    assert R.schema(8)["properties"]["schema_version"] == {"const": 8}, "a released schema is never edited"
     assert R.schema(7)["properties"]["schema_version"] == {"const": 7}, "a released schema is never edited"
     assert R.schema(6)["properties"]["schema_version"] == {"const": 6}, "a released schema is never edited"
 
@@ -362,6 +363,19 @@ def test_a_version_7_record_made_by_0_7_0_re_runs_byte_for_byte():
         {k: v for k, v in rec.items() if k not in ("produced_by", "content_hash")}
 
 
+def test_a_version_8_record_made_by_0_8_1_re_runs_byte_for_byte():
+    """divisibility.v8.calc.json was made by flo2-calc 0.8.1 (before 0.9.0 changed anything): a beta
+    posterior, a randomization test, a binomial coefficient, and 1681 / 41 == floor(1681 / 41), divisibility
+    as the primes trial had to write it. It re-runs to every byte it holds under 0.9.0."""
+    rec = json.loads((DATA / "divisibility.v8.calc.json").read_text())
+    assert rec["schema_version"] == 8 and rec["produced_by"]["flo2_calc"] == "0.8.1"
+    answer = R.rerun(R.load(rec))
+    assert answer["reproduces"] is True, answer["differences"]
+    again = R.build(evaluate(read_graph(rec["graph"])), rec["name"], rec["supports"], 8)
+    assert {k: v for k, v in again.items() if k not in ("produced_by", "content_hash")} == \
+        {k: v for k, v in rec.items() if k not in ("produced_by", "content_hash")}
+
+
 def test_every_operator_is_in_the_current_schema_and_none_of_0_8_0s_in_version_7():
     from flo2_calc.evaluator import OPS
 
@@ -369,7 +383,7 @@ def test_every_operator_is_in_the_current_schema_and_none_of_0_8_0s_in_version_7
         node = R.schema(version)["$defs"]["graph"]["properties"]["nodes"]["items"]["oneOf"][1]
         return set(node["properties"]["op"]["enum"])
 
-    assert ops_of(8) == set(OPS)
+    assert ops_of(9) == set(OPS) and ops_of(8) <= ops_of(9)
     new = set(OPS) - ops_of(7)
     assert {"posterior_normal_mean", "posterior_beta_interval_upper", "randomization_test", "shapley_values",
             "lognormal_cdf", "gamma_quantile", "beta_sf"} <= new
@@ -382,4 +396,5 @@ def test_a_pending_record_holds_every_limit_in_force():
     pending = R.build_pending(g, "big", None, ev.refusal, ev.guard.limits)
     validator().validate(pending)
     assert set(pending["limits_in_force"]) == {"deadline", "max_digits", "max_reply_bytes", "max_array_bytes",
-                                               "max_exact_elements", "max_arrangements", "max_shapley_factors"}
+                                               "max_exact_elements", "max_arrangements", "max_shapley_factors",
+                                               "max_prime_digits", "max_factor_digits"}
