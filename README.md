@@ -111,7 +111,7 @@ flo2 has no door for flo2-calc yet. What it needs is listed under "What flo2 nee
 
 flo2-calc's arithmetic is exact, and exact numbers can grow without bound: a high power, or a long chain of
 divisions, gives numerators and denominators of thousands of digits; a randomization test's arrangements and a
-Shapley table's combinations grow just as fast. So each host sets its limits at start-up, the same way as `--root`: a
+Shapley table's combinations grow just as fast, and proving a large number prime or factoring one faster still. So each host sets its limits at start-up, the same way as `--root`: a
 flag, or its environment variable. A calculation past one is **stopped cleanly, with its
 reason**. It is never cut short, never guessed, and never killed by a sandbox as if it had crashed.
 
@@ -124,6 +124,8 @@ reason**. It is never cut short, never guessed, and never killed by a sandbox as
 | elements an exact array may have (past it: float64, labelled) | `--max-exact-elements N` | `FLO2_CALC_MAX_EXACT_ELEMENTS` | 65,536 (a 256 x 256 grid) | 4,096 (a 64 x 64 grid) |
 | arrangements one randomization test counts | `--max-arrangements N` | `FLO2_CALC_MAX_ARRANGEMENTS` | 10,000,000 | 1,000,000 |
 | factors of one Shapley table (2^k outcomes) | `--max-shapley-factors N` | `FLO2_CALC_MAX_SHAPLEY_FACTORS` | 16 | 12 |
+| digits of a number `is_prime` proves prime | `--max-prime-digits N` | `FLO2_CALC_MAX_PRIME_DIGITS` | 300 | 200 |
+| digits of the composite part `factorize` splits | `--max-factor-digits N` | `FLO2_CALC_MAX_FACTOR_DIGITS` | 50 | 40 |
 
 Why each value:
 
@@ -149,7 +151,8 @@ Why each value:
   128 with its digits) and, for an FFT whose length is not a power of two, the room Arb's check of it takes while it
   runs.
 - **Exact arrays, 65,536 elements on a laptop and 4,096 on flo2.io** (`dec:v0-6-0-array-choices`). This one is not a
-  stop: past it an array is carried in float64 and labelled so, as `dec:idea-how-arrays-are-computed` has large grids
+  stop (but for `integer_range`, 0.9.0, whose elements are the integers the integer operators take exactly: past it a
+  range is stopped, not made float64): past it an array is carried in float64 and labelled so, as `dec:idea-how-arrays-are-computed` has large grids
   be. An exact element costs about 128 bytes and a float64 one 16, so flo2.io's lower value keeps a 256 x 256 grid's
   workflow inside its array budget and its 128m cap. A computed record that holds an array keeps the value it was made
   with (`max_exact_elements`), and re-running uses that value, not the host's, so the record re-runs to the same values
@@ -165,9 +168,23 @@ Why each value:
 - **Shapley factors, 16 on a laptop and 12 on flo2.io.** A table of k factors holds 2^k outcomes, every one named, and
   the values take k 2^(k-1) steps. 2^16 and 2^12 are each host's `max_exact_elements`, so the table stays exact. A host
   may set from 1 to 21 (2^21 is the most elements any array has).
+- **Prime digits, 300 on a laptop and 200 on flo2.io** (`dec:v0-9-0-integer-operator-choices`, choice 7). `is_prime`
+  answers only with a proof (FLINT's `fmpz_is_prime`: a Pocklington, Morrison-Brillhart, Lehmer or Selfridge
+  certificate, else APR-CL). Proving a random prime took, on the laptop that measured it, 0.3 s at 100 digits, 1.6 s
+  at 200, 8 to 10 s at 300, 56 s at 500 and 4 minutes at 700; a composite fails the BPSW probable-prime tests in
+  milliseconds at any of those sizes. A proof is one call nothing interrupts, so this limit is what bounds it: 300 is
+  well inside the laptop's 45 s, and 200 inside flo2.io's 20 s on one shared CPU. Past it a number that FAILS the
+  probable-prime tests is still answered (composite, proven by the failure); one that passes them is stopped, and
+  never answered as "probably prime". A host may set from 1 to 2,000.
+- **Factor digits, 50 on a laptop and 40 on flo2.io** (choice 7). `factorize` divides out every prime below 65,536 and
+  takes a perfect power's root first, so a number of any size with small factors (`10^100`, `1000!`) is factored at
+  once. What is left to split is a composite with no factor below 65,536, and FLINT's `fmpz_factor` (ECM and the
+  quadratic sieve) takes, on that laptop, 0.13 s at 40 digits, 1.5 to 3 s at 50 (two 25-digit primes, the hardest
+  shape), 18 s at 60 and 89 s at 77, again in one call nothing interrupts. Past the limit the factorization is
+  stopped, never answered in part. A host may set from 1 to 100.
 
 **These are the only limits on a calculation.** A randomization test and a Shapley table are sized by theirs before any
-work (0.8.0); a power has no exponent cap of its own: flo2-calc 0.1.0 to 0.6.1
+work (0.8.0), and a primality proof and a factorization by theirs (0.9.0); a power has no exponent cap of its own: flo2-calc 0.1.0 to 0.6.1
 also refused any whole exponent above 1000 (kind `too_large`), a cap none of the served limits named, which refused
 `2^1001` (302 digits) and gave `record_computation` no not-yet-computed record (round 3, q072 and q086). Since 0.7.0 a
 power is sized against the digits budget alone. How a graph may be written (at most 500 nodes, 100 arguments a
@@ -276,6 +293,7 @@ the same graph, and gives the same result, as the same nodes sent whole.
 | comparison | `eq`, `ne`, `lt`, `le`, `gt`, `ge` |
 | counting | `count_true`, `k_of_n`, `to_number` |
 | combinatorics | `choose`, `factorial` |
+| integers | `mod`, `divides`, `gcd`, `is_prime`, `factorize`, `integer_range` (0.9.0) |
 | units | `magnitude` (with `"unit"`), `with_unit` (with `"unit"` and `"source"`) |
 | decibels | `db_to_ratio`, `ratio_to_db` (each with `"kind"`: `"power"` or `"amplitude"`) |
 
@@ -381,6 +399,32 @@ the same graph, and gives the same result, as the same nodes sent whole.
   number: true is `1`, false is `0` (element by element for a true/false array).
 - **`choose`** (`[n, k]`, the binomial coefficient, `0` when `k > n`) and **`factorial`** (`[n]`) are exact, on exact
   whole numbers of 0 or more, and sized before they are computed.
+- **The integer operators** (0.9.0, `req:integer-arithmetic-has-remainder-divisibility-and-primality`,
+  `dec:v0-9-0-integer-operator-choices`; `src/flo2_calc/integers.py`) take exact whole plain numbers of any size
+  within the digits budget. A fraction, a decimal with a fraction part, a value with a unit, a rounded value or
+  true/false is refused, naming the argument and why: a rounded `2` is not known to be whole.
+  - **`mod`** `[a, b]` is `a - b floor(a/b)`, the remainder with the sign of `b` (Knuth's floored remainder:
+    `-7 mod 3` is `2`, `7 mod -3` is `-2`, and `0 <= a mod b < b` for `b > 0`). `b = 0` is refused.
+  - **`divides`** `[d, n]` is true when `n` is a whole multiple of `d`; `0` divides only `0`.
+  - **`gcd`** takes two or more; the greatest common divisor of their absolute values, and `gcd(0, 0)` is `0`.
+  - **`is_prime`** `[n]` is true for a prime and false otherwise (every `n < 2` is false), and it is PROVEN either way,
+    never probable: up to the host's `max_prime_digits` by FLINT's `fmpz_is_prime` (a primality certificate, else
+    APR-CL; below 2^64 a Miller-Rabin test with bases shown to be deterministic there). Past it a number that fails
+    the BPSW probable-prime tests is composite, proven by that failure, and answered `false`; one that passes them is
+    refused (`exceeds_limits`), because no proof was made. Arnault's 397-digit strong pseudoprime to every prime base
+    below 307 is answered `false`.
+  - **`factorize`** `[n]`, `n >= 2`, is an exact grid of rows `[p, e]`, the primes increasing, each with its
+    multiplicity: `1681` is `[[41, 2]]`, read with `element` like any grid. Every prime below 65,536 is divided out
+    first and a perfect power's root is taken, so `10^100` and `1000!` are factored at once; what is left with no
+    small factor is split by FLINT's `fmpz_factor` up to the host's `max_factor_digits`, and refused past it, never
+    answered in part. Every factor is proven prime and their product checked to be `n`. `1` (the empty product) and
+    a number below 1 are refused.
+  - **`integer_range`** `[a, b]`, `a <= b`, is the exact 1-D array `a, a + 1, ..., b`, both ends included, so a run
+    of numbers and its count are never typed. Past the host's `max_exact_elements` it is refused (`exceeds_limits`),
+    not carried in float64: the integer operators take exact values only.
+  - `mod`, `divides`, `gcd` and `is_prime` work element by element on exact arrays; `factorize` and `integer_range`
+    take single values. The primes trial's question, whether `n^2 + n + 41` is prime for `n = 0..39`, is
+    `integer_range`, `mul`, `add`, `is_prime` and `all`; `n = 40` gives `1681`, `is_prime` false, `[[41, 2]]`.
 - **Units for an empirical formula.** An empirical relation (a datasheet's curve fit, a standard's sizing rule) works on
   numbers taken in stated units. `magnitude` takes a quantity's number in a named unit (`2 A` in `"mA"` is `2000`),
   refused unless the quantity measures what that unit measures, so `2000` is never read as amperes. `with_unit` puts a
@@ -712,8 +756,8 @@ data:
 
 A function over an array (`sqrt`, `exp`, `ln`, `sin`, the distributions ...) works element by element, and a
 `count_true` of several true/false values counts them. `to_number` turns a true/false array into an exact array of 1
-and 0. `choose`, `factorial` and the binomial work element by element on exact arrays, by the rules for one value; a
-float64 argument is refused.
+and 0. `choose`, `factorial`, the binomial, `mod`, `divides`, `gcd` and `is_prime` work element by element on exact
+arrays, by the rules for one value; a float64 argument is refused.
 
 **Exact or float64, and labelled.**
 
@@ -825,8 +869,11 @@ flo2's helper contract fixes the split.
 ## The computation record
 
 One JSON object, defined by
-[`src/flo2_calc/schemas/calc-record-8.schema.json`](src/flo2_calc/schemas/calc-record-8.schema.json) (JSON Schema
-draft 2020-12). Version 8 (0.8.0) allows Bayesian updating, the randomization test (with `scheme`, `statistic` and
+[`src/flo2_calc/schemas/calc-record-9.schema.json`](src/flo2_calc/schemas/calc-record-9.schema.json) (JSON Schema
+draft 2020-12). Version 9 (0.9.0) allows the integer operators (`mod`, `divides`, `gcd`, `is_prime`, `factorize`,
+`integer_range`); a host's limits gain `max_prime_digits` and `max_factor_digits`, and a stop may name either, or
+`max_exact_elements` (an integer range). A version 8 record re-runs as it was made
+(`tests/data/divisibility.v8.calc.json`, made by 0.8.1, reproduces byte for byte). Version 8 (0.8.0) allows Bayesian updating, the randomization test (with `scheme`, `statistic` and
 `alternative`), Shapley values (with `factors` and `combinations`) and the lognormal, gamma and beta distributions; a
 value may carry `detail` (the named values its working step shows); and a host's limits gain `max_arrangements` and
 `max_shapley_factors`. A version 7 record re-runs as it was made (`tests/data/statistics.v7.calc.json`, made by 0.7.0,
@@ -1005,7 +1052,8 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
   the labels in the record; and the limits.
 - `tests/test_record.py`: the record is deterministic and fits its schema; it re-runs; tampering is caught; several
   results; records of versions 1 to 3, 6 and 7 reproduce under their own writing (and version 6's under its own
-  temperature rules); round 3's operators in a version 7 record; every operator in version 8's schema.
+  temperature rules); round 3's operators in a version 7 record; a version 8 record made by 0.8.1 reproduces; every
+  operator in version 9's schema.
 - `tests/test_skewed.py` (0.8.0): the lognormal, gamma and beta cdf, sf and quantile against mpmath's own gammainc and
   betainc at 120 digits, next to a rounding tie on both sides; exact cases; units; domains; rounded arguments; the
   chi-square critical values NIST publishes, from the gamma quantile.
@@ -1017,6 +1065,12 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
 - `tests/test_shapley.py` (0.8.0): against Shapley's own definition, the average over every order of adding the
   factors, on random tables of 1 to 6 factors; a missing, repeated or unknown combination named; `max_shapley_factors`;
   the record.
+- `tests/test_integers.py` (0.9.0): `mod` against its definition, `divides`, `gcd` (with the Fibonacci identity),
+  `is_prime` against a sieve of every number below 65,536 and on Mersenne primes, Fermat numbers and strong
+  pseudoprimes (Arnault's included), `factorize` against Legendre's formula for `1000!` and known factorizations,
+  `integer_range`; large integers built past the 80 characters a typed number may have; every refusal (a non-integer,
+  a rounded or a float64 argument, `max_prime_digits`, `max_factor_digits`, `max_exact_elements`); the record, a
+  not-yet-computed one, and the primes trial (`n^2 + n + 41`, `n = 0..39`, and 1681 = 41^2) over MCP.
 - `tests/test_server.py`: the four tools over a real MCP client session. Every refusal's reason is read on the
   client's side. The served skill (prompt and resource) and each of its reference files are read there too, and each
   matches its file.
@@ -1075,7 +1129,7 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    per record. **0.5.0 also offers an MCP prompt and a resource** (the skill, `initialize` now lists `prompts` and
    `resources` beside `tools`). They are not tools, so the door's allow-list of four is untouched; the door may ignore
    them, since hosted on flo2.io the skill is served by flo2 itself. The image's size is unchanged (209 MB), and its
-   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`. 0.7.0 (round 3's fixes) changes the skill's text again (an empirical formula's constants come from the person or a cited document, never the agent's memory; ambiguous expressions; troy weight; the new operators) and the server's instructions; adds `op` values inside a graph (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`) and the units `ozt`, `dwt`, `grain`, `week` and `delta_K`; and makes the record schema version 7. The four tools, their classes and their top-level arguments are unchanged; the image's limits are unchanged. 0.8.0 (the cure design's four requirements) changes the skill's text again (Bayesian updating, the randomization test, Shapley values, the skewed distributions) and the server's instructions; adds `op` values and node fields inside a graph (`scheme`, `statistic`, `alternative`, `factors`, `combinations`) and a value's `detail` inside a reply; makes the record schema version 8; and adds two limits to the image's profile (`FLO2_CALC_MAX_ARRANGEMENTS=1000000`, `FLO2_CALC_MAX_SHAPLEY_FACTORS=12`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies the skill file unchanged. 0.8.1 splits the skill for size, and nothing else changes: 0.8.0's SKILL.md, 27,693 bytes, came to 31,894 characters in flo2's served reply, past its 30,000, so SKILL.md now keeps the rules (under 15,000 bytes, which a test holds) and each operator's arguments, examples and edge cases move to `skills/support-a-decision-with-math/references/` (`when-to-use.md`, `units.md`, `operators.md`, `arrays.md`, `records.md`), each sentence in one place and none changed in meaning, served as resources beside the skill. The four tools, their behaviour and the record schema (version 8) are unchanged, and the image's profile too. flo2 copies SKILL.md unchanged, and the reference files beside it if it serves them.
+   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`. 0.7.0 (round 3's fixes) changes the skill's text again (an empirical formula's constants come from the person or a cited document, never the agent's memory; ambiguous expressions; troy weight; the new operators) and the server's instructions; adds `op` values inside a graph (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`) and the units `ozt`, `dwt`, `grain`, `week` and `delta_K`; and makes the record schema version 7. The four tools, their classes and their top-level arguments are unchanged; the image's limits are unchanged. 0.8.0 (the cure design's four requirements) changes the skill's text again (Bayesian updating, the randomization test, Shapley values, the skewed distributions) and the server's instructions; adds `op` values and node fields inside a graph (`scheme`, `statistic`, `alternative`, `factors`, `combinations`) and a value's `detail` inside a reply; makes the record schema version 8; and adds two limits to the image's profile (`FLO2_CALC_MAX_ARRANGEMENTS=1000000`, `FLO2_CALC_MAX_SHAPLEY_FACTORS=12`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies the skill file unchanged. 0.8.1 splits the skill for size, and nothing else changes: 0.8.0's SKILL.md, 27,693 bytes, came to 31,894 characters in flo2's served reply, past its 30,000, so SKILL.md now keeps the rules (under 15,000 bytes, which a test holds) and each operator's arguments, examples and edge cases move to `skills/support-a-decision-with-math/references/` (`when-to-use.md`, `units.md`, `operators.md`, `arrays.md`, `records.md`), each sentence in one place and none changed in meaning, served as resources beside the skill. The four tools, their behaviour and the record schema (version 8) are unchanged, and the image's profile too. flo2 copies SKILL.md unchanged, and the reference files beside it if it serves them. 0.9.0 (`req:integer-arithmetic-has-remainder-divisibility-and-primality`, from the primes trial on flo2.io) changes the skill's text again (an Integers line in SKILL.md, still under 15,000 bytes, and an Integers section in `references/operators.md`) and the server's instructions; adds `op` values inside a graph (`mod`, `divides`, `gcd`, `is_prime`, `factorize`, `integer_range`); makes the record schema version 9; and adds two limits to the image's profile (`FLO2_CALC_MAX_PRIME_DIGITS=200`, `FLO2_CALC_MAX_FACTOR_DIGITS=40`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies SKILL.md and `references/operators.md` and `references/records.md` unchanged.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.

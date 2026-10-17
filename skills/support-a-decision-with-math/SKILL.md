@@ -1,6 +1,6 @@
 ---
 name: support-a-decision-with-math
-description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison with a limit, a root, a logarithm, a gain in dB, an angle, a p-value or a percentile (normal, lognormal, gamma, beta), a count or a binomial probability, an estimate updated from a published prior, an on/off trial's randomization test, Shapley credit among factors, an empirical formula whose formula and constants the person or a cited document gave, or a computation over data or a grid (a mean, a standard deviation, a fitted slope, an FFT) - especially one with units. It covers composing the computation, units, arrays, rounded and float64 results, where an empirical formula's constants must come from (never your memory), refusals, the working shown back, the computation record, saving it, linking it to the decision, and checking it later.
+description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison with a limit, a root, a logarithm, a gain in dB, an angle, a p-value or a percentile (normal, lognormal, gamma, beta), a count or a binomial probability, divisibility or primes, a Bayesian update from a published prior, a randomization test, Shapley credit, an empirical formula whose formula and constants the person or a cited document gave, or a computation over data or a grid (a mean, a standard deviation, a fitted slope, an FFT) - especially one with units. It covers composing the computation, units, arrays, rounded and float64 results, where an empirical formula's constants must come from (never your memory), refusals, the working shown back, the computation record, saving it, linking it to the decision, and checking it later.
 compatibility: Needs the flo2-calc MCP server (evaluate_graph, add_node, record_computation, rerun_record), which also serves this skill as the MCP prompt support-a-decision-with-math and the resource skill://flo2-calc/support-a-decision-with-math/SKILL.md. Nothing else has to be running. Linking a record to a design uses the design tool's own tools (reflow2), when there is one.
 ---
 
@@ -77,6 +77,9 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
    - **Counting:** `count_true`, `k_of_n`, `to_number`. Never add true/false values, and never tally them yourself.
    - **Combinatorics and the binomial:** `choose`, `factorial`, `binomial_pmf`, `_cdf`, `_sf`. Whether the trials
      are independent with one p is your judgement; say so.
+   - **Integers:** `mod`, `divides`, `gcd`, `is_prime`, `factorize`, and `integer_range` for a, ..., b. Never type a
+     run of whole numbers or its count, and never test divisibility as `v / d == floor(v / d)`. A prime past the
+     host's limit is refused, not guessed: never call it prime yourself.
    - **An empirical formula's units:** `magnitude`, `with_unit`. Never multiply by a typed `"1 mm^2"` to get a unit
      back, and never fill in a constant the person did not give.
 5. **Give data as an array, not as one node per number:** `{"array": [...], "unit": "..."}`, one unit for the
@@ -152,12 +155,10 @@ Say what was computed in the person's terms: "the fiber needs 1.4 mm to bend, th
 0.6 mm to spare against the 0.5 mm you wanted". Do not say "graph" or "node" to them.
 
 - An exact value whose decimal does not end is written rounded with its exact fraction beside it (`"exact": "40/9 h"`):
-  the exact value for these inputs. Quote the rounded text to the person; the record keeps the exact one. Never call a
-  result exact beyond its inputs: a result from a measured value is exact for that value, and no more accurate than it
-  is. Use the `pi` and `e` operators rather than typing their digits.
+  the exact value for these inputs. Quote the rounded text to the person; the record keeps the exact one.
 - A value labelled `"rounded"` is not exact, and the reply's `exactness` says so. Say so too, with its precision: "the
   standard deviation is 0.2302 mm (rounded; correct to 30 digits)". Quote no more digits than the person needs, and
-  never call it exact. Every digit it was asked for is written, trailing zeros included.
+  never call it exact.
 - A value labelled `"float64"` was computed in double precision. Say so with its bound: "the peak of the spectrum is
   16.0 V (float64, within 3e-13 V)". Quote no more digits than its bound supports.
 

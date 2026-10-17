@@ -2,6 +2,7 @@
 
     flo2-calc [--root DIR] [--deadline SECONDS] [--max-digits N] [--max-reply-bytes N] [--max-array-bytes N]
               [--max-exact-elements N] [--max-arrangements N] [--max-shapley-factors N]
+              [--max-prime-digits N] [--max-factor-digits N]
     flo2-calc --version
 
 --root (or FLO2_CALC_ROOT) names the ONE folder flo2-calc may write records
@@ -16,7 +17,8 @@ The LIMITS (limits.py) are set the same way, each by a flag or its variable:
 --max-reply-bytes (FLO2_CALC_MAX_REPLY_BYTES), --max-array-bytes
 (FLO2_CALC_MAX_ARRAY_BYTES), --max-exact-elements
 (FLO2_CALC_MAX_EXACT_ELEMENTS), --max-arrangements (FLO2_CALC_MAX_ARRANGEMENTS)
-and --max-shapley-factors (FLO2_CALC_MAX_SHAPLEY_FACTORS). Unset, they are the laptop
+--max-shapley-factors (FLO2_CALC_MAX_SHAPLEY_FACTORS), --max-prime-digits
+(FLO2_CALC_MAX_PRIME_DIGITS) and --max-factor-digits (FLO2_CALC_MAX_FACTOR_DIGITS). Unset, they are the laptop
 defaults; the image sets flo2.io's lower profile. A setting flo2-calc cannot
 use stops it at start-up with the reason, never silently replaced.
 """
@@ -121,12 +123,30 @@ def main(argv: list[str] | None = None) -> None:
             f"else {defaults.max_shapley_factors}; flo2.io's sandbox: {L.FLO2_IO.max_shapley_factors})"
         ),
     )
+    parser.add_argument(
+        "--max-prime-digits",
+        default=os.environ.get("FLO2_CALC_MAX_PRIME_DIGITS"),
+        help=(
+            f"the most digits of a number is_prime proves prime; past it a probable prime is stopped with its reason, "
+            f"never answered as prime (default: $FLO2_CALC_MAX_PRIME_DIGITS, else {defaults.max_prime_digits}; "
+            f"flo2.io's sandbox: {L.FLO2_IO.max_prime_digits})"
+        ),
+    )
+    parser.add_argument(
+        "--max-factor-digits",
+        default=os.environ.get("FLO2_CALC_MAX_FACTOR_DIGITS"),
+        help=(
+            f"the most digits of the composite part factorize splits after its factors below 65,536; past it the "
+            f"factorization is stopped with its reason (default: $FLO2_CALC_MAX_FACTOR_DIGITS, else "
+            f"{defaults.max_factor_digits}; flo2.io's sandbox: {L.FLO2_IO.max_factor_digits})"
+        ),
+    )
     args = parser.parse_args(argv)
     root = resolve_root(args.root)
     try:
         limits = L.from_settings(
             args.deadline, args.max_digits, args.max_reply_bytes, args.max_array_bytes, args.max_exact_elements,
-            args.max_arrangements, args.max_shapley_factors,
+            args.max_arrangements, args.max_shapley_factors, args.max_prime_digits, args.max_factor_digits,
         )
     except ValueError as e:
         sys.exit(f"flo2-calc: {e}")

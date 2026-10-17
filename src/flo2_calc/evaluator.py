@@ -106,6 +106,15 @@ required at reading), the randomization test of an on/off trial (trials.py:
 lognormal, gamma and beta distributions in the rounded class (realmath.py).
 An operation may give its value with a DETAIL (Detailed): the named
 intermediate values its working step shows, kept beside the value.
+
+FLO2-CALC 0.9.0 (dec:v0-9-0-integer-operator-choices; integers.py): exact
+integer operators on whole plain numbers of any size within the digits
+budget: mod (the floored remainder), divides, gcd, is_prime (proven, never
+probable), factorize (the primes with their multiplicities, as a grid of
+rows [p, e]) and integer_range (a, a + 1, ..., b, so a count is never typed).
+A non-integer argument is refused with its reason; a primality proof or a
+factorization past the host's max_prime_digits or max_factor_digits is
+stopped there (exceeds_limits), never guessed.
 """
 
 from __future__ import annotations
@@ -121,6 +130,7 @@ from flo2_calc import arrays as A
 from flo2_calc import bayes as BY
 from flo2_calc import decibels as D
 from flo2_calc import formula as FM
+from flo2_calc import integers as IN
 from flo2_calc import limits as L
 from flo2_calc import numbers as N
 from flo2_calc import realmath as RM
@@ -176,6 +186,7 @@ ARITHMETIC, FUNCTIONS, CONSTANTS, TRIG, ROUNDING, STATISTICS = (
 UNITS_OPS, DECIBELS, COUNTING = "units", "decibels", "counting"  # dec:round-2-fixes
 COMBINATORICS = "combinatorics"  # round 3
 BAYES, TRIALS, CREDIT = "Bayesian updating", "randomization tests", "credit among factors"  # 0.8.0
+INTEGERS = "integers"  # 0.9.0
 REDUCTION, DATA, TRANSFORM, COMPLEX, ARRAY = (
     "reductions", "statistics over data", "transforms", "complex values", "making and shaping arrays",
 )
@@ -359,6 +370,20 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "factorial": (COMBINATORICS, 1, 1, "n! for an exact whole plain number n >= 0, exact (0! is 1); sized before it is computed"),
     "length": (REDUCTION, 1, 1, 'the number of elements of an array, an exact whole number; with "axis" 0 the length of each '
                "column (the grid's rows), with 1 the length of each row"),
+    "mod": (INTEGERS, 2, 2, "args [a, b], exact whole plain numbers: the remainder a - b floor(a/b), exact, with the sign of b "
+            "(0 <= a mod b < b for b > 0); b = 0 is refused"),
+    "divides": (INTEGERS, 2, 2, "args [d, n], exact whole plain numbers: true when n is a whole multiple of d (d | n); 0 divides "
+                "only 0"),
+    "gcd": (INTEGERS, 2, None, "the greatest common divisor of exact whole plain numbers (of their absolute values), exact; "
+            "gcd(0, 0) is 0"),
+    "is_prime": (INTEGERS, 1, 1, "true when the exact whole plain number n is prime, false when it is not (and for n < 2); "
+                 "PROVEN either way, never probable: a probable prime past the host's max_prime_digits is refused"),
+    "factorize": (INTEGERS, 1, 1, "an exact whole plain number n >= 2 as its primes with their multiplicities: an exact grid "
+                  "of rows [p, e], the primes increasing (1681 is [[41, 2]]); every prime proven; past the host's "
+                  "max_factor_digits refused, never answered in part"),
+    "integer_range": (INTEGERS, 2, 2, "args [a, b], exact whole plain numbers with a <= b: the 1-D exact array a, a + 1, ..., "
+                      "b, both ends included (b - a + 1 elements), so a count is never typed; past the host's "
+                      "max_exact_elements refused"),
 }
 
 # Operators that may give a rounded value, and so take "digits".
@@ -372,7 +397,7 @@ KIND_OPS = frozenset({"db_to_ratio", "ratio_to_db"})  # each must be told "kind"
 SOURCED_OPS = frozenset({"with_unit"})  # each must say, in "source", where what it asserts comes from
 AXIS_OPS = frozenset({"sum", "product", "mean", "min", "max", "count_true", "any", "all", "length"})
 # Exact operators that take single values, and take exact arrays element by element (arrays.py).
-PER_ELEMENT = frozenset({"choose", "factorial", "binomial_pmf", "binomial_cdf", "binomial_sf"})
+PER_ELEMENT = frozenset({"choose", "factorial", "binomial_pmf", "binomial_cdf", "binomial_sf", "mod", "divides", "gcd", "is_prime"})
 ROUND_MODES = ("half_even", "half_away_from_zero", "half_toward_zero", "half_up", "half_down")
 
 INPUT_KEYS = ("id", "value", "source", "note")
@@ -1925,12 +1950,16 @@ def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value | Detailed:
         return TR.apply(node, args, guard)
     if family == CREDIT:
         return SH.apply(node, args, guard)
+    if op in IN.SINGLE:
+        return IN.apply(node, args, guard)  # single values only: an array is refused there, not taken element by element
     if A.uses_arrays(op, args):
         return A.apply(node, args, guard)  # an array among the arguments, or an operator only arrays have
     if family == COUNTING:
         return _counting(node, args)
     if family == COMBINATORICS:
         return _combinatorics(node, args, guard)
+    if family == INTEGERS:
+        return IN.apply(node, args, guard)
     if family == UNITS_OPS:
         return _units_op(node, args[0], guard)
     if family == "logic":

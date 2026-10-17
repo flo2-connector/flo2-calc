@@ -18,6 +18,8 @@ THE LIMITS (cli.py reads them, like --root, from a flag or the environment):
   max_exact_elements --max-exact-elements N  FLO2_CALC_MAX_EXACT_ELEMENTS  the most elements an exact array has
   max_arrangements --max-arrangements N      FLO2_CALC_MAX_ARRANGEMENTS   the arrangements one randomization test counts
   max_shapley_factors --max-shapley-factors N  FLO2_CALC_MAX_SHAPLEY_FACTORS  the factors of one Shapley table
+  max_prime_digits --max-prime-digits N      FLO2_CALC_MAX_PRIME_DIGITS   the digits of a number proven prime
+  max_factor_digits --max-factor-digits N    FLO2_CALC_MAX_FACTOR_DIGITS  the digits of the part factoring splits
 
 max_arrangements and max_shapley_factors (flo2-calc 0.8.0,
 dec:v0-8-0-bayes-randomization-shapley-choices, choice 5) are checked BEFORE
@@ -26,7 +28,17 @@ its scheme allows (C(N, k), or 2^(N/2) within pairs), and a Shapley table of k
 factors holds 2^k outcomes. Past either, the call is stopped like any other
 limit (exceeds_limits), never sampled and never cut short.
 
-max_exact_elements is not a stop: past it an array is carried in float64 and
+max_prime_digits and max_factor_digits (flo2-calc 0.9.0,
+dec:v0-9-0-integer-operator-choices, choices 4, 5 and 7; integers.py) bound the two integer
+operations whose cost grows fastest with the size of a number, each one FLINT call that nothing
+interrupts: proving a number prime (is_prime, and each factor factorize finds), and splitting the
+composite part a factorization has left after its factors below 65,536. Each is checked BEFORE the
+call, from the number's digits. Past max_prime_digits a number that fails a probable-prime test is
+still answered (composite, proven), and one that passes is stopped, never answered as probably
+prime; past max_factor_digits the factorization is stopped, never answered in part.
+
+max_exact_elements is not a stop (except for integer_range, whose elements are the integers the
+integer operators take exactly: past it the range is stopped, naming it, rather than made float64): past it an array is carried in float64 and
 labelled so (dec:idea-how-arrays-are-computed's "large grids";
 dec:v0-6-0-array-choices made it the host's). A computed record that holds an
 array keeps the value it was made with, and re-running uses that value, so the
@@ -80,9 +92,12 @@ SETTINGS: dict[str, tuple[str, str]] = {
     "max_exact_elements": ("--max-exact-elements", "FLO2_CALC_MAX_EXACT_ELEMENTS"),
     "max_arrangements": ("--max-arrangements", "FLO2_CALC_MAX_ARRANGEMENTS"),
     "max_shapley_factors": ("--max-shapley-factors", "FLO2_CALC_MAX_SHAPLEY_FACTORS"),
+    "max_prime_digits": ("--max-prime-digits", "FLO2_CALC_MAX_PRIME_DIGITS"),
+    "max_factor_digits": ("--max-factor-digits", "FLO2_CALC_MAX_FACTOR_DIGITS"),
 }
 # What each count-like limit counts, as a not-yet-computed record says what it needs.
-COUNTS = {"max_digits": "digits", "max_arrangements": "arrangements", "max_shapley_factors": "factors"}
+COUNTS = {"max_digits": "digits", "max_arrangements": "arrangements", "max_shapley_factors": "factors",
+          "max_exact_elements": "elements", "max_prime_digits": "digits", "max_factor_digits": "digits"}
 DEADLINE_MS_RANGE = (1, 86_400_000)  # 0.001 s to a day
 MAX_DIGITS_RANGE = (10, 100_000)  # past 100,000 digits, one step on two such numbers takes most of a second
 MAX_REPLY_BYTES_RANGE = (1024, 256 * MIB)
@@ -90,6 +105,8 @@ MAX_ARRAY_BYTES_RANGE = (64 * 1024, 64 * 1024 * MIB)
 MAX_EXACT_ELEMENTS_RANGE = (1, 1 << 21)  # up to the most elements any one array has (arrays.MAX_ELEMENTS)
 MAX_ARRANGEMENTS_RANGE = (1, 10**12)  # 10^12 arrangements at about 0.6 us each is a week of one CPU
 MAX_SHAPLEY_FACTORS_RANGE = (1, 21)  # 2^21 outcomes is the most elements any one array has (arrays.MAX_ELEMENTS)
+MAX_PRIME_DIGITS_RANGE = (1, 2_000)  # proving a 700-digit prime took 4 minutes of one CPU (README, "Limits")
+MAX_FACTOR_DIGITS_RANGE = (1, 100)  # a 60-digit part took 18 s; FLINT's quadratic sieve is practical to about 100
 
 
 @dataclass(frozen=True)
@@ -103,6 +120,8 @@ class Limits:
     max_exact_elements: int = 65_536  # a 256 x 256 grid stays exact on a laptop
     max_arrangements: int = 10_000_000  # about 6 s of one randomization test at 0.6 us an arrangement
     max_shapley_factors: int = 16  # 2^16 outcomes: max_exact_elements, so the table stays exact
+    max_prime_digits: int = 300  # a 300-digit prime is proven in about 10 s here, against the 45 s deadline
+    max_factor_digits: int = 50  # the hardest 50-digit part (two 25-digit primes) splits in 2 to 3 s here
 
     def describe(self) -> dict[str, Any]:
         """As replies and not-yet-computed records write them: the deadline in
@@ -115,6 +134,8 @@ class Limits:
             "max_exact_elements": self.max_exact_elements,
             "max_arrangements": self.max_arrangements,
             "max_shapley_factors": self.max_shapley_factors,
+            "max_prime_digits": self.max_prime_digits,
+            "max_factor_digits": self.max_factor_digits,
         }
 
     def value_of(self, name: str) -> Any:
@@ -126,8 +147,9 @@ class Limits:
             f"numerator or denominator, a reply of at most {self.max_reply_bytes:,} bytes, at most "
             f"{self.max_array_bytes:,} bytes of arrays in one call, exact arrays of up to "
             f"{self.max_exact_elements:,} elements (larger ones are float64, labelled), at most "
-            f"{self.max_arrangements:,} arrangements in one randomization test, and Shapley values of at most "
-            f"{self.max_shapley_factors} factors"
+            f"{self.max_arrangements:,} arrangements in one randomization test, Shapley values of at most "
+            f"{self.max_shapley_factors} factors, primality proven for numbers of up to {self.max_prime_digits:,} digits, "
+            f"and factoring that splits a part of up to {self.max_factor_digits:,} digits"
         )
 
 
@@ -135,7 +157,7 @@ class Limits:
 LAPTOP = Limits()
 # flo2.io's sandbox: a 128m memory cap, one CPU, and a gateway that stops a helper call at 60 s.
 FLO2_IO = Limits(deadline_ms=20_000, max_digits=2_000, max_reply_bytes=2 * MIB, max_array_bytes=16 * MIB, max_exact_elements=4_096,
-                 max_arrangements=1_000_000, max_shapley_factors=12)
+                 max_arrangements=1_000_000, max_shapley_factors=12, max_prime_digits=200, max_factor_digits=40)
 
 
 def seconds_text(ms: int) -> str:
@@ -179,6 +201,8 @@ def from_settings(
     max_exact_elements: str | None = None,
     max_arrangements: str | None = None,
     max_shapley_factors: str | None = None,
+    max_prime_digits: str | None = None,
+    max_factor_digits: str | None = None,
 ) -> Limits:
     """The limits from start-up settings (None or "" keeps the laptop default).
     Raises ValueError naming the setting and why."""
@@ -187,6 +211,7 @@ def from_settings(
         ("deadline", deadline), ("max_digits", max_digits), ("max_reply_bytes", max_reply_bytes),
         ("max_array_bytes", max_array_bytes), ("max_exact_elements", max_exact_elements),
         ("max_arrangements", max_arrangements), ("max_shapley_factors", max_shapley_factors),
+        ("max_prime_digits", max_prime_digits), ("max_factor_digits", max_factor_digits),
     )
     for name, raw in settings:
         if raw is None or raw.strip() == "":
@@ -205,8 +230,12 @@ def from_settings(
                 out["max_exact_elements"] = parse_count(raw, "limit on an exact array's elements", MAX_EXACT_ELEMENTS_RANGE)
             elif name == "max_arrangements":
                 out["max_arrangements"] = parse_count(raw, "limit on a randomization test's arrangements", MAX_ARRANGEMENTS_RANGE)
-            else:
+            elif name == "max_shapley_factors":
                 out["max_shapley_factors"] = parse_count(raw, "limit on a Shapley table's factors", MAX_SHAPLEY_FACTORS_RANGE)
+            elif name == "max_prime_digits":
+                out["max_prime_digits"] = parse_count(raw, "limit on the digits of a primality proof", MAX_PRIME_DIGITS_RANGE)
+            else:
+                out["max_factor_digits"] = parse_count(raw, "limit on the digits of the part factoring splits", MAX_FACTOR_DIGITS_RANGE)
         except ValueError as e:
             raise ValueError(f"{flag} (or {env}): {e}.") from None
     return Limits(**out)
@@ -483,6 +512,47 @@ class Guard:
                 f"combinations, past this host's limit of Shapley values of at most {self.limits.max_shapley_factors} "
                 "factors, so none was computed.",
                 needed=k,
+            )
+
+    def check_prime_digits(self, digits_: int, what: str) -> None:
+        """BEFORE a primality proof (integers.py): stop at a number of more digits
+        than this host proves prime. Only a number that passed the probable-prime
+        tests reaches here: one that fails them is composite, and answered."""
+        self.check_time()
+        if digits_ > self.limits.max_prime_digits:
+            self._stop(
+                "max_prime_digits",
+                f"{self._here()}{what} has {digits_:,} digits and passes the BPSW probable-prime tests, which no known "
+                "composite passes, but that is not a proof; proving it prime is past this host's limit of "
+                f"{self.limits.max_prime_digits:,} digits for a primality proof, so it was not answered: a probable "
+                "prime is never answered as prime.",
+                needed=digits_,
+            )
+
+    def check_factor_digits(self, digits_: int, what: str) -> None:
+        """BEFORE a factorization splits a composite with no small factors
+        (integers.py): stop at one of more digits than this host factors."""
+        self.check_time()
+        if digits_ > self.limits.max_factor_digits:
+            self._stop(
+                "max_factor_digits",
+                f"{self._here()}{what} is a composite of {digits_:,} digits, past this host's limit of "
+                f"{self.limits.max_factor_digits:,} digits for the part a factorization has to split, so it was not "
+                "factored: a factorization is never answered in part.",
+                needed=digits_,
+            )
+
+    def check_exact_elements(self, count: int, what: str) -> None:
+        """BEFORE an integer range is made: it is exact or not made, so stop at
+        one of more elements than this host's exact arrays hold."""
+        self.check_time()
+        if count > self.limits.max_exact_elements:
+            self._stop(
+                "max_exact_elements",
+                f"{self._here()}the {what} would hold {count:,} whole numbers, past this host's limit of "
+                f"{self.limits.max_exact_elements:,} elements for an exact array, so it was not made: an integer range "
+                "stays exact, because the integer operators take exact values only.",
+                needed=count,
             )
 
     def spend_reply(self, nbytes: int) -> None:
