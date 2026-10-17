@@ -10,7 +10,8 @@ heavier than a decision needs (a 500-node graph, records, re-runs, refusals,
 a 484-node graph of rounded operators at 1,000 digits each, recorded and
 re-run, and arrays: a 256 x 256 grid's discretised integral and 2-D FFT, a
 250 x 250 FFT checked against Arb's rigorous DFT, exact and float64
-regressions over thousands of points),
+regressions over thousands of points, and the integer operators at the image's
+limits),
 then RUNAWAY calculations that only the image's limits stop (a huge power, a
 chain of squarings, the heaviest graph its digits budget allows, sent whole and
 recorded), then reads the container's cgroup memory.peak before closing it.
@@ -128,6 +129,33 @@ def skewed_graph(digits: int = 1000) -> dict:
     return {"nodes": nodes, "result": ["g", "bq", "l"]}
 
 
+def _big(id_: int, m: int, e: int, c: int) -> list[dict]:
+    """Nodes for m 10^e + c, a number longer than the 80 characters a typed value may have."""
+    return [{"id": f"{id_}_m", "value": str(m), "source": "measure.py"}, {"id": f"{id_}_ten", "value": "10", "source": "measure.py"},
+            {"id": f"{id_}_e", "value": str(e), "source": "measure.py"}, {"id": f"{id_}_c", "value": str(c), "source": "measure.py"},
+            {"id": f"{id_}_p", "op": "pow", "args": [f"{id_}_ten", f"{id_}_e"]},
+            {"id": f"{id_}_mp", "op": "mul", "args": [f"{id_}_m", f"{id_}_p"]},
+            {"id": id_, "op": "add", "args": [f"{id_}_mp", f"{id_}_c"]}]
+
+
+def integers_graph() -> dict:
+    """flo2-calc 0.9.0: the heaviest integer work the image's limits allow: n^2 + n + 41 over the longest exact range
+    (4,096), a 200-digit prime proven (13 10^198 + 213), a 40-digit semiprime of two 20-digit primes factored, and
+    2^1000 3^500 factored."""
+    nodes = [{"id": "a", "value": "0", "source": "measure.py"}, {"id": "b", "value": "4095", "source": "measure.py"},
+             {"id": "c", "value": "41", "source": "measure.py"}, {"id": "n", "op": "integer_range", "args": ["a", "b"]},
+             {"id": "n2", "op": "mul", "args": ["n", "n"]}, {"id": "v", "op": "add", "args": ["n2", "n", "c"]},
+             {"id": "prime", "op": "is_prime", "args": ["v"]}, {"id": "primes", "op": "count_true", "args": ["prime"]},
+             *_big("p200", 13, 198, 213), {"id": "proven", "op": "is_prime", "args": ["p200"]},
+             {"id": "s40", "value": "1010849101539582834910061211097993586177", "source": "45931773795037525067 * 22007621696699967331"},
+             {"id": "f40", "op": "factorize", "args": ["s40"]},
+             {"id": "two", "value": "2", "source": "measure.py"}, {"id": "three", "value": "3", "source": "measure.py"},
+             {"id": "e1000", "value": "1000", "source": "measure.py"}, {"id": "e500", "value": "500", "source": "measure.py"},
+             {"id": "t", "op": "pow", "args": ["two", "e1000"]}, {"id": "h", "op": "pow", "args": ["three", "e500"]},
+             {"id": "th", "op": "mul", "args": ["t", "h"]}, {"id": "fth", "op": "factorize", "args": ["th"]}]
+    return {"nodes": nodes, "result": ["primes", "proven", "f40", "fth"]}
+
+
 def runaway_graphs() -> dict[str, dict]:
     """Calculations past any sensible limit: each must be STOPPED, with its reason."""
     nines = "9" * 80
@@ -148,6 +176,11 @@ def runaway_graphs() -> dict[str, dict]:
         "heaviest_allowed": {"nodes": heaviest},
         "trial_past_arrangements": trial_graph(24),  # C(24, 12) = 2,704,156 arrangements
         "shapley_past_factors": shapley_graph(13),
+        "prime_past_digits": {"nodes": [*_big("p201", 17, 199, 203), {"id": "q", "op": "is_prime", "args": ["p201"]}]},
+        "factor_past_digits": {"nodes": [{"id": "s", "value": "41030956297219594152300636819013454593429904428007"},
+                                         {"id": "f", "op": "factorize", "args": ["s"]}]},  # two 25-digit primes
+        "range_past_exact": {"nodes": [{"id": "a", "value": "0"}, {"id": "b", "value": "4096"},
+                                       {"id": "n", "op": "integer_range", "args": ["a", "b"]}]},
     }
 
 
@@ -189,7 +222,9 @@ async def drive(command: list[str], name: str) -> dict:
                                ("trial_22_periods", trial_graph(22), "evaluate_graph"),
                                ("trial_22_periods_record", trial_graph(22), "record_computation"),
                                ("shapley_12_factors_record", shapley_graph(12), "record_computation"),
-                               ("skewed_1000_digits", skewed_graph(1000), "evaluate_graph")):
+                               ("skewed_1000_digits", skewed_graph(1000), "evaluate_graph"),
+                               ("integers", integers_graph(), "evaluate_graph"),
+                               ("integers_record", integers_graph(), "record_computation")):
             t0 = time.perf_counter()
             args = {"graph": g} if tool == "evaluate_graph" else {"graph": g, "name": label}
             r = await s.call_tool(tool, args)

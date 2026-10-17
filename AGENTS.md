@@ -57,7 +57,11 @@
   it rests on), the randomization test (`trials.py`; `scheme`, `statistic` and `alternative` never defaulted; exact,
   never sampled), Shapley values (`shapley.py`; every combination named once, never filled in) and the skewed
   distributions. An operation may give a `detail` (`evaluator.Detailed`): named intermediate values its working step
-  shows. The units side (more units, degC/degF, currencies, dB) is
+  shows. 0.9.0 (`dec:v0-9-0-integer-operator-choices`, proposed; `req:integer-arithmetic-has-remainder-divisibility-and-primality`,
+  from the primes trial) adds the integer operators (`integers.py`): `mod` (floored, the sign of the divisor), `divides`,
+  `gcd`, `is_prime`, `factorize` (a grid of rows [p, e]) and `integer_range` (a to b, both ends), each on exact whole
+  plain numbers only. **Primality is proven, never probable**: a probable prime past `max_prime_digits` is refused,
+  and a factorization past `max_factor_digits` is refused, never answered in part. The units side (more units, degC/degF, currencies, dB) is
   `units.py`'s, not the evaluator's.
 - **Results** may be one node or a list (`"result": ["lo", "hi"]`), each reported by name as `results`.
 - **Two ways in** (`dec:graph-submission-modes`): a whole graph, or node by node through `add_node`. Both end in
@@ -83,12 +87,14 @@
   (`req:a-calculation-past-the-hosts-limits-is-stopped-and-handed-on`, options (b), (c) and (d) of
   `dec:idea-estimate-compute-before-calculating`; an up-front cost estimate, (a), is NOT built):
   - The host sets a deadline, a digits budget, a reply budget, an array budget, the exact-array size, the most
-    arrangements a randomization test counts and the most factors of a Shapley table at start-up (`limits.py`, README
+    arrangements a randomization test counts, the most factors of a Shapley table, the digits of a primality proof and
+    the digits of the part a factorization splits at start-up (`limits.py`, README
     "Limits"). The
     laptop defaults are in `limits.LAPTOP`, and flo2.io's profile is in `limits.FLO2_IO` and the `Dockerfile`'s
     `ENV`.
   - The evaluator checks them as it goes. A power is sized BEFORE it is computed, as are a randomization test's
-    arrangements and a Shapley table's factors, and every partial result is held to the budget. Passing one is a normal refusal, `kind: "exceeds_limits"`, never `isError` and never a crash.
+    arrangements, a Shapley table's factors, a primality proof and a factorization's hard part (each one FLINT call
+    nothing interrupts), and every partial result is held to the budget. Passing one is a normal refusal, `kind: "exceeds_limits"`, never `isError` and never a crash.
   - They are the ONLY limits on a calculation. A power has no exponent cap of its own (0.1.0 to 0.6.1 had one, 1000,
     which no served limit named: round 3). Never add a hard-coded cap; if one must exist, it is a served limit with
     its own plain refusal, in the instructions and the README's Limits table.
@@ -155,12 +161,13 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
   `python_flint` in `produced_by`; version 4 (0.5.0) added `formula`, `working`, `results`, `simplified_from`, the
   round-2 operators' fields, and a new writing of values; version 5 (0.6.0) arrays; version 6 (0.6.1)
   `max_exact_elements`; version 7 (0.7.0) every formula line's value, round 3's operators and `delta_K`; version 8
-  (0.8.0) the cure design's operators, their node fields, a value's `detail` and two new limits. Every older
+  (0.8.0) the cure design's operators, their node fields, a value's `detail` and two new limits; version 9 (0.9.0) the
+  integer operators and two more limits. Every older
   version must still re-run, each under its own version's writing (`evaluator.LEGACY` for 1 to 3,
   `evaluator.FORMULA_RESULTS_ONLY` for 4 to 6) and rules (`record.rules_of`: before `delta_K` for 1 to 6):
   `tests/data/*.v1.calc.json` were made by 0.1.0, `tests/data/*.v2.calc.json` by 0.2.0,
   `tests/data/display.v3.calc.json` by 0.4.0, `tests/data/temperature-and-formula.v6.calc.json` by 0.6.1, and
-  `tests/data/statistics.v7.calc.json` by 0.7.0.
+  `tests/data/statistics.v7.calc.json` by 0.7.0, and `tests/data/divisibility.v8.calc.json` by 0.8.1.
 - Nothing goes to stdout except MCP messages.
 - The licence is Apache-2.0. No secrets.
 - Record what you build on the design:
@@ -179,6 +186,7 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | `src/flo2_calc/bayes.py` | Bayesian updating: normal-normal and beta-binomial, the beta credible interval | `cmp:evaluator`, `cap:bayesian-updating-of-an-estimate-with-its-priors-source-kept` |
 | `src/flo2_calc/trials.py` | the randomization test of an on/off trial, exact over every arrangement | `cmp:evaluator`, `cap:a-randomization-test-gives-an-on-off-trials-exact-p-value` |
 | `src/flo2_calc/shapley.py` | Shapley values from a table naming every combination | `cmp:evaluator`, `cap:shapley-values-share-credit-among-a-few-factors` |
+| `src/flo2_calc/integers.py` | the integer operators: mod, divides, gcd, is_prime (proven), factorize, integer_range | `cmp:evaluator`, `cap:exact-integer-operators-remainder-divisibility-gcd-primality-factorization-and-range` |
 | `src/flo2_calc/arrays.py` | arrays: reading them (inline, or a data file under `--root`), element-wise operations, reductions, statistics over data, the FFT, the float64 label and its bounds | `cmp:evaluator`, `req:flo2-calc-computes-over-arrays` |
 | `src/flo2_calc/limits.py` | the host-set limits, and the guard that checks them while evaluating | `cmp:evaluator`, `cap:a-calculation-is-stopped-at-the-hosts-limits` |
 | `src/flo2_calc/realmath.py` | the rounded class: correctly rounded values from Arb enclosures, and their bounds | `cmp:evaluator`, `cap:a-rounded-result-is-correctly-rounded-and-labelled`, `cap:trigonometry-and-rounding-to-places`, `cap:statistical-distributions`, `cap:skewed-distributions-lognormal-gamma-beta` |

@@ -19,11 +19,12 @@ identically, and quote `largest_difference` if asked.
 ## A calculation past the host's limits (step 11)
 
 - flo2.io's limits are lower than a laptop's: 20 s a call, 2,000 digits, 2 MiB a reply, 16 MiB of arrays a call (a
-  256 x 256 grid's FFT fits), 1,000,000 arrangements in one randomization test and Shapley values of at most 12
-  factors.
+  256 x 256 grid's FFT fits), 1,000,000 arrangements in one randomization test, Shapley values of at most 12
+  factors, primes proven up to 200 digits and a factorization's hard part up to 40 digits.
 - The refusal names the limit (a deadline, `max_digits`, `max_reply_bytes`, `max_array_bytes`, `max_arrangements`
-  for a randomization test or `max_shapley_factors` for a Shapley table), its value, the node reached and how
-  large the numbers grew.
+  for a randomization test, `max_shapley_factors` for a Shapley table, `max_prime_digits` for a primality proof,
+  `max_factor_digits` for a factorization, or `max_exact_elements` for an integer range), its value, the node
+  reached and how large the numbers grew.
 - The not-yet-computed record holds the graph, the inputs with their sources and the limit it passed, but no
   result.
 - To complete it, pass it as `record` to `record_computation` on a flo2-calc with more room, such as one started

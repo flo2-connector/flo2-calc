@@ -1,0 +1,464 @@
+{
+  "arithmetic": "Exact rational arithmetic on the inputs as written: no binary floating point. + - * / and integer powers are exact, and so is every unit conversion but deg-rad and dBm-mW, so every value not marked \"rounded\" is exact FOR THESE INPUTS and no more accurate than they are: a decimal typed for an irrational number (a truncated pi or e) is taken as exactly that decimal, not as the number it stands for (the pi and e operators are the constants themselves). A whole number is written in full. Any other value whose decimal ends (at most 40 significant digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact value for these inputs is given beside it as a fraction. A computed value whose compound unit is exactly a simpler unit is shown in it (\"simplified_from\" names the unit it was computed in); the value does not change. Comparisons use exact values. A value marked \"rounded\" is NOT exact: it comes from pi, e, a root, exp, ln, log10, a non-whole power (or a whole one asked for \"digits\" past the digits budget), trigonometry, a deg-rad conversion, a decibel conversion or a distribution, or from arithmetic on such a value. It is a decimal of the stated number of significant digits, every one written, given no \"exact\" fraction, and \"error_at_most\" bounds its distance from the true value. Where it says \"correctly_rounded\", it is the true value rounded half-even, decided from a rigorous enclosure (Arb ball arithmetic, python-flint). A comparison, ceil, floor or round of a rounded value is answered only when its error bound decides it, and refused otherwise. An ARRAY of exact numbers stays exact through rational operations, reductions and the statistics that are rational; a value marked \"float64\" is NOT exact: an FFT, a rounded-class function over an array, an array of more elements than this record's max_exact_elements (the host's setting where it was made), or anything mixed with such a value, computed in IEEE 754 double precision. Every element of a float64 value lies within its \"error_at_most\" of the true value, a rigorous bound whose basis \"how\" names (the FFT's: Higham 2002, Theorem 24.2, for a power-of-two length; Arb's rigorous DFT for any other). An array of more than 1,024 elements is written as its sha256 over every element's text, which re-running compares.",
+  "content_hash": "sha256:c53306ac338b8ecce00cf3e5a341bb68179a8664b966b9ffe89e9b6974ad7605",
+  "formula": [
+    {
+      "latex": "\\text{post} = \\frac{\\text{a} + \\text{k}}{\\text{a} + \\text{b} + \\text{n}} = \\frac{9}{14}",
+      "node": "post",
+      "text": "post = (a + k) / (a + b + n) = 9/14"
+    },
+    {
+      "latex": "\\text{p} = \\operatorname{randomization\\_test}\\left(\\text{y},\\ \\text{on};\\ \\text{scheme=within\\_pairs},\\ \\text{statistic=mean\\_difference},\\ \\text{alternative=greater}\\right) = 0.125",
+      "node": "p",
+      "text": "p = randomization_test(y, on; scheme=within_pairs, statistic=mean_difference, alternative=greater) = 0.125"
+    },
+    {
+      "latex": "\\text{c} = \\binom{\\text{n}}{\\text{k}} = 120",
+      "node": "c",
+      "text": "c = choose(n, k) = 120"
+    },
+    {
+      "latex": "\\text{q} = \\frac{\\text{v}}{\\text{w}} = 41",
+      "node": "q",
+      "text": "q = v / w = 41"
+    },
+    {
+      "latex": "\\text{whole} = \\text{q} \\overset{?}{=} \\left\\lfloor \\text{q} \\right\\rfloor = \\text{true}",
+      "node": "whole",
+      "text": "whole = q == floor(q) = true"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "a",
+        "source": "a flat prior: Beta(2, 2), the published pilot's",
+        "value": "2"
+      },
+      {
+        "id": "b",
+        "source": "a flat prior: Beta(2, 2), the published pilot's",
+        "value": "2"
+      },
+      {
+        "id": "k",
+        "source": "good weeks",
+        "value": "7"
+      },
+      {
+        "id": "n",
+        "source": "weeks on the supplement",
+        "value": "10"
+      },
+      {
+        "args": [
+          "a",
+          "b",
+          "k",
+          "n"
+        ],
+        "id": "post",
+        "op": "posterior_beta_mean"
+      },
+      {
+        "id": "y",
+        "source": "outcomes, one a period",
+        "value": {
+          "array": [
+            "5",
+            "3",
+            "6",
+            "2",
+            "7",
+            "4"
+          ]
+        }
+      },
+      {
+        "id": "on",
+        "source": "which periods were on",
+        "value": {
+          "array": [
+            "true",
+            "false",
+            "true",
+            "false",
+            "true",
+            "false"
+          ]
+        }
+      },
+      {
+        "alternative": "greater",
+        "args": [
+          "y",
+          "on"
+        ],
+        "id": "p",
+        "op": "randomization_test",
+        "scheme": "within_pairs",
+        "statistic": "mean_difference"
+      },
+      {
+        "args": [
+          "n",
+          "k"
+        ],
+        "id": "c",
+        "op": "choose"
+      },
+      {
+        "id": "v",
+        "source": "40^2 + 40 + 41",
+        "value": "1681"
+      },
+      {
+        "id": "w",
+        "source": "a candidate divisor",
+        "value": "41"
+      },
+      {
+        "args": [
+          "v",
+          "w"
+        ],
+        "id": "q",
+        "op": "div"
+      },
+      {
+        "args": [
+          "q"
+        ],
+        "id": "fq",
+        "op": "floor"
+      },
+      {
+        "args": [
+          "q",
+          "fq"
+        ],
+        "id": "whole",
+        "op": "eq"
+      }
+    ],
+    "result": [
+      "post",
+      "p",
+      "c",
+      "whole"
+    ]
+  },
+  "inputs": [
+    {
+      "id": "a",
+      "source": "a flat prior: Beta(2, 2), the published pilot's",
+      "unit": "",
+      "value": "2"
+    },
+    {
+      "id": "b",
+      "source": "a flat prior: Beta(2, 2), the published pilot's",
+      "unit": "",
+      "value": "2"
+    },
+    {
+      "id": "k",
+      "source": "good weeks",
+      "unit": "",
+      "value": "7"
+    },
+    {
+      "id": "n",
+      "source": "weeks on the supplement",
+      "unit": "",
+      "value": "10"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:47a08e0d122ea6bd92c9eeb6f500fb916b5a3c616489b2876bc29c630083a622",
+        "shape": [
+          6
+        ],
+        "unit": ""
+      },
+      "id": "y",
+      "source": "outcomes, one a period",
+      "unit": "",
+      "value": "array 6 (exact)"
+    },
+    {
+      "array": {
+        "kind": "bool",
+        "sha256": "sha256:35f5e28f71165ba62c93c280bd0345bcaf8c54666414cee286044c5eb249eca4",
+        "shape": [
+          6
+        ]
+      },
+      "id": "on",
+      "source": "which periods were on",
+      "value": "array 6 (true/false)"
+    },
+    {
+      "id": "v",
+      "source": "40^2 + 40 + 41",
+      "unit": "",
+      "value": "1681"
+    },
+    {
+      "id": "w",
+      "source": "a candidate divisor",
+      "unit": "",
+      "value": "41"
+    }
+  ],
+  "max_exact_elements": 65536,
+  "name": "before-integer-operators",
+  "produced_by": {
+    "flo2_calc": "0.8.1",
+    "numpy": "2.5.3",
+    "pint": "0.26.1",
+    "python_flint": "0.9.0"
+  },
+  "record_format": "flo2-calc computation record",
+  "results": [
+    {
+      "exact": "9/14",
+      "node": "post",
+      "value": "0.642857142857142857142857142857"
+    },
+    {
+      "detail": [
+        {
+          "name": "observed",
+          "value": "3"
+        },
+        {
+          "name": "as_extreme",
+          "value": "1"
+        },
+        {
+          "name": "arrangements",
+          "value": "8"
+        }
+      ],
+      "node": "p",
+      "value": "0.125"
+    },
+    {
+      "node": "c",
+      "value": "120"
+    },
+    {
+      "node": "whole",
+      "value": "true"
+    }
+  ],
+  "schema_version": 8,
+  "status": "computed",
+  "supports": "flo2-calc 0.9.0's test that a version 8 record still re-runs",
+  "values": [
+    {
+      "node": "a",
+      "value": "2"
+    },
+    {
+      "node": "b",
+      "value": "2"
+    },
+    {
+      "node": "k",
+      "value": "7"
+    },
+    {
+      "node": "n",
+      "value": "10"
+    },
+    {
+      "exact": "9/14",
+      "node": "post",
+      "value": "0.642857142857142857142857142857"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:47a08e0d122ea6bd92c9eeb6f500fb916b5a3c616489b2876bc29c630083a622",
+        "shape": [
+          6
+        ],
+        "unit": "",
+        "values": [
+          "5",
+          "3",
+          "6",
+          "2",
+          "7",
+          "4"
+        ]
+      },
+      "node": "y",
+      "value": "array 6 (exact)"
+    },
+    {
+      "array": {
+        "kind": "bool",
+        "sha256": "sha256:35f5e28f71165ba62c93c280bd0345bcaf8c54666414cee286044c5eb249eca4",
+        "shape": [
+          6
+        ],
+        "values": [
+          "true",
+          "false",
+          "true",
+          "false",
+          "true",
+          "false"
+        ]
+      },
+      "node": "on",
+      "value": "array 6 (true/false)"
+    },
+    {
+      "detail": [
+        {
+          "name": "observed",
+          "value": "3"
+        },
+        {
+          "name": "as_extreme",
+          "value": "1"
+        },
+        {
+          "name": "arrangements",
+          "value": "8"
+        }
+      ],
+      "node": "p",
+      "value": "0.125"
+    },
+    {
+      "node": "c",
+      "value": "120"
+    },
+    {
+      "node": "v",
+      "value": "1681"
+    },
+    {
+      "node": "w",
+      "value": "41"
+    },
+    {
+      "node": "q",
+      "value": "41"
+    },
+    {
+      "node": "fq",
+      "value": "41"
+    },
+    {
+      "node": "whole",
+      "value": "true"
+    }
+  ],
+  "working": [
+    {
+      "label": "given",
+      "latex": "\\text{a} = 2",
+      "node": "a",
+      "step": 1,
+      "text": "a = 2"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{b} = 2",
+      "node": "b",
+      "step": 2,
+      "text": "b = 2"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{k} = 7",
+      "node": "k",
+      "step": 3,
+      "text": "k = 7"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{n} = 10",
+      "node": "n",
+      "step": 4,
+      "text": "n = 10"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{post} = \\frac{\\text{a} + \\text{k}}{\\text{a} + \\text{b} + \\text{n}} = \\frac{2 + 7}{2 + 2 + 10} = \\frac{9}{14}",
+      "node": "post",
+      "step": 5,
+      "text": "post = (a + k) / (a + b + n) = (2 + 7) / (2 + 2 + 10) = 9/14"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{y} = \\text{array 6 (exact)}",
+      "node": "y",
+      "step": 6,
+      "text": "y = array 6 (exact)"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{on} = \\text{array 6 (true/false)}",
+      "node": "on",
+      "step": 7,
+      "text": "on = array 6 (true/false)"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{p} = \\operatorname{randomization\\_test}\\left(\\text{y},\\ \\text{on};\\ \\text{scheme=within\\_pairs},\\ \\text{statistic=mean\\_difference},\\ \\text{alternative=greater}\\right) = 0.125;\\ \\text{where }\\text{observed} = 3,\\ \\text{as\\_extreme} = 1,\\ \\text{arrangements} = 8",
+      "node": "p",
+      "step": 8,
+      "text": "p = randomization_test(y, on; scheme=within_pairs, statistic=mean_difference, alternative=greater) = 0.125; where observed = 3, as_extreme = 1, arrangements = 8"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{c} = \\binom{\\text{n}}{\\text{k}} = \\binom{10}{7} = 120",
+      "node": "c",
+      "step": 9,
+      "text": "c = choose(n, k) = choose(10, 7) = 120"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{v} = 1681",
+      "node": "v",
+      "step": 10,
+      "text": "v = 1681"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{w} = 41",
+      "node": "w",
+      "step": 11,
+      "text": "w = 41"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{q} = \\frac{\\text{v}}{\\text{w}} = \\frac{1681}{41} = 41",
+      "node": "q",
+      "step": 12,
+      "text": "q = v / w = 1681 / 41 = 41"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{fq} = \\left\\lfloor \\text{q} \\right\\rfloor = \\left\\lfloor 41 \\right\\rfloor = 41",
+      "node": "fq",
+      "step": 13,
+      "text": "fq = floor(q) = floor(41) = 41"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{whole} = \\text{q} \\overset{?}{=} \\text{fq} = 41 \\overset{?}{=} 41 = \\text{true}",
+      "node": "whole",
+      "step": 14,
+      "text": "whole = q == fq = 41 == 41 = true"
+    }
+  ]
+}

@@ -166,7 +166,7 @@ def _call(fn_text: str, fn_tex: str, args: list[Expr], sep: str = ", ") -> Expr:
 _CMP_TEXT = {"eq": "==", "ne": "!=", "lt": "<", "le": "<=", "gt": ">", "ge": ">="}
 _CMP_TEX = {"eq": r"\overset{?}{=}", "ne": r"\neq", "lt": "<", "le": r"\le", "gt": ">", "ge": r"\ge"}
 _FUNC_TEX = {"exp": r"\exp", "ln": r"\ln", "log10": r"\log_{10}", "sin": r"\sin", "cos": r"\cos", "tan": r"\tan",
-             "asin": r"\arcsin", "acos": r"\arccos", "atan": r"\arctan", "min": r"\min", "max": r"\max"}
+             "asin": r"\arcsin", "acos": r"\arccos", "atan": r"\arctan", "min": r"\min", "max": r"\max", "gcd": r"\gcd"}
 
 
 def _joined(op: str, args: list[Expr]) -> Expr:
@@ -350,6 +350,15 @@ def expression(node: Any, args: list[Expr]) -> Expr:
         return Expr(f"choose({n.text}, {k.text})", CALL, r"\binom{" + n.latex + "}{" + k.latex + "}", ATOM)
     if op == "factorial":
         return Expr(f"factorial({args[0].text})", CALL, _pl(args[0], ATOM) + "!", POW)
+    if op == "mod":  # 0.9.0's integer operators (integers.py)
+        a, b = args
+        return Expr(f"{_pt(a, MUL)} mod {_pt(b, MUL + 1)}", MUL, f"{_pl(a, MUL)} \\bmod {_pl(b, MUL + 1)}", MUL)
+    if op == "divides":
+        d, n = args
+        return Expr(f"divides({d.text}, {n.text})", CALL, f"{_pl(d, CMP + 1)} \\mid {_pl(n, CMP + 1)}", CMP)
+    if op == "integer_range":
+        a, b = args
+        return Expr(f"integer_range({a.text}, {b.text})", CALL, r"\left\{" + a.latex + r",\ \ldots,\ " + b.latex + r"\right\}", ATOM)
     if op == "to_number":
         return Expr(f"to_number({args[0].text})", CALL, r"\left[" + args[0].latex + r"\right]", ATOM)
     if op == "length":

@@ -283,7 +283,7 @@ def test_an_array_line_ends_with_its_description_and_a_rounded_one_with_approx()
 def test_a_current_record_holds_the_same_lines_as_the_reply():
     ev = evaluate(read_graph(Q002))
     rec = R.build(ev, "q002", None)
-    assert rec["schema_version"] == 8
+    assert rec["schema_version"] == 9
     values = {v["node"]: v for v in rec["values"]}
     assert all(_ends_with_its_value(line, values) for line in rec["formula"])
     assert rec["formula"] == run(Q002)["formula"], "reply and record show the same equations"

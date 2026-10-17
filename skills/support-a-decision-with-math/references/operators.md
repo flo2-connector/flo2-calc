@@ -54,6 +54,34 @@ holds, and each operator family's arguments, examples and edge cases.
   `binomial_sf` with args `[k, n, p]`: P(X = k), P(X <= k) and P(X > k). "At least 3 of 5" is `binomial_sf` with
   k = 2. All exact for an exact p.
 
+## Integers
+
+- **mod, divides, gcd:** `mod` `[a, b]` is the remainder with the sign of b (`-7 mod 3` is 2; `b` = 0 is refused);
+  `divides` `[d, n]` is true when n is a whole multiple of d (0 divides only 0); `gcd` takes two or more. Each works
+  element by element on an exact array.
+- **Primes:** `is_prime` `[n]` is proven true or false (false below 2), element by element on an array.
+  `factorize` `[n]`, n >= 2, gives a grid of rows `[p, e]`, the primes increasing: 1681 is `[[41, 2]]`; read a row
+  with `element`. Past the host's limits (the digits of a primality proof, the digits of the part factoring has to
+  split) each is refused, `exceeds_limits`, never answered as "probably prime" or in part.
+- **A run of whole numbers:** `integer_range` `[a, b]` is a, a + 1, ..., b, both ends included. Build on it rather
+  than typing the numbers or their count; `length` gives the count. "Is n^2 + n + 41 prime for n = 0 to 39?":
+
+```json
+{"nodes": [
+  {"id": "a", "value": "0", "source": "the question"}, {"id": "b", "value": "39", "source": "the question"},
+  {"id": "c", "value": "41", "source": "the question"},
+  {"id": "n", "op": "integer_range", "args": ["a", "b"]},
+  {"id": "n2", "op": "mul", "args": ["n", "n"]},
+  {"id": "v", "op": "add", "args": ["n2", "n", "c"]},
+  {"id": "prime", "op": "is_prime", "args": ["v"]},
+  {"id": "every", "op": "all", "args": ["prime"]}],
+ "result": "every"}
+```
+
+- Every argument is an exact whole plain number: a fraction, a decimal with a fraction part, a value with a unit, a
+  rounded value or true/false is refused, naming it. A range is exact or not made: past the host's limit on an exact
+  array it is refused, not carried in float64.
+
 ## An empirical formula with stated units
 
 **An empirical formula with stated units** (a datasheet's fit, a standard's relation, its formula and constants
@@ -76,7 +104,8 @@ on the plain numbers, then put the stated unit on the result with `with_unit` an
 ## What the operators for anything that is not exact give back
 
 Their results come back labelled `"rounded"`: correctly rounded to 30 significant digits (ask for more with
-`"digits"`, up to 1000), with `error_at_most`, and never with an `exact` fraction. Anything computed from a rounded
+`"digits"`, up to 1000), with `error_at_most`, and never with an `exact` fraction. Every digit it was asked for is
+written, trailing zeros included. Anything computed from a rounded
 value is labelled rounded too, with its bound. Where the result is rational it stays exact (`sqrt(9/4)` is `1.5`).
 
 ## Bayesian updating (step 6)

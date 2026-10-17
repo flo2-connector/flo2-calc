@@ -64,10 +64,12 @@ def heavy_graph(n: int = 500) -> dict:
 
 def test_the_defaults_suit_a_laptop_and_flo2_io_has_a_lower_profile():
     assert L.from_settings(None, None, None) == L.LAPTOP == L.Limits(45_000, 20_000, 8 * 1024 * 1024)
-    assert L.FLO2_IO == L.Limits(20_000, 2_000, 2 * 1024 * 1024, 16 * 1024 * 1024, 4_096, 1_000_000, 12)
+    assert L.FLO2_IO == L.Limits(20_000, 2_000, 2 * 1024 * 1024, 16 * 1024 * 1024, 4_096, 1_000_000, 12, 200, 40)
     assert L.LAPTOP.max_array_bytes == 512 * 1024 * 1024
     assert (L.LAPTOP.max_arrangements, L.LAPTOP.max_shapley_factors) == (10_000_000, 16)
-    for field in ("deadline_ms", "max_digits", "max_reply_bytes", "max_array_bytes", "max_arrangements", "max_shapley_factors"):
+    assert (L.LAPTOP.max_prime_digits, L.LAPTOP.max_factor_digits) == (300, 50)
+    for field in ("deadline_ms", "max_digits", "max_reply_bytes", "max_array_bytes", "max_arrangements", "max_shapley_factors",
+                  "max_prime_digits", "max_factor_digits"):
         assert getattr(L.FLO2_IO, field) < getattr(L.LAPTOP, field), field
     # A Shapley table of the most factors stays exact: 2^k outcomes within max_exact_elements.
     for limits in (L.LAPTOP, L.FLO2_IO):
@@ -76,14 +78,17 @@ def test_the_defaults_suit_a_laptop_and_flo2_io_has_a_lower_profile():
     # TypeScript SDK's clients at 60 s too: both deadlines answer well before either gives up.
     assert L.LAPTOP.deadline_ms < 60_000 and L.FLO2_IO.deadline_ms <= 60_000 // 3
     assert L.FLO2_IO.describe() == {"deadline": "20 s", "max_digits": 2000, "max_reply_bytes": 2097152, "max_array_bytes": 16777216,
-                                    "max_exact_elements": 4096, "max_arrangements": 1000000, "max_shapley_factors": 12}
+                                    "max_exact_elements": 4096, "max_arrangements": 1000000, "max_shapley_factors": 12,
+                                    "max_prime_digits": 200, "max_factor_digits": 40}
 
 
 @pytest.mark.parametrize("name, flag, env, good, bad, words", [
     ("max_arrangements", "--max-arrangements", "FLO2_CALC_MAX_ARRANGEMENTS", "250000", "0", "1 to 1,000,000,000,000"),
     ("max_shapley_factors", "--max-shapley-factors", "FLO2_CALC_MAX_SHAPLEY_FACTORS", "8", "22", "1 to 21"),
+    ("max_prime_digits", "--max-prime-digits", "FLO2_CALC_MAX_PRIME_DIGITS", "120", "2001", "1 to 2,000"),
+    ("max_factor_digits", "--max-factor-digits", "FLO2_CALC_MAX_FACTOR_DIGITS", "30", "101", "1 to 100"),
 ])
-def test_the_two_limits_of_0_8_0_are_set_like_the_others(name, flag, env, good, bad, words):
+def test_the_limits_of_0_8_0_and_0_9_0_are_set_like_the_others(name, flag, env, good, bad, words):
     """flo2-calc 0.8.0 (dec:v0-8-0-bayes-randomization-shapley-choices, choice 5): set by a flag or its
     variable, refused at start-up when flo2-calc cannot use the value, and said in the instructions."""
     assert L.SETTINGS[name] == (flag, env)
@@ -101,6 +106,9 @@ def test_the_instructions_name_the_two_new_limits():
     words = build_server(None, L.Limits(max_arrangements=1234, max_shapley_factors=7)).instructions
     assert "at most 1,234 arrangements in one randomization test" in words
     assert "Shapley values of at most 7 factors" in words
+    words = build_server(None, L.Limits(max_prime_digits=123, max_factor_digits=45)).instructions
+    assert "primality proven for numbers of up to 123 digits" in words
+    assert "factoring that splits a part of up to 45 digits" in words
 
 
 @pytest.mark.parametrize("text, ms", [("20", 20_000), ("0.5", 500), ("20 s", 20_000), ("0.001", 1), ("86400", 86_400_000)])
@@ -145,7 +153,8 @@ def test_a_value_past_the_digits_budget_is_stopped_naming_the_node_the_limit_and
     assert r["reached"]["nodes_done"] == 3 and r["reached"]["nodes"] == 7
     assert r["reached"]["largest_digits"] == 233
     assert r["limits"] == {"deadline": "45 s", "max_digits": 200, "max_reply_bytes": 8388608, "max_array_bytes": 536870912,
-                           "max_exact_elements": 65536, "max_arrangements": 10000000, "max_shapley_factors": 16}
+                           "max_exact_elements": 65536, "max_arrangements": 10000000, "max_shapley_factors": 16,
+                           "max_prime_digits": 300, "max_factor_digits": 50}
     assert 'mul at node "x3": the product has a numerator of 233 digits' in r["reason"]
     assert "budget of 200 digits" in r["reason"] and "stopped cleanly" in r["reason"]
 
