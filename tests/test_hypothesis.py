@@ -62,8 +62,9 @@ def block(answer: dict, node: str = "p") -> dict:
 
 def value_of(v: dict) -> Fraction:
     """A value as written: its exact fraction where it has one, else its decimal."""
-    text = v.get("exact") or v["value"]
-    return parse_number(text.split(" ")[0])
+    if "exact" in v:
+        return Fraction(v["exact"].split(" ")[0])
+    return parse_number(v["value"].split(" ")[0])
 
 
 def alpha(a: str = "0.05") -> dict:
@@ -139,7 +140,8 @@ def test_welchs_t_test_on_the_sleep_data_matches_r_and_an_independent_computatio
     assert sig(p, 4) == "0.07939"
     # independent: mpmath's incomplete beta, correctly rounded to the 30th digit; and the t density's integral
     assert p == rounded(t_tail_two_sided(t2, nu))
-    assert abs(mpq(p) - 2 * t_tail_by_integral(mp.sqrt(mpq(t2)), nu)) < mp.mpf(10) ** -25
+    with mp.workdps(60):
+        assert abs(mpq(p) - 2 * t_tail_by_integral(mp.sqrt(mpq(t2)), nu)) < mp.mpf(10) ** -25
     assert b["p_value"]["rounded"]["correctly_rounded"] is True
     assert b["variance"] == "welch" and "Welch" in b["p_value_method"]
     assert b["decision"] == "fail to reject H0 at α = 0.05" and b["reject_h0"] is False
@@ -360,6 +362,10 @@ def test_every_named_test_keeps_the_same_fields(name, nodes, args, fields):
     assert entry(ans)["value"] == b["p_value"]["value"]
     # the working step shows the statistic and the decision
     assert "reject_H0" in json.dumps(ans["working"])
+    # and its record fits the schema and re-runs (0.10.0's measurement found an exact plan's empty detail did not)
+    rec = R.build(evaluate(read_graph(graph(*nodes, op("p", name, *args, **fields)))), "p-record", None)
+    jsonschema.Draft202012Validator(R.schema()).validate(rec)
+    assert R.rerun(R.load(rec))["reproduces"] is True
 
 
 @pytest.mark.parametrize("name, nodes, args, fields", [t for t in ALL_TESTS if t[3].get("alternative")],

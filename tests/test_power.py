@@ -56,7 +56,9 @@ def plan(answer: dict, node: str = "w") -> dict:
 
 
 def value_of(v: dict) -> Fraction:
-    return parse_number((v.get("exact") or v["value"]).split(" ")[0])
+    if "exact" in v:
+        return Fraction(v["exact"].split(" ")[0])
+    return parse_number(v["value"].split(" ")[0])
 
 
 def alpha(a: str = "0.05") -> dict:
@@ -355,6 +357,10 @@ def test_every_power_and_sample_size_keeps_the_same_fields(name, nodes, args, fi
         assert {"power at n", "power at n - 1"} <= shown or p["n"] in ("1", "2")
     else:
         assert entry(ans)["value"] == p["power"]["value"]
+    # and its record fits the schema and re-runs (0.10.0's measurement found an exact plan's empty detail did not)
+    rec = R.build(evaluate(read_graph(graph(*nodes, op("w", name, *args, **fields)))), "w-record", None)
+    jsonschema.Draft202012Validator(R.schema()).validate(rec)
+    assert R.rerun(R.load(rec))["reproduces"] is True
 
 
 @pytest.mark.parametrize("name, nodes, args, fields", [p for p in PLANS if p[3].get("alternative")],
@@ -385,6 +391,13 @@ def test_a_sample_size_search_past_the_deadline_stops_and_a_larger_host_complete
     pending = R.build_pending(read_graph(g), "fisher-plan", None, ev.refusal, L.Limits(deadline_ms=200))
     jsonschema.Draft202012Validator(R.schema()).validate(pending)
     assert pending["status"] == "not_computed"
+
+
+def test_every_named_test_has_a_power_and_a_sample_size():
+    from flo2_calc import hypothesis as HT
+    from flo2_calc import power as PW
+
+    assert PW.TESTS == HT.TESTS and set(PW.PLANS) == {f"{t}_{k}" for t in HT.TESTS for k in ("power", "sample_size")}
 
 
 def test_a_plan_is_kept_as_a_record_that_re_runs():

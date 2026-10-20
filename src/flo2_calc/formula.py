@@ -49,8 +49,15 @@ whose operation gave a DETAIL (evaluator.Detailed) ends with it: "; where
 n = 4, sum(x) = 256", or a randomization test's observed statistic and its two
 counts, or each Shapley value and their check against v(all) - v(none).
 
+flo2-calc 0.10.0's named tests and their plans show their call with the fields
+that decide them: "t_test_two_sample(a, b, alpha; variance=welch,
+alternative=two_sided)"; a chi-square test, which takes neither, is a plain
+call. The step's detail gives the statistic, the degrees of freedom, n and
+reject_H0 (a plan's: the noncentrality, the critical value, the power at n and
+at n - 1).
+
 The renderings are part of the record's format (schema version 4, 7 for every
-line's value, and 8 for 0.8.0's operators and the detail): a change to them is
+line's value, 8 for 0.8.0's operators and the detail, and 10 for 0.10.0's): a change to them is
 a change of schema version, because a record re-runs to exactly the fields it
 holds.
 """
@@ -282,6 +289,13 @@ def expression(node: Any, args: list[Expr]) -> Expr:
         fields = [f"scheme={node.scheme}", f"statistic={node.statistic}", f"alternative={node.alternative}"]
         text = f"randomization_test({args[0].text}, {args[1].text}; {', '.join(fields)})"
         tex = (_op_tex("randomization_test") + r"\left(" + args[0].latex + r",\ " + args[1].latex + r";\ "
+               + r",\ ".join(r"\text{" + f.replace("_", r"\_") + "}" for f in fields) + r"\right)")
+        return Expr(text, CALL, tex, CALL)
+    if getattr(node, "variance", None) is not None or (getattr(node, "alternative", None) is not None and op != "randomization_test"):
+        # 0.10.0's named tests and their plans: the call, then the fields that decide it (variance, alternative)
+        fields = [f"{k}={getattr(node, k)}" for k in ("variance", "alternative") if getattr(node, k, None) is not None]
+        text = f"{op}({', '.join(a.text for a in args)}; {', '.join(fields)})"
+        tex = (_op_tex(op) + r"\left(" + r",\ ".join(a.latex for a in args) + r";\ "
                + r",\ ".join(r"\text{" + f.replace("_", r"\_") + "}" for f in fields) + r"\right)")
         return Expr(text, CALL, tex, CALL)
     if op == "shapley_values":

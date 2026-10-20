@@ -10,8 +10,9 @@ heavier than a decision needs (a 500-node graph, records, re-runs, refusals,
 a 484-node graph of rounded operators at 1,000 digits each, recorded and
 re-run, and arrays: a 256 x 256 grid's discretised integral and 2-D FFT, a
 250 x 250 FFT checked against Arb's rigorous DFT, exact and float64
-regressions over thousands of points, and the integer operators at the image's
-limits),
+regressions over thousands of points, the integer operators at the image's
+limits, and the named hypothesis tests and their power and sample-size plans
+at their heaviest),
 then RUNAWAY calculations that only the image's limits stop (a huge power, a
 chain of squarings, the heaviest graph its digits budget allows, sent whole and
 recorded), then reads the container's cgroup memory.peak before closing it.
@@ -156,6 +157,51 @@ def integers_graph() -> dict:
     return {"nodes": nodes, "result": ["primes", "proven", "f40", "fth"]}
 
 
+def _sample(seed: int, n: int, shift: int) -> list[str]:
+    """n decimals with one place, from a fixed linear congruential sequence (the same on every machine)."""
+    out, x = [], seed
+    for _ in range(n):
+        x = (1103515245 * x + 12345) % 2**31
+        out.append(f"{(x % 1000 + shift) / 10}")
+    return out
+
+
+def tests_graph() -> dict:
+    """flo2-calc 0.10.0: the named tests at their heaviest in the image: Welch's t-test on two samples of 4,096 (the
+    exact-array limit), the exact binomial test of 5,000 trials, Fisher's exact test of a table of 2,000, and the
+    chi-square test of independence of a 20 x 20 table."""
+    nodes = [{"id": "alpha", "value": "0.05", "source": "measure.py"},
+             {"id": "x", "value": {"array": _sample(1, 4096, 0), "unit": "mm"}, "source": "measure.py"},
+             {"id": "y", "value": {"array": _sample(2, 4096, 5), "unit": "mm"}, "source": "measure.py"},
+             {"id": "welch", "op": "t_test_two_sample", "args": ["x", "y", "alpha"], "variance": "welch", "alternative": "two_sided"},
+             {"id": "k", "value": "2550", "source": "measure.py"}, {"id": "n", "value": "5000", "source": "measure.py"},
+             {"id": "p0", "value": "1/2", "source": "measure.py"},
+             {"id": "binomial", "op": "binomial_test", "args": ["k", "n", "p0", "alpha"], "alternative": "two_sided"},
+             {"id": "t2", "value": {"array": [["520", "480"], ["470", "530"]]}, "source": "measure.py"},
+             {"id": "fisher", "op": "fisher_exact", "args": ["t2", "alpha"], "alternative": "two_sided"},
+             {"id": "t20", "value": {"array": [[str(50 + i * j % 37) for j in range(20)] for i in range(20)]}, "source": "measure.py"},
+             {"id": "chi2", "op": "chi2_independence", "args": ["t20", "alpha"]}]
+    return {"nodes": nodes, "result": ["welch", "binomial", "fisher", "chi2"]}
+
+
+def plans_graph() -> dict:
+    """flo2-calc 0.10.0: power and sample size at their heaviest that answer within the image's deadline: a two-sample
+    t sample size for a small effect (2,103 per group), a one-sample t power whose noncentral series runs to about
+    3,000 terms, a chi-square sample size of 4,429, an exact binomial sample size of 1,055 (searched upward, every n
+    exact) and Fisher's exact power at 100 per group."""
+    v = lambda i, x: {"id": i, "value": x, "source": "measure.py"}  # noqa: E731
+    nodes = [v("alpha", "0.05"), v("d", "0.1"), v("one", "1"), v("t90", "0.9"), v("n3000", "3000"), v("n100", "100"),
+             {"id": "t2n", "op": "t_test_two_sample_sample_size", "args": ["d", "one", "t90", "alpha"], "variance": "pooled", "alternative": "two_sided"},
+             {"id": "t1w", "op": "t_test_one_sample_power", "args": ["one", "one", "n3000", "alpha"], "alternative": "two_sided"},
+             v("q0", {"array": ["1/4", "1/4", "1/4", "1/4"]}), v("q1", {"array": ["0.27", "0.25", "0.25", "0.23"]}),
+             {"id": "c2n", "op": "chi2_goodness_of_fit_sample_size", "args": ["q0", "q1", "t90", "alpha"]},
+             v("half", "1/2"), v("p55", "0.55"),
+             {"id": "bn", "op": "binomial_test_sample_size", "args": ["half", "p55", "t90", "alpha"], "alternative": "two_sided"},
+             v("p6", "0.6"), v("p4", "0.4"),
+             {"id": "fw", "op": "fisher_exact_power", "args": ["p6", "p4", "n100", "alpha"], "alternative": "two_sided"}]
+    return {"nodes": nodes, "result": ["t2n", "t1w", "c2n", "bn", "fw"]}
+
+
 def runaway_graphs() -> dict[str, dict]:
     """Calculations past any sensible limit: each must be STOPPED, with its reason."""
     nines = "9" * 80
@@ -181,6 +227,11 @@ def runaway_graphs() -> dict[str, dict]:
                                          {"id": "f", "op": "factorize", "args": ["s"]}]},  # two 25-digit primes
         "range_past_exact": {"nodes": [{"id": "a", "value": "0"}, {"id": "b", "value": "4096"},
                                        {"id": "n", "op": "integer_range", "args": ["a", "b"]}]},
+        # 0.10.0: an exact sample-size search for a tiny difference, which only the deadline stops
+        "fisher_sample_size_past_deadline": {"nodes": [{"id": "p1", "value": "0.52"}, {"id": "p2", "value": "0.5"},
+                                                       {"id": "t", "value": "0.9"}, {"id": "alpha", "value": "0.05"},
+                                                       {"id": "n", "op": "fisher_exact_sample_size", "args": ["p1", "p2", "t", "alpha"],
+                                                        "alternative": "greater"}]},
     }
 
 
@@ -224,7 +275,11 @@ async def drive(command: list[str], name: str) -> dict:
                                ("shapley_12_factors_record", shapley_graph(12), "record_computation"),
                                ("skewed_1000_digits", skewed_graph(1000), "evaluate_graph"),
                                ("integers", integers_graph(), "evaluate_graph"),
-                               ("integers_record", integers_graph(), "record_computation")):
+                               ("integers_record", integers_graph(), "record_computation"),
+                               ("tests", tests_graph(), "evaluate_graph"),
+                               ("tests_record", tests_graph(), "record_computation"),
+                               ("plans", plans_graph(), "evaluate_graph"),
+                               ("plans_record", plans_graph(), "record_computation")):
             t0 = time.perf_counter()
             args = {"graph": g} if tool == "evaluate_graph" else {"graph": g, "name": label}
             r = await s.call_tool(tool, args)

@@ -115,6 +115,16 @@ rows [p, e]) and integer_range (a, a + 1, ..., b, so a count is never typed).
 A non-integer argument is refused with its reason; a primality proof or a
 factorization past the host's max_prime_digits or max_factor_digits is
 stopped there (exceeds_limits), never guessed.
+
+FLO2-CALC 0.10.0 (dec:v0-10-0-named-test-and-power-choices): the named
+hypothesis tests (hypothesis.py: z_test, t_test_one_sample,
+t_test_two_sample, chi2_goodness_of_fit, chi2_independence, binomial_test,
+fisher_exact), each taking alpha as its last argument and "alternative" (and
+the two-sample t-test "variance") never defaulted; and for each, its power at
+n and the smallest n for a target power (power.py: <test>_power and
+<test>_sample_size). A test's value is its p-value; a plan's is its power, or
+its n. Each gives, beside its DETAIL, a BLOCK: "hypothesis_test" or
+"test_plan", the fields a design reads (record schema 10).
 """
 
 from __future__ import annotations
@@ -130,9 +140,11 @@ from flo2_calc import arrays as A
 from flo2_calc import bayes as BY
 from flo2_calc import decibels as D
 from flo2_calc import formula as FM
+from flo2_calc import hypothesis as HT
 from flo2_calc import integers as IN
 from flo2_calc import limits as L
 from flo2_calc import numbers as N
+from flo2_calc import power as PW
 from flo2_calc import realmath as RM
 from flo2_calc import shapley as SH
 from flo2_calc import temperature as T
@@ -187,6 +199,7 @@ UNITS_OPS, DECIBELS, COUNTING = "units", "decibels", "counting"  # dec:round-2-f
 COMBINATORICS = "combinatorics"  # round 3
 BAYES, TRIALS, CREDIT = "Bayesian updating", "randomization tests", "credit among factors"  # 0.8.0
 INTEGERS = "integers"  # 0.9.0
+HTESTS, POWER = "hypothesis tests", "power and sample size"  # 0.10.0
 REDUCTION, DATA, TRANSFORM, COMPLEX, ARRAY = (
     "reductions", "statistics over data", "transforms", "complex values", "making and shaping arrays",
 )
@@ -384,6 +397,56 @@ OPS: dict[str, tuple[str, int, int | None, str]] = {
     "integer_range": (INTEGERS, 2, 2, "args [a, b], exact whole plain numbers with a <= b: the 1-D exact array a, a + 1, ..., "
                       "b, both ends included (b - a + 1 elements), so a count is never typed; past the host's "
                       "max_exact_elements refused"),
+    # 0.10.0: the named hypothesis tests (req:calc-computes-named-hypothesis-tests-as-kept-records). Each value is
+    # the p-value, with a "hypothesis_test" block; alpha, the significance level fixed in advance, is the last arg.
+    "z_test": (HTESTS, 4, 5, 'H0 mu = mu0 with sigma known, args [data, mu0, sigma, alpha] (data a 1-D exact array) or [mean, '
+               'n, mu0, sigma, alpha]; "alternative" (greater, less or two_sided) never defaulted; the p-value from the '
+               "normal tail, correctly rounded; with the statistic z, the assumptions and the decision at alpha"),
+    "t_test_one_sample": (HTESTS, 3, 5, 'Student\'s t-test of H0 mu = mu0, args [data, mu0, alpha] or [mean, sd, n, mu0, '
+                          'alpha]; "alternative" never defaulted; n - 1 degrees of freedom; correctly rounded (a paired '
+                          "test is this test on the differences)"),
+    "t_test_two_sample": (HTESTS, 3, 7, 'H0 mu1 = mu2, args [data1, data2, alpha] or [mean1, sd1, n1, mean2, sd2, n2, alpha]; '
+                          '"variance" welch (unequal; Welch-Satterthwaite degrees of freedom, exact for exact data) or '
+                          'pooled (equal; n1 + n2 - 2) and "alternative", neither ever defaulted; correctly rounded'),
+    "chi2_goodness_of_fit": (HTESTS, 3, 3, "Pearson's X^2 of counts against H0's proportions, args [observed, expected, alpha]: "
+                             "1-D arrays, the expected proportions summing to 1 (or counts summing to the observed total); "
+                             "k - 1 degrees of freedom; refused when an expected count is below 5 (the approximation's "
+                             "condition); takes no alternative"),
+    "chi2_independence": (HTESTS, 2, 2, "Pearson's X^2 test of independence of an r x c table of counts, args [table, alpha]; "
+                          "(r - 1)(c - 1) degrees of freedom, no continuity correction; refused when an expected count is "
+                          "below 5; takes no alternative"),
+    "binomial_test": (HTESTS, 4, 4, 'the exact binomial test of H0 p = p0, args [k, n, p0, alpha]; "alternative" never '
+                      "defaulted; the p-value an exact fraction (two-sided: every outcome no more probable than k)"),
+    "fisher_exact": (HTESTS, 2, 2, 'Fisher\'s exact test of a 2 x 2 table of counts, args [table, alpha], conditional on both '
+                     'margins; "alternative" (greater: odds ratio > 1) never defaulted; the p-value an exact fraction'),
+    # 0.10.0: power and sample size (req:calc-computes-power-and-sample-size-up-front). A power's value is the power,
+    # a sample size's the smallest n reaching the target; each with a "test_plan" block. Fields as the test's.
+    "z_test_power": (POWER, 4, 4, "the power of the z-test, args [delta, sigma, n, alpha]: delta the true difference from mu0 "
+                     "(signed), sigma the known sd; correctly rounded"),
+    "z_test_sample_size": (POWER, 4, 4, "the smallest n whose z-test power reaches the target, args [delta, sigma, power, alpha]"),
+    "t_test_one_sample_power": (POWER, 4, 4, "the power of the one-sample t-test, args [delta, sd, n, alpha], from the "
+                                "noncentral t; correctly rounded"),
+    "t_test_one_sample_sample_size": (POWER, 4, 4, "the smallest n reaching the target power, args [delta, sd, power, alpha]"),
+    "t_test_two_sample_power": (POWER, 4, 4, 'the power of the pooled two-sample t-test, args [delta, sd, n, alpha], n PER '
+                                'GROUP (two equal groups); "variance" must be pooled (Welch\'s has no exact power)'),
+    "t_test_two_sample_sample_size": (POWER, 4, 4, "the smallest n per group reaching the target power, args [delta, sd, power, "
+                                      "alpha]"),
+    "chi2_goodness_of_fit_power": (POWER, 4, 4, "the power of the goodness-of-fit test, args [p0, p1, n, alpha]: H0's and the "
+                                   "expected proportions (each summing to 1); the noncentral chi-square approximation, "
+                                   "lambda = n w^2"),
+    "chi2_goodness_of_fit_sample_size": (POWER, 4, 4, "the smallest n reaching the target power with every expected count at "
+                                         "least 5, args [p0, p1, power, alpha]"),
+    "chi2_independence_power": (POWER, 3, 3, "the power of the test of independence, args [p1, n, alpha]: the expected joint "
+                                "proportions, a grid summing to 1"),
+    "chi2_independence_sample_size": (POWER, 3, 3, "the smallest n reaching the target power, args [p1, power, alpha]"),
+    "binomial_test_power": (POWER, 4, 4, "the exact power of the binomial test, args [p0, p1, n, alpha]: an exact fraction, "
+                            "with the test's attained size"),
+    "binomial_test_sample_size": (POWER, 4, 4, "the smallest n whose exact power reaches the target, args [p0, p1, power, alpha] "
+                                  "(the power is not monotone in n)"),
+    "fisher_exact_power": (POWER, 4, 4, "the exact power of Fisher's test, args [p1, p2, n, alpha]: each group's success "
+                           "probability, n PER GROUP; an exact fraction"),
+    "fisher_exact_sample_size": (POWER, 4, 4, "the smallest n per group whose exact power reaches the target, args [p1, p2, "
+                                 "power, alpha]"),
 }
 
 # Operators that may give a rounded value, and so take "digits".
@@ -392,6 +455,7 @@ ROUNDED_OPS = frozenset(
 ) | {"pow", "convert", "magnitude", "sd_sample", "sd_population", "fit_slope_se", "fit_intercept_se", "fit_residual_se"}
 UNIT_OPS = frozenset({"convert", "asin", "acos", "atan", "atan2", "magnitude", "with_unit", "phase"})
 ROUNDED_OPS = ROUNDED_OPS | {"posterior_normal_sd", "posterior_beta_sd", "posterior_beta_interval_lower", "posterior_beta_interval_upper"}
+ROUNDED_OPS = ROUNDED_OPS | {k for k, v in OPS.items() if v[0] in (HTESTS, POWER)}
 ANGLE_UNIT_OPS = frozenset({"asin", "acos", "atan", "atan2", "phase"})
 KIND_OPS = frozenset({"db_to_ratio", "ratio_to_db"})  # each must be told "kind"
 SOURCED_OPS = frozenset({"with_unit"})  # each must say, in "source", where what it asserts comes from
@@ -402,7 +466,7 @@ ROUND_MODES = ("half_even", "half_away_from_zero", "half_toward_zero", "half_up"
 
 INPUT_KEYS = ("id", "value", "source", "note")
 OP_KEYS = ("id", "op", "args", "unit", "digits", "places", "mode", "kind", "source", "axis", "note",
-           "scheme", "statistic", "alternative", "factors", "combinations")
+           "scheme", "statistic", "alternative", "factors", "combinations", "variance")
 TRIAL_FIELDS = {  # randomization_test's fields: each required, each never defaulted (0.8.0)
     "scheme": {
         "every_arrangement": "any arrangement of this many on periods among all the periods, each equally likely",
@@ -447,6 +511,7 @@ class OpNode:
     alternative: str | None = None
     factors: tuple[str, ...] | None = None  # shapley_values (0.8.0): the factors, in order
     combinations: tuple[tuple[str, ...], ...] | None = None  # for each outcome, the factors present, as given
+    variance: str | None = None  # t_test_two_sample and its plans (0.10.0): "welch" or "pooled"
 
 
 Node = InputNode | OpNode
@@ -459,6 +524,7 @@ class Detailed:
 
     value: Any
     detail: tuple[tuple[str, Any], ...]
+    block: tuple[str, dict[str, Any]] | None = None  # 0.10.0: ("hypothesis_test" or "test_plan", its fields)
 
 
 @dataclass(frozen=True)
@@ -488,7 +554,7 @@ class Graph:
                 d = {"id": n.id, "op": n.op, "args": list(n.args)}
                 if n.unit_text is not None:
                     d["unit"] = n.unit_text
-                for key in ("digits", "places", "mode", "kind", "source", "axis", "scheme", "statistic", "alternative"):
+                for key in ("digits", "places", "mode", "kind", "source", "axis", "scheme", "statistic", "alternative", "variance"):
                     if getattr(n, key) is not None:
                         d[key] = getattr(n, key)
                 if n.factors is not None:
@@ -513,6 +579,7 @@ class Evaluation:
     values: dict[str, Value] = field(default_factory=dict)
     refusal: dict[str, Any] | None = None
     details: dict[str, tuple[tuple[str, Value], ...]] = field(default_factory=dict)
+    blocks: dict[str, tuple[str, dict[str, Any]]] = field(default_factory=dict)  # 0.10.0: a test's or a plan's fields
 
     @property
     def ok(self) -> bool:
@@ -757,6 +824,7 @@ def _node(obj: Any, path: str, data_root: Any = None, exact_limit: int | None = 
     if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
         raise CallError(at(path, "args"), f'"{op}" takes "args": a list of the ids of the nodes it works on, in order.')
     most_n = MAX_ARGS if most is None else most
+    HT.check_arg_count(op, len(args), path)
     if not least <= len(args) <= most_n or (family == STATISTICS and least == 1 and len(args) == 2):
         if family == STATISTICS and least == 1:
             want = "1 ([x], the standard normal) or 3 ([x, mean, sd])" if op != "normal_quantile" else "1 ([p]) or 3 ([p, mean, sd])"
@@ -835,10 +903,11 @@ def _node(obj: Any, path: str, data_root: Any = None, exact_limit: int | None = 
         axis = obj["axis"]
         if axis not in (0, 1) or isinstance(axis, bool):
             raise CallError(at(path, "axis"), 'a grid\'s "axis" is 0 (down each column) or 1 (along each row).')
-    trial = _trial_fields(obj, op, path)
+    scheme, statistic, alternative = _trial_fields(obj, op, path)
+    tested, variance = HT.read_fields(obj, op, path, PW.PLANS)
     factors, combinations = SH.read_table(obj, op, path) if (op == "shapley_values" or "factors" in obj or "combinations" in obj) else (None, None)
     return OpNode(nid, op, tuple(args), unit, unit_text, _note(obj, path), digits_, places, mode, kind, source, axis,
-                  *trial, factors, combinations)
+                  scheme, statistic, alternative or tested, factors, combinations, variance)
 
 
 def _trial_fields(obj: dict[str, Any], op: str, path: str) -> tuple[str | None, str | None, str | None]:
@@ -847,6 +916,9 @@ def _trial_fields(obj: dict[str, Any], op: str, path: str) -> tuple[str | None, 
     out: list[str | None] = []
     for key, allowed in TRIAL_FIELDS.items():
         if op != "randomization_test":
+            if key == "alternative":  # the named tests and their plans take one too (hypothesis.read_fields)
+                out.append(None)
+                continue
             if key in obj:
                 raise CallError(at(path, key), f'only randomization_test takes "{key}"; "{op}" does not.')
             out.append(None)
@@ -1941,9 +2013,13 @@ def _counting(node: OpNode, args: list[Value]) -> Value:
 # ---------------------------------------------------------------- one node
 
 
-def _apply(node: OpNode, args: list[Value], guard: L.Guard) -> Value | Detailed:
+def _apply(node: OpNode, args: list[Value], guard: L.Guard, nodes: dict[str, Node] | None = None) -> Value | Detailed:
     op, names = node.op, node.args
     family = OPS[op][0]
+    if family == HTESTS:
+        return HT.apply(node, args, guard, nodes)  # data arrays and tables: never element by element
+    if family == POWER:
+        return PW.apply(node, args, guard, nodes)
     if family == BAYES:
         return BY.apply(node, args, guard)  # the data may be an array: never element by element
     if family == TRIALS:
@@ -2019,9 +2095,12 @@ def evaluate(graph: Graph, guard: L.Guard | None = None) -> Evaluation:
                     A.check(node.value, guard, "array")
                 ev.values[nid] = node.value
                 continue
-            value = _apply(node, [ev.values[a] for a in node.args], guard)
+            value = _apply(node, [ev.values[a] for a in node.args], guard, nodes)
             if isinstance(value, Detailed):
-                ev.details[nid] = value.detail
+                if value.detail:  # a record's detail has at least one entry (an exact plan may have none to show)
+                    ev.details[nid] = value.detail
+                if value.block is not None:
+                    ev.blocks[nid] = value.block
                 value = value.value
             if isinstance(value, Quantity):
                 guard.check_number(value.magnitude)
@@ -2065,9 +2144,26 @@ def values_json(ev: Evaluation, style: Style = CURRENT) -> list[dict[str, Any]]:
             entry = {"node": nid, **value_json(ev.values[nid], style, _unit_chosen_by_rule(nodes[nid]))}
             if nid in ev.details:
                 entry["detail"] = [{"name": name, **value_json(v, style)} for name, v in ev.details[nid]]
+            if nid in ev.blocks:
+                key, fields = ev.blocks[nid]
+                entry[key] = block_json(fields, style)
             ev.guard.spend_reply(_entry_bytes(entry))
             out.append(entry)
     return out
+
+
+def block_json(obj: Any, style: Style = CURRENT) -> Any:
+    """A test's or a plan's block as replies and records write it (0.10.0): each value as a value is written, a
+    (name, value) pair as {"name", "value", ...}, and everything else as it is."""
+    if isinstance(obj, Quantity) or isinstance(obj, A.Array):
+        return value_json(obj, style)
+    if isinstance(obj, tuple) and len(obj) == 2 and isinstance(obj[0], str) and isinstance(obj[1], (Quantity, bool)):
+        return {"name": obj[0], **value_json(obj[1], style)}
+    if isinstance(obj, dict):
+        return {k: block_json(v, style) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [block_json(v, style) for v in obj]
+    return obj
 
 
 def _unit_chosen_by_rule(node: Node) -> bool:

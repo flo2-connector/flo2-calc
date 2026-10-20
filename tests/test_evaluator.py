@@ -299,6 +299,8 @@ def test_the_operator_families_are_the_accepted_ones():
         "Bayesian updating", "randomization tests", "credit among factors",
         # 0.9.0, the primes trial (dec:v0-9-0-integer-operator-choices)
         "integers",
+        # 0.10.0, phase 5 (dec:v0-10-0-named-test-and-power-choices)
+        "hypothesis tests", "power and sample size",
     }
     assert {k for k, v in OPS.items() if v[0] == "logic"} == {"and", "or", "not", "nor", "nand", "xor"}
 

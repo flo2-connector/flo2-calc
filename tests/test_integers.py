@@ -514,7 +514,7 @@ def test_every_integer_operator_is_in_schema_9_and_none_in_version_8():
         return set(node["properties"]["op"]["enum"])
 
     assert ops_of(9) <= set(OPS)
-    assert set(OPS) - ops_of(8) == {"mod", "divides", "gcd", "is_prime", "factorize", "integer_range"}
+    assert ops_of(9) - ops_of(8) == {"mod", "divides", "gcd", "is_prime", "factorize", "integer_range"}
 
 
 # ---------------------------------------------------------------- over MCP

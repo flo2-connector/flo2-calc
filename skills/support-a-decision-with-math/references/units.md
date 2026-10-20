@@ -17,5 +17,7 @@ unit, spelled as the design spells units. These kinds are spelled as follows. Th
 - **Decibels:** a gain or loss is `"6 dB"` (`"0.2 dB/m"` per length); a power level is `"-30 dBm"` or `"10 dBW"`.
 - **Prefixes:** units are case-sensitive, and a prefix's case is its size: `mJ` is a millijoule and `MJ` a
   megajoule.
+- **A near-miss unit** may come back with what to write instead (`khz` gives `Write "kHz"`). When flo2-calc gives no
+  hint, write the unit you mean yourself.
 - **Shown simpler:** a computed value may come back in a simpler unit than it was computed in (`mAh/mA` shown as
   `h`); `simplified_from` says so. The value is the same. A whole number is written in full.
