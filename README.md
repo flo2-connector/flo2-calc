@@ -29,6 +29,11 @@ when a question set or a real design needs them, never for parity (`dec:idea-wha
   source kept and a beta credible interval); the exact p-value of an on/off trial's randomization test, over every
   arrangement its stated scheme allows; Shapley values sharing an outcome's credit among a few factors, from a table
   naming every combination. Exact for exact inputs, the standard deviations and intervals correctly rounded.
+- **Named hypothesis tests, and power before the data** (0.10.0). The z-test, one- and two-sample t-tests (Welch's
+  or pooled, stated), chi-square goodness of fit and independence, the exact binomial test and Fisher's exact test,
+  each a kept record of its statistic, p-value (correctly rounded, or an exact fraction), sidedness, degrees of
+  freedom, the assumptions it rests on, and "reject H0 at α" or "fail to reject H0 at α", never more. For each, the
+  power of a planned study at n and the smallest n that reaches a target power.
 - **Units, checked.** A value can carry a unit, spelled as reflow2 designs spell it (`mm`, `g`, `V`, `mA`, ...).
   Units that measure different things are refused, naming the operation and both units, never stripped. A unit
   flo2-calc does not know is refused, never guessed, and a hint never offers a unit of another size or kind.
@@ -294,6 +299,8 @@ the same graph, and gives the same result, as the same nodes sent whole.
 | counting | `count_true`, `k_of_n`, `to_number` |
 | combinatorics | `choose`, `factorial` |
 | integers | `mod`, `divides`, `gcd`, `is_prime`, `factorize`, `integer_range` (0.9.0) |
+| hypothesis tests | `z_test`, `t_test_one_sample`, `t_test_two_sample` (with `"variance"`), `chi2_goodness_of_fit`, `chi2_independence`, `binomial_test`, `fisher_exact`; each but the chi-square tests with `"alternative"`, none defaulted (0.10.0) |
+| power and sample size | `<test>_power` and `<test>_sample_size` for each test above, with its fields (0.10.0) |
 | units | `magnitude` (with `"unit"`), `with_unit` (with `"unit"` and `"source"`) |
 | decibels | `db_to_ratio`, `ratio_to_db` (each with `"kind"`: `"power"` or `"amplitude"`) |
 
@@ -425,6 +432,50 @@ the same graph, and gives the same result, as the same nodes sent whole.
   - `mod`, `divides`, `gcd` and `is_prime` work element by element on exact arrays; `factorize` and `integer_range`
     take single values. The primes trial's question, whether `n^2 + n + 41` is prime for `n = 0..39`, is
     `integer_range`, `mul`, `add`, `is_prime` and `all`; `n = 40` gives `1681`, `is_prime` false, `[[41, 2]]`.
+- **The named hypothesis tests** (0.10.0, `req:calc-computes-named-hypothesis-tests-as-kept-records`,
+  `dec:v0-10-0-named-test-and-power-choices`; `src/flo2_calc/hypothesis.py`). Each takes alpha, the significance
+  level fixed in advance, as its LAST argument: an exact plain number strictly between 0 and 1 (a rounded one is
+  refused). Each but the chi-square tests needs `"alternative"` (`greater`, `less` or `two_sided`), never defaulted.
+  - **`z_test`** `[data, mu0, sigma, alpha]` or `[mean, n, mu0, sigma, alpha]` (sigma known);
+    **`t_test_one_sample`** `[data, mu0, alpha]` or `[mean, sd, n, mu0, alpha]` (a paired test is this test on the
+    differences); **`t_test_two_sample`** `[data1, data2, alpha]` or `[mean1, sd1, n1, mean2, sd2, n2, alpha]`, with
+    `"variance"`: `welch` (Welch-Satterthwaite degrees of freedom, exact for exact data) or `pooled`, never defaulted.
+    Their p-values are the normal or Student-t tail at the EXACT square of the statistic (Arb's erfc, or the
+    regularized incomplete beta), so they are correctly rounded; Welch's is the tail of Student's t at Welch's degrees
+    of freedom, itself an approximation to the statistic's distribution, and the record says so.
+  - **`chi2_goodness_of_fit`** `[observed, expected, alpha]` (H0's proportions summing to exactly 1, or expected
+    counts summing to the observed total) and **`chi2_independence`** `[table, alpha]` (Pearson's X^2 with no
+    continuity correction). The chi-square tail is correctly rounded, and an approximation to the statistic's exact
+    distribution: flo2-calc holds it to its condition, every expected count at least 5 (Cochran), and REFUSES a test
+    that fails it (`kind: "assumption_fails"`, naming the cell and the exact test to use) rather than computing it.
+  - **`binomial_test`** `[k, n, p0, alpha]` and **`fisher_exact`** `[table, alpha]` (2 x 2, conditional on both
+    margins; `greater` is an odds ratio above 1) are EXACT fractions. Two-sided, each sums every outcome no more
+    probable than the one observed (R's `binom.test` and `fisher.test` method), compared exactly rather than within
+    R's relative tolerance of 1e-7.
+  - The node's value is the p-value; its working step shows the statistic, the degrees of freedom, n and
+    `reject_H0`; and its entry holds `hypothesis_test`: `test`, `title`, `h0`, `h1`, `alternative` (`upper_tail` for
+    a chi-square test), `sidedness`, `alpha` (its node, value and source), `n`, `statistic`, `dof`, `p_value`,
+    `p_value_method`, `assumptions`, `decision` and `reject_h0` (and `variance` for the two-sample t-test). The
+    decision is "reject H0 at α = a" when p <= alpha, else "fail to reject H0 at α = a", decided on the TRUE p-value
+    (from enclosures that exclude alpha), never on the digits shown. Nothing says H1 is shown or proven: reading a
+    test's verdict is the design's job (reflow2's `req:a-hypothesis-tests-verdict-reads-as-supported-at-alpha-never-as-shown`).
+- **Power and sample size** (0.10.0, `req:calc-computes-power-and-sample-size-up-front`; `src/flo2_calc/power.py`).
+  For each test, `<test>_power` gives the power at n and `<test>_sample_size` the smallest n whose power reaches a
+  target, with the test's own `"alternative"` and `"variance"`; alpha is the last argument. The z- and t-tests take
+  `[delta, sd, n or power, alpha]` (two samples: n per group, two equal groups, `"variance": "pooled"`: Welch's test
+  has no exact power and is refused with that reason); the chi-square tests H0's and H1's proportions
+  (`[p0, p1, ...]`, or the joint proportions of a table); the binomial `[p0, p1, ...]`; Fisher's `[p1, p2, ...]`, n
+  per group. The z-test's power is from Arb's erfc and erfcinv; the t-tests' is the noncentral t's tail beyond the
+  critical t (Guenther's and Lenth's series, its remainder bounded rigorously), both tails two-sided (R's
+  `power.t.test` leaves the far one out unless `strict = TRUE`); the chi-square tests' is the noncentral chi-square
+  with lambda = n w^2, the standard approximation to X^2 under H1 (said so in the record); all correctly rounded. The
+  binomial and Fisher tests' are EXACT, from the test's own rejection region (the binomial's attained size beside
+  it). A sample size is searched with each comparison decided; for the exact tests the power is not monotone in n, so
+  the search goes upward from the smallest and the record says a larger n can have less power. A planned chi-square
+  also needs every expected count at least 5, so its n is the larger of the two, both shown. The entry holds
+  `test_plan`: `test`, `kind`, `title`, `alternative`, `alpha`, `effect`, `n`, `n_is`, `power`, `target_power` (a
+  sample size), `method` and `assumptions`. A target no n reaches is refused with its reason; a search past the
+  deadline is stopped like any calculation, its record not yet computed.
 - **Units for an empirical formula.** An empirical relation (a datasheet's curve fit, a standard's sizing rule) works on
   numbers taken in stated units. `magnitude` takes a quantity's number in a named unit (`2 A` in `"mA"` is `2000`),
   refused unless the quantity measures what that unit measures, so `2000` is never read as amperes. `with_unit` puts a
@@ -869,8 +920,13 @@ flo2's helper contract fixes the split.
 ## The computation record
 
 One JSON object, defined by
-[`src/flo2_calc/schemas/calc-record-9.schema.json`](src/flo2_calc/schemas/calc-record-9.schema.json) (JSON Schema
-draft 2020-12). Version 9 (0.9.0) allows the integer operators (`mod`, `divides`, `gcd`, `is_prime`, `factorize`,
+[`src/flo2_calc/schemas/calc-record-10.schema.json`](src/flo2_calc/schemas/calc-record-10.schema.json) (JSON Schema
+draft 2020-12). Version 10 (0.10.0) allows the named hypothesis tests and their power and sample size, with
+`alternative` and `variance` on their nodes; a test's value entry carries `hypothesis_test` and a plan's `test_plan`
+(above). A record holds no time: when a test's alpha and choice were fixed, and whether they moved after its data, is
+read from the design's history of alpha's source node and of the record. A version 9 record re-runs as it was made
+(`tests/data/hand-composed-tests.v9.calc.json`, made by 0.9.0: Welch's t composed by hand, reproduces byte for byte).
+Version 9 (0.9.0) allows the integer operators (`mod`, `divides`, `gcd`, `is_prime`, `factorize`,
 `integer_range`); a host's limits gain `max_prime_digits` and `max_factor_digits`, and a stop may name either, or
 `max_exact_elements` (an integer range). A version 8 record re-runs as it was made
 (`tests/data/divisibility.v8.calc.json`, made by 0.8.1, reproduces byte for byte). Version 8 (0.8.0) allows Bayesian updating, the randomization test (with `scheme`, `statistic` and
@@ -1028,7 +1084,14 @@ two more runaway calls, 24 periods (2,704,156 arrangements) and 13 factors, stop
 exact range, 4,096, through `is_prime`; a 200-digit prime proven; a 40-digit semiprime of two 20-digit primes and
 2^1000 3^500 factored: 1.94 s, recorded and re-run 3.66 s), and three more runaway calls, a 201-digit prime, a 50-digit
 semiprime and a range of 4,097, stopped at `max_prime_digits`, `max_factor_digits` and `max_exact_elements`. It peaked
-at 106.0 MiB under 128m, every runaway call stopped and the container alive after. 0.5.0 peaked at 91.3 MiB and 0.4.0 at 78.2 MiB in their 27-call sessions; numpy, loaded and
+at 106.0 MiB under 128m, every runaway call stopped and the container alive after. 0.10.0 ran it on 2026-10-19 with
+seven more calls (55; 105 s before the runaway calls): the named tests at their heaviest (Welch's t-test on two samples
+of 4,096, the exact binomial test of 5,000 trials, Fisher's exact test of a table of 2,000 and a 20 x 20 chi-square
+test: 0.37 s, recorded and re-run 1.05 s), power and sample size at their heaviest within the deadline (a two-sample t
+sample size of 2,103 per group, a one-sample t power whose noncentral series runs to about 3,000 terms, a chi-square
+sample size of 4,429, an exact binomial sample size of 1,055 and Fisher's exact power at 100 per group: 3.07 s,
+recorded and re-run 6.58 s), and one more runaway call, Fisher's sample size for 0.52 against 0.50, stopped at the
+20 s deadline. It peaked at 105.5 MiB under 128m, every runaway call stopped and the container alive after. 0.5.0 peaked at 91.3 MiB and 0.4.0 at 78.2 MiB in their 27-call sessions; numpy, loaded and
 working on the arrays above, costs about 14 MiB more than 0.5.0. A cap of **128m** is still above the peak, with 22 MiB to spare,
 and the array budget (16 MiB in the image) keeps a call's arrays inside it. CI runs the image under 128m, and asks it
 every limit's questions there (`tests/test_limits.py`, `tests/test_pending_record.py`) and the arrays' questions
@@ -1057,8 +1120,8 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
   the labels in the record; and the limits.
 - `tests/test_record.py`: the record is deterministic and fits its schema; it re-runs; tampering is caught; several
   results; records of versions 1 to 3, 6 and 7 reproduce under their own writing (and version 6's under its own
-  temperature rules); round 3's operators in a version 7 record; a version 8 record made by 0.8.1 reproduces; every
-  operator in version 9's schema.
+  temperature rules); round 3's operators in a version 7 record; a version 8 record made by 0.8.1 and a version 9
+  record made by 0.9.0 reproduce; every operator in version 10's schema, and the tests and plans in none before it.
 - `tests/test_skewed.py` (0.8.0): the lognormal, gamma and beta cdf, sf and quantile against mpmath's own gammainc and
   betainc at 120 digits, next to a rounding tie on both sides; exact cases; units; domains; rounded arguments; the
   chi-square critical values NIST publishes, from the gamma quantile.
@@ -1070,6 +1133,16 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
 - `tests/test_shapley.py` (0.8.0): against Shapley's own definition, the average over every order of adding the
   factors, on random tables of 1 to 6 factors; a missing, repeated or unknown combination named; `max_shapley_factors`;
   the record.
+- `tests/test_hypothesis.py` (0.10.0): every named test against published values (R's `t.test` on Student's sleep
+  data, Welch, pooled and paired; R's `binom.test` on Mendel's peas; R's `chisq.test` on Agresti's table; Fisher's
+  tea; Mendel's 9:3:3:1) and against mpmath at 120 digits by other routes (the incomplete beta, correctly rounded to
+  the 30th digit, and the t density's integral; erfc; the incomplete gamma) and exact enumerations; the summary form
+  equal to the data form; every test's record carrying the same fields; nothing defaulted; every refusal; the
+  decision on the true p-value; the record and its re-run; one test over MCP.
+- `tests/test_power.py` (0.10.0): power and sample size against R's `power.t.test` examples, Cohen's chi-square N,
+  the identity that a one-degree chi-square power IS the two-sided z power (to every digit), mpmath integrals of the
+  noncentral t and chi-square densities, and exact enumerations for the binomial and Fisher; every plan's record
+  carrying the same fields; the refusals; a search stopped at the deadline and its pending record.
 - `tests/test_integers.py` (0.9.0): `mod` against its definition, `divides`, `gcd` (with the Fibonacci identity),
   `is_prime` against a sieve of every number below 65,536 and on Mersenne primes, Fermat numbers and strong
   pseudoprimes (Arnault's included), `factorize` against Legendre's formula for `1000!` and known factorizations,
@@ -1134,7 +1207,7 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    per record. **0.5.0 also offers an MCP prompt and a resource** (the skill, `initialize` now lists `prompts` and
    `resources` beside `tools`). They are not tools, so the door's allow-list of four is untouched; the door may ignore
    them, since hosted on flo2.io the skill is served by flo2 itself. The image's size is unchanged (209 MB), and its
-   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`. 0.7.0 (round 3's fixes) changes the skill's text again (an empirical formula's constants come from the person or a cited document, never the agent's memory; ambiguous expressions; troy weight; the new operators) and the server's instructions; adds `op` values inside a graph (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`) and the units `ozt`, `dwt`, `grain`, `week` and `delta_K`; and makes the record schema version 7. The four tools, their classes and their top-level arguments are unchanged; the image's limits are unchanged. 0.8.0 (the cure design's four requirements) changes the skill's text again (Bayesian updating, the randomization test, Shapley values, the skewed distributions) and the server's instructions; adds `op` values and node fields inside a graph (`scheme`, `statistic`, `alternative`, `factors`, `combinations`) and a value's `detail` inside a reply; makes the record schema version 8; and adds two limits to the image's profile (`FLO2_CALC_MAX_ARRANGEMENTS=1000000`, `FLO2_CALC_MAX_SHAPLEY_FACTORS=12`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies the skill file unchanged. 0.8.1 splits the skill for size, and nothing else changes: 0.8.0's SKILL.md, 27,693 bytes, came to 31,894 characters in flo2's served reply, past its 30,000, so SKILL.md now keeps the rules (under 15,000 bytes, which a test holds) and each operator's arguments, examples and edge cases move to `skills/support-a-decision-with-math/references/` (`when-to-use.md`, `units.md`, `operators.md`, `arrays.md`, `records.md`), each sentence in one place and none changed in meaning, served as resources beside the skill. The four tools, their behaviour and the record schema (version 8) are unchanged, and the image's profile too. flo2 copies SKILL.md unchanged, and the reference files beside it if it serves them. 0.9.0 (`req:integer-arithmetic-has-remainder-divisibility-and-primality`, from the primes trial on flo2.io) changes the skill's text again (an Integers line in SKILL.md, still under 15,000 bytes, and an Integers section in `references/operators.md`) and the server's instructions; adds `op` values inside a graph (`mod`, `divides`, `gcd`, `is_prime`, `factorize`, `integer_range`); makes the record schema version 9; and adds two limits to the image's profile (`FLO2_CALC_MAX_PRIME_DIGITS=200`, `FLO2_CALC_MAX_FACTOR_DIGITS=40`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies SKILL.md and `references/operators.md` and `references/records.md` unchanged.
+   measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`. 0.7.0 (round 3's fixes) changes the skill's text again (an empirical formula's constants come from the person or a cited document, never the agent's memory; ambiguous expressions; troy weight; the new operators) and the server's instructions; adds `op` values inside a graph (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`) and the units `ozt`, `dwt`, `grain`, `week` and `delta_K`; and makes the record schema version 7. The four tools, their classes and their top-level arguments are unchanged; the image's limits are unchanged. 0.8.0 (the cure design's four requirements) changes the skill's text again (Bayesian updating, the randomization test, Shapley values, the skewed distributions) and the server's instructions; adds `op` values and node fields inside a graph (`scheme`, `statistic`, `alternative`, `factors`, `combinations`) and a value's `detail` inside a reply; makes the record schema version 8; and adds two limits to the image's profile (`FLO2_CALC_MAX_ARRANGEMENTS=1000000`, `FLO2_CALC_MAX_SHAPLEY_FACTORS=12`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies the skill file unchanged. 0.8.1 splits the skill for size, and nothing else changes: 0.8.0's SKILL.md, 27,693 bytes, came to 31,894 characters in flo2's served reply, past its 30,000, so SKILL.md now keeps the rules (under 15,000 bytes, which a test holds) and each operator's arguments, examples and edge cases move to `skills/support-a-decision-with-math/references/` (`when-to-use.md`, `units.md`, `operators.md`, `arrays.md`, `records.md`), each sentence in one place and none changed in meaning, served as resources beside the skill. The four tools, their behaviour and the record schema (version 8) are unchanged, and the image's profile too. flo2 copies SKILL.md unchanged, and the reference files beside it if it serves them. 0.9.0 (`req:integer-arithmetic-has-remainder-divisibility-and-primality`, from the primes trial on flo2.io) changes the skill's text again (an Integers line in SKILL.md, still under 15,000 bytes, and an Integers section in `references/operators.md`) and the server's instructions; adds `op` values inside a graph (`mod`, `divides`, `gcd`, `is_prime`, `factorize`, `integer_range`); makes the record schema version 9; and adds two limits to the image's profile (`FLO2_CALC_MAX_PRIME_DIGITS=200`, `FLO2_CALC_MAX_FACTOR_DIGITS=40`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies SKILL.md and `references/operators.md` and `references/records.md` unchanged. 0.10.0 (`req:calc-computes-named-hypothesis-tests-as-kept-records` and `req:calc-computes-power-and-sample-size-up-front`, phase 5) changes the skill's text again (a hypothesis-test line in SKILL.md's step 6, still under 15,000 bytes, a new reference file `references/hypothesis-tests.md`, and a sentence each moved into `references/operators.md` and `references/units.md`) and the server's instructions; adds `op` values inside a graph (the seven named tests and their 14 power and sample-size operators) and a node field (`variance`; `alternative` now on more operators); adds a block to a value's entry in a reply (`hypothesis_test`, `test_plan`) and a refusal kind (`assumption_fails`); and makes the record schema version 10. No limit is added, so the image's profile is unchanged. The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies SKILL.md, `references/hypothesis-tests.md` (new: it must be added to what flo2 serves beside the skill), `references/operators.md` and `references/units.md` unchanged.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.

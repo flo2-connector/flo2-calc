@@ -1,6 +1,7 @@
 # The operators: arguments, examples and edge cases
 
-A reference file of the skill `support-a-decision-with-math`, for its steps 3, 4, 6 and 7. The rules (never type a
+A reference file of the skill `support-a-decision-with-math`, for its steps 3, 4, 6 and 7 (a hypothesis test and
+its power are in their own file, named in step 6). The rules (never type a
 constant or a result in; what only you and the person can say) are in `SKILL.md`; this file holds what a reply
 holds, and each operator family's arguments, examples and edge cases.
 
@@ -150,6 +151,9 @@ outcome of EVERY combination of the factors on or off, with `"factors"` (the nam
 every factor minus the outcome with none, and the working shows it.
 
 ## When an operator refuses its argument (step 7)
+
+A "Malformed call" error names the field to fix: an unknown unit, a missing node, a cycle.
+
 
 `"kind": "out_of_domain"` or `"undefined"`: the argument is outside what the function takes (`sqrt(-1)`, a
 probability of 1, `tan(90 deg)`). The computation, not the calculator, needs fixing. For an array, the reason names

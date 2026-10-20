@@ -58,7 +58,7 @@ def validator():
 def test_a_record_holds_what_a_decision_needs():
     rec = make(supports={"design_node": "dec:fiber-route"})
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 9
+    assert rec["schema_version"] == 10
     assert rec["status"] == "computed"
     assert "stopped" not in rec and "limits_in_force" not in rec, "a computed record carries no host limits"
     assert rec["graph"] == FIBER
@@ -309,7 +309,7 @@ def test_a_version_6_record_re_runs_under_the_rules_and_writing_it_was_made_with
 def test_the_same_graph_recorded_now_writes_delta_k_and_every_line_s_value():
     old = json.loads((DATA / "temperature-and-formula.v6.calc.json").read_text())
     now = make(old["graph"], old["name"], old["supports"])
-    assert now["schema_version"] == 9
+    assert now["schema_version"] == 10
     validator().validate(now)
     values = {v["node"]: v for v in now["values"]}
     assert values["rise_k"]["value"] == "10 delta_K" and values["diff"]["value"] == "1.85 delta_K"
@@ -339,9 +339,10 @@ def test_round_3_operators_are_in_a_version_7_record_and_re_run():
     assert R.rerun(rec)["reproduces"] is True
 
 
-def test_every_published_schema_is_kept_and_version_9_is_current():
-    assert R.SCHEMA_VERSION == 9 and sorted(R.SCHEMA_FILES) == [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    assert R.schema(9)["properties"]["schema_version"] == {"const": 9}
+def test_every_published_schema_is_kept_and_version_10_is_current():
+    assert R.SCHEMA_VERSION == 10 and sorted(R.SCHEMA_FILES) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    assert R.schema(10)["properties"]["schema_version"] == {"const": 10}
+    assert R.schema(9)["properties"]["schema_version"] == {"const": 9}, "a released schema is never edited"
     assert R.schema(8)["properties"]["schema_version"] == {"const": 8}, "a released schema is never edited"
     assert R.schema(7)["properties"]["schema_version"] == {"const": 7}, "a released schema is never edited"
     assert R.schema(6)["properties"]["schema_version"] == {"const": 6}, "a released schema is never edited"
@@ -383,11 +384,40 @@ def test_every_operator_is_in_the_current_schema_and_none_of_0_8_0s_in_version_7
         node = R.schema(version)["$defs"]["graph"]["properties"]["nodes"]["items"]["oneOf"][1]
         return set(node["properties"]["op"]["enum"])
 
-    assert ops_of(9) == set(OPS) and ops_of(8) <= ops_of(9)
+    assert ops_of(10) == set(OPS) and ops_of(8) <= ops_of(9) <= ops_of(10)
     new = set(OPS) - ops_of(7)
     assert {"posterior_normal_mean", "posterior_beta_interval_upper", "randomization_test", "shapley_values",
             "lognormal_cdf", "gamma_quantile", "beta_sf"} <= new
     assert ops_of(7) <= ops_of(8)
+
+
+def test_a_version_9_record_made_by_0_9_0_re_runs_byte_for_byte():
+    """hand-composed-tests.v9.calc.json was made by flo2-calc 0.9.0 (before 0.10.0 changed anything): Welch's
+    t statistic on Student's sleep data composed by hand from means, variances and a root, a t quantile, a
+    chi-square tail, a binomial tail, mod and is_prime. It re-runs to every byte it holds under 0.10.0."""
+    rec = json.loads((DATA / "hand-composed-tests.v9.calc.json").read_text())
+    assert rec["schema_version"] == 9 and rec["produced_by"]["flo2_calc"] == "0.9.0"
+    answer = R.rerun(R.load(rec))
+    assert answer["reproduces"] is True, answer["differences"]
+    again = R.build(evaluate(read_graph(rec["graph"])), rec["name"], rec["supports"], 9)
+    assert {k: v for k, v in again.items() if k not in ("produced_by", "content_hash")} == \
+        {k: v for k, v in rec.items() if k not in ("produced_by", "content_hash")}
+
+
+def test_the_named_tests_and_their_plans_are_in_version_10_and_none_in_version_9():
+    from flo2_calc.evaluator import OPS
+
+    def ops_of(version):
+        node = R.schema(version)["$defs"]["graph"]["properties"]["nodes"]["items"]["oneOf"][1]
+        return set(node["properties"]["op"]["enum"])
+
+    tests = {"z_test", "t_test_one_sample", "t_test_two_sample", "chi2_goodness_of_fit", "chi2_independence",
+             "binomial_test", "fisher_exact"}
+    plans = {f"{t}_{k}" for t in tests for k in ("power", "sample_size")}
+    assert set(OPS) - ops_of(9) == tests | plans
+    entry = R.schema(10)["$defs"]["entry"]["properties"]
+    assert "hypothesis_test" in entry and "test_plan" in entry
+    assert "hypothesis_test" not in R.schema(9)["$defs"]["entry"]["properties"]
 
 
 def test_a_pending_record_holds_every_limit_in_force():

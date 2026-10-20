@@ -1014,3 +1014,261 @@ def skewed_quantile(kind: str, p: Ball, params: list[Ball], places: int, guard: 
     hi = top + (half_unit(top, finer) if top else 0)
     lo = bottom - (half_unit(bottom, finer) if bottom else 0)
     return Outcome(c, round_up_significant(max(hi - c, c - lo, Fraction(0)), 2), False)
+
+
+# ---------------------------------------------------------------- hypothesis tests and power (flo2-calc 0.10.0)
+#
+# req:calc-computes-named-hypothesis-tests-as-kept-records and req:calc-computes-power-and-sample-size-up-front
+# (hypothesis.py, power.py). A named test's p-value is a function of EXACT rational arguments (the statistic's
+# square, its sign, the degrees of freedom), so it is correctly rounded by the same Ziv test as every other
+# rounded value. A power is computed from a critical value that is itself a quantile; that quantile is found
+# correctly rounded at the working precision first (outside the lock), and enters the power's Arb computation
+# as a ball holding the true quantile, so the enclosure of the power stays rigorous and narrows as the working
+# precision grows. The noncentral t and chi-square are Poisson-weighted series whose truncation is bounded
+# rigorously: past the term where each ratio of terms is at most 1/2, the rest is at most twice the next term.
+
+
+def _alt_tail(two: Any, s: int, alternative: str) -> Any:
+    """A one-sided p-value from the two-sided one, P(|S| >= |s_obs|), and the statistic's sign s: the side the
+    alternative looks at holds half of it, the other side the rest (a continuous statistic)."""
+    if alternative == "two_sided":
+        return two
+    toward = (s > 0) == (alternative == "greater")
+    return two / 2 if toward else 1 - two / 2
+
+
+def _z_two_sided(z2: Fraction) -> Any:
+    return (_arb(z2 / 2).sqrt()).erfc()
+
+
+def z_p_value(alternative: str) -> Fn:
+    """The z-test's p-value, args [z^2, sign of z]: P(|Z| >= |z|) = erfc(|z| / sqrt 2), or one tail of it. Exact
+    (1, or 1/2) at z = 0."""
+
+    def exact(z2: Fraction, s: Fraction) -> Fraction | None:
+        if z2 == 0:
+            return Fraction(1) if alternative == "two_sided" else HALF
+        return None
+
+    def on_exact(z2: Fraction, s: Fraction) -> Any:
+        return _alt_tail(_z_two_sided(z2), int(s), alternative)
+
+    return Fn(f"the z-test's p-value ({alternative})", lambda z2, s: on_exact(_mid(z2), _mid(s)), exact, on_exact)
+
+
+def _t_two_sided(t2: Fraction, nu: Fraction) -> Any:
+    """P(|T| >= |t|) with nu degrees of freedom: I_x(nu/2, 1/2) at x = nu / (nu + t^2), or, where t^2 < nu (x near
+    1, where that series converges slowly), 1 - I_{1-x}(1/2, nu/2), 1 - x = t^2 / (nu + t^2), computed exactly first."""
+    F = flint()
+    if t2 < nu:
+        return 1 - _arb(t2 / (nu + t2)).beta_lower(F.fmpq(1, 2), _arb(nu / 2), regularized=1)
+    return _arb(nu / (nu + t2)).beta_lower(_arb(nu / 2), F.fmpq(1, 2), regularized=1)
+
+
+def t_two_sided_exact(t2: Fraction, nu: Fraction) -> Fraction | None:
+    """P(|T| >= |t|) where it is rational: 1 at t = 0; and for an even whole nu, where it is
+    1 - sqrt(x) sum_{j < nu/2} C(2j, j) / 4^j (1 - x)^j with x = t^2 / (nu + t^2), exactly when sqrt(x) is rational
+    (for an even nu it is irrational otherwise, so the rounding test ends)."""
+    if t2 == 0:
+        return Fraction(1)
+    if nu.denominator != 1 or nu.numerator % 2:
+        return None
+    x = t2 / (nu + t2)
+    root = exact_sqrt(x)
+    if root is None:
+        return None
+    total, term = Fraction(0), Fraction(1)
+    for j in range(nu.numerator // 2):
+        total += term
+        term = term * (1 - x) * (2 * j + 1) / (2 * j + 2)
+    return 1 - root * total
+
+
+def t_p_value(alternative: str) -> Fn:
+    """A t-test's p-value, args [t^2, nu, sign of t]: from P(|T| >= |t|) by the alternative."""
+
+    def exact(t2: Fraction, nu: Fraction, s: Fraction) -> Fraction | None:
+        two = t_two_sided_exact(t2, nu)
+        if two is None:
+            return None
+        if alternative == "two_sided":
+            return two
+        return HALF if t2 == 0 else (two / 2 if (s > 0) == (alternative == "greater") else 1 - two / 2)
+
+    def on_exact(t2: Fraction, nu: Fraction, s: Fraction) -> Any:
+        return _alt_tail(_t_two_sided(t2, nu), int(s), alternative)
+
+    return Fn(f"the t-test's p-value ({alternative})", lambda t2, nu, s: on_exact(_mid(t2), _mid(nu), _mid(s)), exact, on_exact)
+
+
+def correctly_rounded_by(compute: Callable[[int], Callable[[], Any]], places: int, guard: L.Guard, what: str) -> Fraction:
+    """A real value correctly rounded to `places` significant digits, from compute(working): a computation run at
+    `working` decimal digits whose Arb ball holds the true value (it may do work of its own first, outside the
+    lock: a quantile it needs). Ziv's test, as correctly_rounded: the working precision doubles until both ends of
+    the enclosure round alike, up to the host's digits budget."""
+    working = places + 10
+    while True:
+        guard.check_precision(working, what)
+        found = _at(working, compute(working))
+        if found is not None:
+            bounds = _enclosure(found, places, guard, what)
+            if bounds is not None:
+                lo, hi = bounds
+                a = round_significant(lo, places)
+                if a == round_significant(hi, places):
+                    return a
+        working = _next(working, guard)
+
+
+def compare_by(compute: Callable[[int], Callable[[], Any]], target: Fraction, guard: L.Guard, what: str) -> int:
+    """+1 when the true value is above `target`, -1 when below, decided from enclosures at a growing precision. A
+    value exactly at the target is never decided: the precision grows until the host's budget stops it."""
+    working = 30
+    while True:
+        guard.check_precision(working, what)
+        found = _at(working, compute(working))
+        if found is not None:
+            m, r, e = found
+            scale = Fraction(10) ** e
+            if Fraction(m - r) * scale > target:
+                return 1
+            if Fraction(m + r) * scale < target:
+                return -1
+        working = _next(working, guard)
+
+
+def fn_at(fn: Fn, args: list[Fraction]) -> Callable[[int], Callable[[], Any]]:
+    """An Fn at exact arguments, as a computation for correctly_rounded_by and compare_by."""
+    if fn.arb_exact is not None:
+        return lambda working: lambda: fn.arb_exact(*args)  # type: ignore[misc]
+    return lambda working: lambda: fn.arb(*[_arb(a) for a in args])
+
+
+def _phi(x: Any) -> Any:
+    """The standard normal cdf, erfc(-x / sqrt 2) / 2: accurate in either tail."""
+    return (-x / _sqrt2()).erfc() / 2
+
+
+def z_power(alternative: str) -> Fn:
+    """The power of a z-test, args [lambda^2, sign of lambda, alpha], lambda = delta sqrt(n) / sigma:
+    Phi(lambda - z_(1-alpha)) for "greater", Phi(-lambda - z_(1-alpha)) for "less", and
+    Phi(lambda - z_(1-alpha/2)) + Phi(-lambda - z_(1-alpha/2)) two-sided; z_(1-q) = sqrt(2) erfcinv(2q). Exactly
+    alpha when lambda is 0."""
+
+    def exact(l2: Fraction, s: Fraction, a: Fraction) -> Fraction | None:
+        return a if l2 == 0 else None
+
+    def on_exact(l2: Fraction, s: Fraction, a: Fraction) -> Any:
+        lam = int(s) * _arb(l2).sqrt()
+        if alternative == "two_sided":
+            c = _sqrt2() * _arb(a).erfcinv()
+            return _phi(lam - c) + _phi(-lam - c)
+        c = _sqrt2() * _arb(2 * a).erfcinv()
+        return _phi(lam - c) if alternative == "greater" else _phi(-lam - c)
+
+    return Fn(f"the z-test's power ({alternative})", lambda l2, s, a: on_exact(_mid(l2), _mid(s), _mid(a)), exact, on_exact)
+
+
+def _small(working: int) -> Any:
+    """A truncation target well below the working precision's last digit."""
+    return flint().arb(10) ** (-(working + 10))
+
+
+def nct_cdf(t: Any, nu: Fraction, lam: Any, working: int, guard: L.Guard) -> Any:
+    """P(T' <= t) for the noncentral t with nu degrees of freedom and noncentrality lam, for t > 0 (a ball), by
+    the series of Guenther (1978) and Lenth (1989, AS 243):
+
+        Phi(-lam) + 1/2 sum_j [p_j I_x(j + 1/2, nu/2) + q_j I_x(j + 1, nu/2)],   x = t^2 / (t^2 + nu),
+        p_j = e^(-mu) mu^j / j!,  q_j = lam e^(-mu) mu^j / (sqrt(2) Gamma(j + 3/2)),  mu = lam^2 / 2.
+
+    I_x(a + 1, b) = I_x(a, b) - x^a (1 - x)^b Gamma(a + b) / (Gamma(a + 1) Gamma(b)) carries each incomplete beta
+    to the next. The sum stops past the term where both ratios of terms, mu / (j + 1) and mu / (j + 3/2), are at
+    most 1/2 and twice the next terms are below 10^-(working + 10); since every I is in [0, 1], the rest is at
+    most twice the next terms, and that bound is added to the ball."""
+    F = flint()
+    arb = F.arb
+    half = arb(F.fmpq(1, 2))
+    eps = _small(working)
+    tt = t * t
+    v = _arb(nu)
+    x = tt / (tt + v)
+    rest = v / (tt + v)
+    b = v / 2
+    i_half = x.beta_lower(half, b, regularized=1)
+    i_one = x.beta_lower(arb(1), b, regularized=1)
+    lg_b = b.lgamma()
+    t_half = ((half + b).lgamma() - (half + 1).lgamma() - lg_b).exp() * x.sqrt() * rest**b
+    t_one = ((1 + b).lgamma() - lg_b).exp() * x * rest**b
+    a_half, a_one = half, arb(1)
+    mu = lam * lam / 2
+    e = (-mu).exp()
+    p = e
+    q = lam * e * (arb(2) / arb.pi()).sqrt()
+    total = arb(0)
+    j = 0
+    while True:
+        total += p * i_half + q * i_one
+        i_half -= t_half
+        t_half *= x * (a_half + b) / (a_half + 1)
+        a_half += 1
+        i_one -= t_one
+        t_one *= x * (a_one + b) / (a_one + 1)
+        a_one += 1
+        p *= mu / (j + 1)
+        q *= mu / (j + 1 + half)
+        j += 1
+        if j % 64 == 0:
+            guard.check_time()
+        if 2 * mu < j + 1 and 2 * (p + abs(q)) < eps:
+            break
+    tail = 2 * (p + abs(q))
+    return _phi(-lam) + total / 2 + (tail / 2) * arb(0, 1)
+
+
+def ncx2_sf(c: Any, df: int, lam: Any, working: int, guard: L.Guard) -> Any:
+    """P(X > c) for the noncentral chi-square with df degrees of freedom and noncentrality lam, the Poisson
+    mixture sum_j e^(-lam/2) (lam/2)^j / j! Q(df/2 + j, c/2) (Q the regularized upper incomplete gamma, carried by
+    Q(a + 1, y) = Q(a, y) + y^a e^(-y) / Gamma(a + 1)); past the term where lam/2 / (j + 1) <= 1/2 and twice the
+    next weight is below 10^-(working + 10), the rest is at most twice the next weight (every Q is in [0, 1])."""
+    F = flint()
+    arb = F.arb
+    eps = _small(working)
+    y = c / 2
+    a = arb(df) / 2
+    big_q = y.gamma_upper(a, regularized=1)
+    term = (a * y.log() - y - (a + 1).lgamma()).exp()
+    h = lam / 2
+    w = (-h).exp()
+    total = arb(0)
+    j = 0
+    while True:
+        total += w * big_q
+        big_q += term
+        term *= y / (a + 1 + j)
+        w *= h / (j + 1)
+        j += 1
+        if j % 64 == 0:
+            guard.check_time()
+        if 2 * h < j + 1 and 2 * w < eps:
+            break
+    return total + (2 * w) * arb(0, 1)
+
+
+def quantile_ball(value: Fraction, places: int) -> Any:
+    """The ball holding the true value of a quantile correctly rounded to `places` digits."""
+    F = flint()
+    if value == 0:
+        return F.arb(0)
+    r = half_unit(value, places)
+    return _arb(value) + F.arb(0, F.fmpq(r.numerator, r.denominator))
+
+
+def t_critical(alpha: Fraction, nu: Fraction, two_sided: bool, places: int, guard: L.Guard) -> Fraction:
+    """t_(1 - alpha) (or t_(1 - alpha/2) two-sided) with nu degrees of freedom, correctly rounded to `places`."""
+    return _t_quantile_cr(1 - (alpha / 2 if two_sided else alpha), nu, places, guard)
+
+
+def chi2_critical(alpha: Fraction, df: int, places: int, guard: L.Guard) -> Fraction:
+    """The chi-square quantile at 1 - alpha with df degrees of freedom (a gamma of shape df/2, scale 2),
+    correctly rounded to `places`."""
+    return _quantile_cr(_gamma_tails(Fraction(df, 2), Fraction(2)), 1 - alpha, places, guard)

@@ -1,6 +1,6 @@
 ---
 name: support-a-decision-with-math
-description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison with a limit, a root, a logarithm, a gain in dB, an angle, a p-value or a percentile (normal, lognormal, gamma, beta), a count or a binomial probability, divisibility or primes, a Bayesian update from a published prior, a randomization test, Shapley credit, an empirical formula whose formula and constants the person or a cited document gave, or a computation over data or a grid (a mean, a standard deviation, a fitted slope, an FFT) - especially one with units. It covers composing the computation, units, arrays, rounded and float64 results, where an empirical formula's constants must come from (never your memory), refusals, the working shown back, the computation record, saving it, linking it to the decision, and checking it later.
+description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison with a limit, a root, a logarithm, a gain in dB, an angle, a p-value or a percentile (normal, lognormal, gamma, beta), a hypothesis test (z, t, chi-square, binomial, Fisher) or its power, a count or a binomial probability, divisibility or primes, a Bayesian update from a published prior, a randomization test, Shapley credit, an empirical formula whose formula and constants the person or a cited document gave, or a computation over data or a grid (a mean, a standard deviation, a fitted slope, an FFT) - especially one with units. It covers composing the computation, units, arrays, result labels, where an empirical formula's constants come from (never your memory), refusals, the working, the record, linking it and checking it later.
 compatibility: Needs the flo2-calc MCP server (evaluate_graph, add_node, record_computation, rerun_record), which also serves this skill as the MCP prompt support-a-decision-with-math and the resource skill://flo2-calc/support-a-decision-with-math/SKILL.md. Nothing else has to be running. Linking a record to a design uses the design tool's own tools (reflow2), when there is one.
 ---
 
@@ -57,8 +57,8 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
    arrives as a binary float.
    - A value is **one** number. Never type arithmetic inside it (`"3 + 4"`, `"2^10"`): make each operation a node.
    - Temperatures, money, gallons, troy weight and decibels are spelled as `references/units.md` says.
-3. **Evaluate it** with `evaluate_graph` (the whole graph in one call) or `add_node` (one node at a time, when you
-   want to see each value as you go; pass back the `graph` it returns). The result is the same either way. What a
+3. **Evaluate it** with `evaluate_graph` (the whole graph in one call) or `add_node` (one node at a time; pass back the
+   `graph` it returns). The result is the same either way. What a
    reply holds: `references/operators.md`.
    - When the answer has several parts, name them all: `"result": ["margin", "fits"]`.
    - **Read the `formula` and the `working` it shows back, and check they are the computation you meant.** Your
@@ -67,7 +67,6 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
    family's arguments, examples and edge cases: `references/operators.md`.
    - **Constants, roots, logarithms, powers:** `pi`, `e`, `sqrt`, `exp`, `ln`, `log10`, `pow`. Do not type pi to
      30 digits as an input.
-   - **Trigonometry:** `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`. **Rounding:** `ceil`, `floor`, `round`.
    - **Distributions:** normal, chi-square, Student-t, lognormal, gamma, beta. Which distribution a population
      follows, and its parameters, come from the person or the publication that fits it: say which, as the inputs'
      sources.
@@ -85,7 +84,7 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
 5. **Give data as an array, not as one node per number:** `{"array": [...], "unit": "..."}`, one unit for the
    whole array. Every operator works element by element; reductions, the straight-line fit, the FFT, grids, data
    files and the `"float64"` label are in `references/arrays.md`.
-   - `length` counts an array's elements (`"axis"` for a grid's columns or rows). Use it for n, never a typed count:
+   - `length` counts an array's elements. Use it for n, never a typed count:
      `sqrt(n)` and degrees of freedom then rest on the data, not on your counting.
    - Statistics over data are named, with no default: `variance_sample` or `variance_population`, `sd_sample` or
      `sd_population`. Choose the one the question means (n - 1 for a sample, n for a whole population).
@@ -100,10 +99,14 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
      apply: say so instead of computing one.
    - **Shapley values** (`shapley_values`). If a combination was never tried, flo2-calc refuses, naming it: ask the
      person for its outcome; never estimate it yourself.
+   - **A hypothesis test** (z, t, chi-square, binomial, Fisher's exact) **or its power and sample size**:
+     `references/hypothesis-tests.md`. Never build a test from cdfs by hand. Fix alpha (its source the design's
+     constraint), the test and its `"alternative"` before the data; whether its assumptions hold is your judgement
+     with the person. Quote the decision as the record words it ("reject H0 at α = 0.05"): never "proves H1", and
+     never "H0 is true". A chi-square refused for expected counts below 5: use the exact test it names.
 7. **Read a refusal and fix the cause; never work around it.**
    - A `"status": "refused"` reply names the node, the operation and why. For example, `add cannot combine mm and g`
      means the computation is wrong, not the calculator. Tell the person what did not add up.
-   - A "Malformed call" error names the field to fix: an unknown unit, a missing node, a cycle.
    - An expression typed as a value is refused. If it is called **malformed** (`"3 + * 4"`), do not repair it or guess
      what it meant: ask the person what was intended, then build that as nodes.
    - If it is called **ambiguous** (`"6/2(1+2)"`, an implied multiplication), the refusal gives both readings. Never
@@ -111,8 +114,7 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
    - An unknown unit that pint reads (`"mile"`) is named for what it is, with the units of that kind flo2-calc knows.
      Nothing is substituted: give the value in one of those units, from a source that states it, never a conversion
      factor you recall.
-   - A near-miss unit may say what to write instead (`khz` gives `Write "kHz"`). When flo2-calc gives no hint, write
-     the unit you mean yourself. Never change its prefix to get past the refusal.
+   - Never change a unit's prefix to get past a refusal (a near-miss's hint: `references/units.md`).
    - `"kind": "undecidable"` means a rounded value's error bound straddles the answer: `sqrt(2) * sqrt(2) = 2` cannot be
      told. Ask for more `digits`, or compute it another way (compare the exact squares instead). Never decide it
      yourself.
@@ -138,16 +140,15 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
 
 ## On flo2.io (a helper beside the person's design)
 
-When flo2-calc is reached through flo2's `use_helper_tool`, the steps are the same, with three differences:
+Through flo2's `use_helper_tool` the steps are the same, except:
 
 - There is no folder to write in, so leave `output_path` out. flo2 keeps the record that `record_computation` returns
   as a file in the person's design, every version, and hands you its name and a link. Give the person the link.
 - Link that kept file to the decision with the design tools (`use_design_tool`), as in step 9.
 - To re-check a record, pass its content to `rerun_record`.
-- flo2.io's limits are lower than a laptop's (`references/records.md`). Arrays come inline there: no data files. A
-  calculation past them comes back as a not-yet-computed record, kept in the design like any other. The person, or
-  an agent on their machine, completes it there with the standalone flo2-calc (step 11). Then link the completed
-  record to the decision in its place.
+- flo2.io's limits are lower (`references/records.md`), and arrays come inline, with no data files. A calculation
+  past them comes back not yet computed, kept like any record: the person, or an agent on their machine, completes
+  it with the standalone flo2-calc (step 11) and links that record in its place.
 
 ## Talking about it
 

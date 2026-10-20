@@ -477,11 +477,11 @@ def test_the_formula_writes_mod_divides_gcd_and_the_range_as_mathematics():
 # ---------------------------------------------------------------- the record
 
 
-def test_a_record_of_the_trial_validates_under_schema_9_and_re_runs_byte_for_byte():
+def test_a_record_of_the_trial_validates_under_the_current_schema_and_re_runs_byte_for_byte():
     g = read_graph(euler_graph(0, 39))
     rec = R.build(evaluate(g), "euler-41", "the primes trial")
-    assert rec["schema_version"] == 9
-    jsonschema.Draft202012Validator(R.schema(9)).validate(rec)
+    assert rec["schema_version"] == 10
+    jsonschema.Draft202012Validator(R.schema()).validate(rec)
     again = R.rerun(R.load(json.loads(R.file_bytes(rec))))
     assert again["reproduces"] is True, again["differences"]
 
@@ -492,7 +492,7 @@ def test_a_factorization_stopped_at_the_limit_is_a_pending_record_a_larger_host_
     ev = evaluate(g, L.Guard(small))
     assert ev.stopped
     pending = R.build_pending(g, "f7", None, ev.refusal, small)
-    jsonschema.Draft202012Validator(R.schema(9)).validate(pending)
+    jsonschema.Draft202012Validator(R.schema()).validate(pending)
     assert pending["limits_in_force"]["max_factor_digits"] == 30 and pending["limits_in_force"]["max_prime_digits"] == 300
     assert "max_factor_digits of at least 39 digits" in R.needs_of(pending["stopped"])
     assert R._room_here(pending["stopped"], L.LAPTOP) and not R._room_here(pending["stopped"], small)
@@ -504,17 +504,17 @@ def test_an_integer_range_stopped_at_the_exact_array_limit_is_a_valid_pending_re
     g = read_graph(graph(inp("a", "1", "t"), inp("b", "5000", "t"), op("n", "integer_range", "a", "b")))
     ev = evaluate(g, L.Guard(L.FLO2_IO))
     pending = R.build_pending(g, "range", None, ev.refusal, L.FLO2_IO)
-    jsonschema.Draft202012Validator(R.schema(9)).validate(pending)
+    jsonschema.Draft202012Validator(R.schema()).validate(pending)
     assert "max_exact_elements of at least 5,000 elements" in R.needs_of(pending["stopped"])
 
 
-def test_every_operator_is_in_schema_9_and_none_of_0_9_0s_in_version_8():
+def test_every_integer_operator_is_in_schema_9_and_none_in_version_8():
     def ops_of(version):
         node = R.schema(version)["$defs"]["graph"]["properties"]["nodes"]["items"]["oneOf"][1]
         return set(node["properties"]["op"]["enum"])
 
-    assert ops_of(9) == set(OPS)
-    assert set(OPS) - ops_of(8) == {"mod", "divides", "gcd", "is_prime", "factorize", "integer_range"}
+    assert ops_of(9) <= set(OPS)
+    assert ops_of(9) - ops_of(8) == {"mod", "divides", "gcd", "is_prime", "factorize", "integer_range"}
 
 
 # ---------------------------------------------------------------- over MCP

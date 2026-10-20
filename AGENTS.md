@@ -61,7 +61,15 @@
   from the primes trial) adds the integer operators (`integers.py`): `mod` (floored, the sign of the divisor), `divides`,
   `gcd`, `is_prime`, `factorize` (a grid of rows [p, e]) and `integer_range` (a to b, both ends), each on exact whole
   plain numbers only. **Primality is proven, never probable**: a probable prime past `max_prime_digits` is refused,
-  and a factorization past `max_factor_digits` is refused, never answered in part. The units side (more units, degC/degF, currencies, dB) is
+  and a factorization past `max_factor_digits` is refused, never answered in part. 0.10.0
+  (`dec:v0-10-0-named-test-and-power-choices`, proposed; `req:calc-computes-named-hypothesis-tests-as-kept-records` and
+  `req:calc-computes-power-and-sample-size-up-front`, phase 5) adds the named hypothesis tests (`hypothesis.py`: z, one-
+  and two-sample t, chi-square goodness of fit and independence, exact binomial, Fisher's exact) and, for each, its
+  power and sample size (`power.py`). Alpha is a test's last argument; `"alternative"` and the two-sample t-test's
+  `"variance"` are never defaulted. **A test never says more than "reject H0 at α" or "fail to reject H0 at α"**,
+  decided on the true p-value; a chi-square test whose expected count is below 5 is refused (`assumption_fails`), not
+  approximated. A test's or a plan's value carries a block (`hypothesis_test`, `test_plan`) with the same fields for
+  every test: the class is pinned in `tests/test_hypothesis.py` and `tests/test_power.py`. The units side (more units, degC/degF, currencies, dB) is
   `units.py`'s, not the evaluator's.
 - **Results** may be one node or a list (`"result": ["lo", "hi"]`), each reported by name as `results`.
 - **Two ways in** (`dec:graph-submission-modes`): a whole graph, or node by node through `add_node`. Both end in
@@ -162,12 +170,14 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
   round-2 operators' fields, and a new writing of values; version 5 (0.6.0) arrays; version 6 (0.6.1)
   `max_exact_elements`; version 7 (0.7.0) every formula line's value, round 3's operators and `delta_K`; version 8
   (0.8.0) the cure design's operators, their node fields, a value's `detail` and two new limits; version 9 (0.9.0) the
-  integer operators and two more limits. Every older
+  integer operators and two more limits; version 10 (0.10.0) the named tests, their plans, `variance`, and the
+  `hypothesis_test` and `test_plan` blocks. Every older
   version must still re-run, each under its own version's writing (`evaluator.LEGACY` for 1 to 3,
   `evaluator.FORMULA_RESULTS_ONLY` for 4 to 6) and rules (`record.rules_of`: before `delta_K` for 1 to 6):
   `tests/data/*.v1.calc.json` were made by 0.1.0, `tests/data/*.v2.calc.json` by 0.2.0,
   `tests/data/display.v3.calc.json` by 0.4.0, `tests/data/temperature-and-formula.v6.calc.json` by 0.6.1, and
-  `tests/data/statistics.v7.calc.json` by 0.7.0, and `tests/data/divisibility.v8.calc.json` by 0.8.1.
+  `tests/data/statistics.v7.calc.json` by 0.7.0, `tests/data/divisibility.v8.calc.json` by 0.8.1, and
+  `tests/data/hand-composed-tests.v9.calc.json` by 0.9.0.
 - Nothing goes to stdout except MCP messages.
 - The licence is Apache-2.0. No secrets.
 - Record what you build on the design:
@@ -187,9 +197,11 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | `src/flo2_calc/trials.py` | the randomization test of an on/off trial, exact over every arrangement | `cmp:evaluator`, `cap:a-randomization-test-gives-an-on-off-trials-exact-p-value` |
 | `src/flo2_calc/shapley.py` | Shapley values from a table naming every combination | `cmp:evaluator`, `cap:shapley-values-share-credit-among-a-few-factors` |
 | `src/flo2_calc/integers.py` | the integer operators: mod, divides, gcd, is_prime (proven), factorize, integer_range | `cmp:evaluator`, `cap:exact-integer-operators-remainder-divisibility-gcd-primality-factorization-and-range` |
+| `src/flo2_calc/hypothesis.py` | the named hypothesis tests: statistic, p-value, sidedness, degrees of freedom, assumptions, the decision at alpha | `cmp:evaluator`, `cap:named-hypothesis-tests-kept-as-records-with-their-decision-at-alpha` |
+| `src/flo2_calc/power.py` | power and sample size for each named test | `cmp:evaluator`, `cap:power-and-sample-size-of-each-named-test` |
 | `src/flo2_calc/arrays.py` | arrays: reading them (inline, or a data file under `--root`), element-wise operations, reductions, statistics over data, the FFT, the float64 label and its bounds | `cmp:evaluator`, `req:flo2-calc-computes-over-arrays` |
 | `src/flo2_calc/limits.py` | the host-set limits, and the guard that checks them while evaluating | `cmp:evaluator`, `cap:a-calculation-is-stopped-at-the-hosts-limits` |
-| `src/flo2_calc/realmath.py` | the rounded class: correctly rounded values from Arb enclosures, and their bounds | `cmp:evaluator`, `cap:a-rounded-result-is-correctly-rounded-and-labelled`, `cap:trigonometry-and-rounding-to-places`, `cap:statistical-distributions`, `cap:skewed-distributions-lognormal-gamma-beta` |
+| `src/flo2_calc/realmath.py` | the rounded class: correctly rounded values from Arb enclosures, and their bounds; the tests' p-values, the noncentral t and chi-square (0.10.0) | `cmp:evaluator`, `cap:a-rounded-result-is-correctly-rounded-and-labelled`, `cap:trigonometry-and-rounding-to-places`, `cap:statistical-distributions`, `cap:skewed-distributions-lognormal-gamma-beta`, `cap:named-hypothesis-tests-kept-as-records-with-their-decision-at-alpha`, `cap:power-and-sample-size-of-each-named-test` |
 | `src/flo2_calc/numbers.py` | exact numbers: read, check, write | `cmp:evaluator` |
 | `src/flo2_calc/units.py` | the unit vocabulary, dimensions, exact conversion, the near-miss hint | `cmp:units` |
 | `src/flo2_calc/temperature.py` | degC and degF: what a temperature with an offset may do | `cmp:units` |

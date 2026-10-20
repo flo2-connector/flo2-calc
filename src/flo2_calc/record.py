@@ -1,11 +1,11 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-9.schema.json; version 1 to
-8 records, schemas/calc-record-1.schema.json to calc-record-8.schema.json,
+A record is one JSON object (schemas/calc-record-10.schema.json; version 1 to
+9 records, schemas/calc-record-1.schema.json to calc-record-9.schema.json,
 still re-run):
 
     record_format   "flo2-calc computation record"
-    schema_version  9
+    schema_version  10
     status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
@@ -69,6 +69,16 @@ limits_in_force gains max_prime_digits and max_factor_digits; a stop may name
 either, or max_exact_elements (an integer range is exact or not made). A
 version 8 record re-runs as it was made (tests/data/divisibility.v8.calc.json,
 made by 0.8.1).
+
+VERSION 10 (flo2-calc 0.10.0, dec:v0-10-0-named-test-and-power-choices) allows
+the named hypothesis tests (hypothesis.py) and, for each, its power and sample
+size (power.py), with "alternative" and "variance" on their nodes; a test's
+value carries "hypothesis_test" (its statistic, p-value, sidedness, degrees of
+freedom, assumptions, and the decision at alpha, with alpha's source) and a
+plan's "test_plan". A version 9 record re-runs as it was made
+(tests/data/hand-composed-tests.v9.calc.json, made by 0.9.0). A record holds
+no time: when a test's criteria were fixed, and whether they moved after its
+data, is read from the design's history of alpha's source and of the record.
 
 DETERMINISTIC. There is no timestamp and no machine name, and the file is
 written with sorted keys, so the same graph (and name, and supports) gives a
@@ -149,7 +159,7 @@ from flo2_calc.evaluator import (
 from flo2_calc.numbers import ARITHMETIC_NOTE, ARRAYS_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 SCHEMA_FILES = {
     1: "calc-record-1.schema.json",
     2: "calc-record-2.schema.json",
@@ -160,6 +170,7 @@ SCHEMA_FILES = {
     7: "calc-record-7.schema.json",
     8: "calc-record-8.schema.json",
     9: "calc-record-9.schema.json",
+    10: "calc-record-10.schema.json",
 }
 DELTA_K_FROM = 7  # the first schema version whose rules write a K known to be a change as delta_K
 COMPUTED = "computed"

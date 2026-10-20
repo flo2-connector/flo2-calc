@@ -40,7 +40,7 @@ jobs:
       # The conformance check (flo2's MUST tier, asked as flo2's plug asks it),
       # the tools over a real client session, every host-set limit and the
       # not-yet-computed record, and arrays (a 256 x 256 grid's integral and 2-D
-      # FFT among them), asked of the image under flo2-tool-sandbox's
+      # FFT among them) and a named hypothesis test (0.10.0), asked of the image under flo2-tool-sandbox's
       # flags and the image's own limits (flo2.io's profile). 128m is the cap
       # README.md's measurement supports; flo2's broker sets its own from that
       # measurement. Runaway calculations must be stopped with their reason and
@@ -53,4 +53,4 @@ jobs:
             --cap-drop ALL --security-opt no-new-privileges --user 65534:65534
             --mount type=bind,source=${{ github.workspace }}/tests,target=/design,readonly
             flo2-calc:ci
-        run: python -m pytest -v tests/test_conformance.py tests/test_server.py tests/test_limits.py tests/test_pending_record.py tests/test_arrays_server.py
+        run: python -m pytest -v tests/test_conformance.py tests/test_server.py tests/test_limits.py tests/test_pending_record.py tests/test_arrays_server.py tests/test_hypothesis.py::test_a_named_test_over_mcp
