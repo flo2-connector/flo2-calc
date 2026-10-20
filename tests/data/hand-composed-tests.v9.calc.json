@@ -1,0 +1,751 @@
+{
+  "arithmetic": "Exact rational arithmetic on the inputs as written: no binary floating point. + - * / and integer powers are exact, and so is every unit conversion but deg-rad and dBm-mW, so every value not marked \"rounded\" is exact FOR THESE INPUTS and no more accurate than they are: a decimal typed for an irrational number (a truncated pi or e) is taken as exactly that decimal, not as the number it stands for (the pi and e operators are the constants themselves). A whole number is written in full. Any other value whose decimal ends (at most 40 significant digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact value for these inputs is given beside it as a fraction. A computed value whose compound unit is exactly a simpler unit is shown in it (\"simplified_from\" names the unit it was computed in); the value does not change. Comparisons use exact values. A value marked \"rounded\" is NOT exact: it comes from pi, e, a root, exp, ln, log10, a non-whole power (or a whole one asked for \"digits\" past the digits budget), trigonometry, a deg-rad conversion, a decibel conversion or a distribution, or from arithmetic on such a value. It is a decimal of the stated number of significant digits, every one written, given no \"exact\" fraction, and \"error_at_most\" bounds its distance from the true value. Where it says \"correctly_rounded\", it is the true value rounded half-even, decided from a rigorous enclosure (Arb ball arithmetic, python-flint). A comparison, ceil, floor or round of a rounded value is answered only when its error bound decides it, and refused otherwise. An ARRAY of exact numbers stays exact through rational operations, reductions and the statistics that are rational; a value marked \"float64\" is NOT exact: an FFT, a rounded-class function over an array, an array of more elements than this record's max_exact_elements (the host's setting where it was made), or anything mixed with such a value, computed in IEEE 754 double precision. Every element of a float64 value lies within its \"error_at_most\" of the true value, a rigorous bound whose basis \"how\" names (the FFT's: Higham 2002, Theorem 24.2, for a power-of-two length; Arb's rigorous DFT for any other). An array of more than 1,024 elements is written as its sha256 over every element's text, which re-running compares.",
+  "content_hash": "sha256:1bdcddb842e4ce8ab73271e92f104660600cea7f145fe7d5050be68f09048898",
+  "formula": [
+    {
+      "latex": "\\text{t} = \\frac{\\overline{\\text{a}} - \\overline{\\text{b}}}{\\sqrt{\\frac{\\operatorname{Var}_{\\text{sample}}\\left(\\text{a}\\right)}{\\operatorname{length}\\left(\\text{a}\\right)} + \\frac{\\operatorname{Var}_{\\text{sample}}\\left(\\text{b}\\right)}{\\operatorname{length}\\left(\\text{b}\\right)}}} \\approx -1.86081346748685310152516799541",
+      "node": "t",
+      "text": "t = (mean(a) - mean(b)) / sqrt(variance_sample(a) / length(a) + variance_sample(b) / length(b)) ≈ -1.86081346748685310152516799541"
+    },
+    {
+      "latex": "\\text{t\\_crit} = \\operatorname{t\\_quantile}\\left(\\text{p975},\\ \\text{dof}\\right) \\approx 2.10092204024103848806087164373",
+      "node": "t_crit",
+      "text": "t_crit = t_quantile(p975, dof) ≈ 2.10092204024103848806087164373"
+    },
+    {
+      "latex": "\\text{p\\_chi} = \\operatorname{chi2\\_sf}\\left(\\text{x2},\\ \\text{three}\\right) \\approx 0.925431080317467882784111588149",
+      "node": "p_chi",
+      "text": "p_chi = chi2_sf(x2, three) ≈ 0.925431080317467882784111588149"
+    },
+    {
+      "latex": "\\text{tail} = \\operatorname{binomial\\_sf}\\left(\\text{k},\\ \\text{n},\\ \\text{half}\\right) = 0.942340850830078125",
+      "node": "tail",
+      "text": "tail = binomial_sf(k, n, half) = 0.942340850830078125"
+    },
+    {
+      "latex": "\\text{r} = \\text{n} \\bmod \\text{k} = 2",
+      "node": "r",
+      "text": "r = n mod k = 2"
+    },
+    {
+      "latex": "\\text{prime} = \\operatorname{is\\_prime}\\left(\\text{n}\\right) = \\text{false}",
+      "node": "prime",
+      "text": "prime = is_prime(n) = false"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "a",
+        "source": "Cushny and Peebles (1905), drug 1, extra hours of sleep (Student 1908)",
+        "value": {
+          "array": [
+            "0.7",
+            "-1.6",
+            "-0.2",
+            "-1.2",
+            "-0.1",
+            "3.4",
+            "3.7",
+            "0.8",
+            "0.0",
+            "2.0"
+          ],
+          "unit": "h"
+        }
+      },
+      {
+        "id": "b",
+        "source": "Cushny and Peebles (1905), drug 2",
+        "value": {
+          "array": [
+            "1.9",
+            "0.8",
+            "1.1",
+            "0.1",
+            "-0.1",
+            "4.4",
+            "5.5",
+            "1.6",
+            "4.6",
+            "3.4"
+          ],
+          "unit": "h"
+        }
+      },
+      {
+        "args": [
+          "a"
+        ],
+        "id": "mean_a",
+        "op": "mean"
+      },
+      {
+        "args": [
+          "b"
+        ],
+        "id": "mean_b",
+        "op": "mean"
+      },
+      {
+        "args": [
+          "a"
+        ],
+        "id": "var_a",
+        "op": "variance_sample"
+      },
+      {
+        "args": [
+          "b"
+        ],
+        "id": "var_b",
+        "op": "variance_sample"
+      },
+      {
+        "args": [
+          "a"
+        ],
+        "id": "n_a",
+        "op": "length"
+      },
+      {
+        "args": [
+          "b"
+        ],
+        "id": "n_b",
+        "op": "length"
+      },
+      {
+        "args": [
+          "va_n",
+          "vb_n"
+        ],
+        "id": "se2",
+        "op": "add"
+      },
+      {
+        "args": [
+          "var_a",
+          "n_a"
+        ],
+        "id": "va_n",
+        "op": "div"
+      },
+      {
+        "args": [
+          "var_b",
+          "n_b"
+        ],
+        "id": "vb_n",
+        "op": "div"
+      },
+      {
+        "args": [
+          "mean_a",
+          "mean_b"
+        ],
+        "id": "diff",
+        "op": "sub"
+      },
+      {
+        "args": [
+          "se2"
+        ],
+        "id": "se",
+        "op": "sqrt"
+      },
+      {
+        "args": [
+          "diff",
+          "se"
+        ],
+        "id": "t",
+        "op": "div"
+      },
+      {
+        "id": "p975",
+        "source": "two-sided, alpha 0.05",
+        "value": "0.975"
+      },
+      {
+        "id": "dof",
+        "source": "pooled degrees of freedom, n_a + n_b - 2",
+        "value": "18"
+      },
+      {
+        "args": [
+          "p975",
+          "dof"
+        ],
+        "id": "t_crit",
+        "op": "t_quantile"
+      },
+      {
+        "id": "x2",
+        "source": "a chi-square statistic, for the tail",
+        "value": "0.47"
+      },
+      {
+        "id": "three",
+        "source": "degrees of freedom",
+        "value": "3"
+      },
+      {
+        "args": [
+          "x2",
+          "three"
+        ],
+        "id": "p_chi",
+        "op": "chi2_sf"
+      },
+      {
+        "id": "k",
+        "source": "successes",
+        "value": "6"
+      },
+      {
+        "id": "n",
+        "source": "trials",
+        "value": "20"
+      },
+      {
+        "id": "half",
+        "source": "null rate",
+        "value": "1/2"
+      },
+      {
+        "args": [
+          "k",
+          "n",
+          "half"
+        ],
+        "id": "tail",
+        "op": "binomial_sf"
+      },
+      {
+        "args": [
+          "n",
+          "k"
+        ],
+        "id": "r",
+        "op": "mod"
+      },
+      {
+        "args": [
+          "n"
+        ],
+        "id": "prime",
+        "op": "is_prime"
+      }
+    ],
+    "result": [
+      "t",
+      "t_crit",
+      "p_chi",
+      "tail",
+      "r",
+      "prime"
+    ]
+  },
+  "inputs": [
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:0c90232d9344a407deb0e3fa6cf2ebe9625af118bef1803afedfb3fba61d2a4b",
+        "shape": [
+          10
+        ],
+        "unit": "h"
+      },
+      "id": "a",
+      "source": "Cushny and Peebles (1905), drug 1, extra hours of sleep (Student 1908)",
+      "unit": "h",
+      "value": "array 10 (exact, h)"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:4eae707fbf47f2bfcf381c248a1b90a76947fd91bf6dbbe73c7c9e82e69074fd",
+        "shape": [
+          10
+        ],
+        "unit": "h"
+      },
+      "id": "b",
+      "source": "Cushny and Peebles (1905), drug 2",
+      "unit": "h",
+      "value": "array 10 (exact, h)"
+    },
+    {
+      "id": "p975",
+      "source": "two-sided, alpha 0.05",
+      "unit": "",
+      "value": "0.975"
+    },
+    {
+      "id": "dof",
+      "source": "pooled degrees of freedom, n_a + n_b - 2",
+      "unit": "",
+      "value": "18"
+    },
+    {
+      "id": "x2",
+      "source": "a chi-square statistic, for the tail",
+      "unit": "",
+      "value": "0.47"
+    },
+    {
+      "id": "three",
+      "source": "degrees of freedom",
+      "unit": "",
+      "value": "3"
+    },
+    {
+      "id": "k",
+      "source": "successes",
+      "unit": "",
+      "value": "6"
+    },
+    {
+      "id": "n",
+      "source": "trials",
+      "unit": "",
+      "value": "20"
+    },
+    {
+      "id": "half",
+      "source": "null rate",
+      "unit": "",
+      "value": "0.5"
+    }
+  ],
+  "max_exact_elements": 65536,
+  "name": "hand-composed-tests",
+  "produced_by": {
+    "flo2_calc": "0.9.0",
+    "numpy": "2.5.3",
+    "pint": "0.26.1",
+    "python_flint": "0.9.0"
+  },
+  "record_format": "flo2-calc computation record",
+  "results": [
+    {
+      "node": "t",
+      "rounded": {
+        "correctly_rounded": false,
+        "digits": 30,
+        "error_at_most": "6.1e-30",
+        "from": [
+          "se"
+        ]
+      },
+      "value": "-1.86081346748685310152516799541"
+    },
+    {
+      "node": "t_crit",
+      "rounded": {
+        "correctly_rounded": true,
+        "digits": 30,
+        "error_at_most": "5e-30",
+        "from": [
+          "t_crit"
+        ]
+      },
+      "value": "2.10092204024103848806087164373"
+    },
+    {
+      "node": "p_chi",
+      "rounded": {
+        "correctly_rounded": true,
+        "digits": 30,
+        "error_at_most": "5e-31",
+        "from": [
+          "p_chi"
+        ]
+      },
+      "value": "0.925431080317467882784111588149"
+    },
+    {
+      "node": "tail",
+      "value": "0.942340850830078125"
+    },
+    {
+      "node": "r",
+      "value": "2"
+    },
+    {
+      "node": "prime",
+      "value": "false"
+    }
+  ],
+  "schema_version": 9,
+  "status": "computed",
+  "supports": {
+    "design_node": "req:the-math-of-a-study-is-designed-up-front"
+  },
+  "values": [
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:0c90232d9344a407deb0e3fa6cf2ebe9625af118bef1803afedfb3fba61d2a4b",
+        "shape": [
+          10
+        ],
+        "unit": "h",
+        "values": [
+          "0.7",
+          "-1.6",
+          "-0.2",
+          "-1.2",
+          "-0.1",
+          "3.4",
+          "3.7",
+          "0.8",
+          "0",
+          "2"
+        ]
+      },
+      "node": "a",
+      "value": "array 10 (exact, h)"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:4eae707fbf47f2bfcf381c248a1b90a76947fd91bf6dbbe73c7c9e82e69074fd",
+        "shape": [
+          10
+        ],
+        "unit": "h",
+        "values": [
+          "1.9",
+          "0.8",
+          "1.1",
+          "0.1",
+          "-0.1",
+          "4.4",
+          "5.5",
+          "1.6",
+          "4.6",
+          "3.4"
+        ]
+      },
+      "node": "b",
+      "value": "array 10 (exact, h)"
+    },
+    {
+      "node": "mean_a",
+      "value": "0.75 h"
+    },
+    {
+      "node": "mean_b",
+      "value": "2.33 h"
+    },
+    {
+      "exact": "5761/1800 h^2",
+      "node": "var_a",
+      "value": "3.20055555555555555555555555556 h^2"
+    },
+    {
+      "node": "var_b",
+      "value": "4.009 h^2"
+    },
+    {
+      "node": "n_a",
+      "value": "10"
+    },
+    {
+      "node": "n_b",
+      "value": "10"
+    },
+    {
+      "exact": "5761/18000 h^2",
+      "node": "va_n",
+      "value": "0.320055555555555555555555555556 h^2"
+    },
+    {
+      "node": "vb_n",
+      "value": "0.4009 h^2"
+    },
+    {
+      "exact": "32443/45000 h^2",
+      "node": "se2",
+      "value": "0.720955555555555555555555555556 h^2"
+    },
+    {
+      "node": "diff",
+      "value": "-1.58 h"
+    },
+    {
+      "node": "se",
+      "rounded": {
+        "correctly_rounded": true,
+        "digits": 30,
+        "error_at_most": "5e-31 h",
+        "from": [
+          "se"
+        ]
+      },
+      "value": "0.849091017238761957423080524266 h"
+    },
+    {
+      "node": "t",
+      "rounded": {
+        "correctly_rounded": false,
+        "digits": 30,
+        "error_at_most": "6.1e-30",
+        "from": [
+          "se"
+        ]
+      },
+      "value": "-1.86081346748685310152516799541"
+    },
+    {
+      "node": "p975",
+      "value": "0.975"
+    },
+    {
+      "node": "dof",
+      "value": "18"
+    },
+    {
+      "node": "t_crit",
+      "rounded": {
+        "correctly_rounded": true,
+        "digits": 30,
+        "error_at_most": "5e-30",
+        "from": [
+          "t_crit"
+        ]
+      },
+      "value": "2.10092204024103848806087164373"
+    },
+    {
+      "node": "x2",
+      "value": "0.47"
+    },
+    {
+      "node": "three",
+      "value": "3"
+    },
+    {
+      "node": "p_chi",
+      "rounded": {
+        "correctly_rounded": true,
+        "digits": 30,
+        "error_at_most": "5e-31",
+        "from": [
+          "p_chi"
+        ]
+      },
+      "value": "0.925431080317467882784111588149"
+    },
+    {
+      "node": "k",
+      "value": "6"
+    },
+    {
+      "node": "n",
+      "value": "20"
+    },
+    {
+      "node": "half",
+      "value": "0.5"
+    },
+    {
+      "node": "tail",
+      "value": "0.942340850830078125"
+    },
+    {
+      "node": "r",
+      "value": "2"
+    },
+    {
+      "node": "prime",
+      "value": "false"
+    }
+  ],
+  "working": [
+    {
+      "label": "given",
+      "latex": "\\text{a} = \\text{array 10 (exact, h)}",
+      "node": "a",
+      "step": 1,
+      "text": "a = array 10 (exact, h)"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{b} = \\text{array 10 (exact, h)}",
+      "node": "b",
+      "step": 2,
+      "text": "b = array 10 (exact, h)"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{mean\\_a} = \\overline{\\text{a}} = 0.75\\,\\mathrm{h}",
+      "node": "mean_a",
+      "step": 3,
+      "text": "mean_a = mean(a) = 0.75 h"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{mean\\_b} = \\overline{\\text{b}} = 2.33\\,\\mathrm{h}",
+      "node": "mean_b",
+      "step": 4,
+      "text": "mean_b = mean(b) = 2.33 h"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{var\\_a} = \\operatorname{Var}_{\\text{sample}}\\left(\\text{a}\\right) = \\frac{5761}{1800}\\,\\mathrm{h}^{2}",
+      "node": "var_a",
+      "step": 5,
+      "text": "var_a = variance_sample(a) = 5761/1800 h^2"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{var\\_b} = \\operatorname{Var}_{\\text{sample}}\\left(\\text{b}\\right) = 4.009\\,\\mathrm{h}^{2}",
+      "node": "var_b",
+      "step": 6,
+      "text": "var_b = variance_sample(b) = 4.009 h^2"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{n\\_a} = \\operatorname{length}\\left(\\text{a}\\right) = 10",
+      "node": "n_a",
+      "step": 7,
+      "text": "n_a = length(a) = 10"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{n\\_b} = \\operatorname{length}\\left(\\text{b}\\right) = 10",
+      "node": "n_b",
+      "step": 8,
+      "text": "n_b = length(b) = 10"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{va\\_n} = \\frac{\\text{var\\_a}}{\\text{n\\_a}} = \\frac{\\frac{5761}{1800}\\,\\mathrm{h}^{2}}{10} = \\frac{5761}{18000}\\,\\mathrm{h}^{2}",
+      "node": "va_n",
+      "step": 9,
+      "text": "va_n = var_a / n_a = 5761/1800 h^2 / 10 = 5761/18000 h^2"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{vb\\_n} = \\frac{\\text{var\\_b}}{\\text{n\\_b}} = \\frac{4.009\\,\\mathrm{h}^{2}}{10} = 0.4009\\,\\mathrm{h}^{2}",
+      "node": "vb_n",
+      "step": 10,
+      "text": "vb_n = var_b / n_b = 4.009 h^2 / 10 = 0.4009 h^2"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{se2} = \\text{va\\_n} + \\text{vb\\_n} = \\frac{5761}{18000}\\,\\mathrm{h}^{2} + 0.4009\\,\\mathrm{h}^{2} = \\frac{32443}{45000}\\,\\mathrm{h}^{2}",
+      "node": "se2",
+      "step": 11,
+      "text": "se2 = va_n + vb_n = 5761/18000 h^2 + 0.4009 h^2 = 32443/45000 h^2"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{diff} = \\text{mean\\_a} - \\text{mean\\_b} = 0.75\\,\\mathrm{h} - 2.33\\,\\mathrm{h} = -1.58\\,\\mathrm{h}",
+      "node": "diff",
+      "step": 12,
+      "text": "diff = mean_a - mean_b = 0.75 h - 2.33 h = -1.58 h"
+    },
+    {
+      "label": "rounded: 30 significant digits, correctly rounded, error at most 5e-31 h",
+      "latex": "\\text{se} = \\sqrt{\\text{se2}} = \\sqrt{\\frac{32443}{45000}\\,\\mathrm{h}^{2}} \\approx 0.849091017238761957423080524266\\,\\mathrm{h}",
+      "node": "se",
+      "step": 13,
+      "text": "se = sqrt(se2) = sqrt(32443/45000 h^2) ≈ 0.849091017238761957423080524266 h"
+    },
+    {
+      "label": "rounded: 30 significant digits, error at most 6.1e-30",
+      "latex": "\\text{t} = \\frac{\\text{diff}}{\\text{se}} = \\frac{-1.58\\,\\mathrm{h}}{0.849091017238761957423080524266\\,\\mathrm{h}} \\approx -1.86081346748685310152516799541",
+      "node": "t",
+      "step": 14,
+      "text": "t = diff / se = -1.58 h / (0.849091017238761957423080524266 h) ≈ -1.86081346748685310152516799541"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{p975} = 0.975",
+      "node": "p975",
+      "step": 15,
+      "text": "p975 = 0.975"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{dof} = 18",
+      "node": "dof",
+      "step": 16,
+      "text": "dof = 18"
+    },
+    {
+      "label": "rounded: 30 significant digits, correctly rounded, error at most 5e-30",
+      "latex": "\\text{t\\_crit} = \\operatorname{t\\_quantile}\\left(\\text{p975},\\ \\text{dof}\\right) = \\operatorname{t\\_quantile}\\left(0.975,\\ 18\\right) \\approx 2.10092204024103848806087164373",
+      "node": "t_crit",
+      "step": 17,
+      "text": "t_crit = t_quantile(p975, dof) = t_quantile(0.975, 18) ≈ 2.10092204024103848806087164373"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{x2} = 0.47",
+      "node": "x2",
+      "step": 18,
+      "text": "x2 = 0.47"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{three} = 3",
+      "node": "three",
+      "step": 19,
+      "text": "three = 3"
+    },
+    {
+      "label": "rounded: 30 significant digits, correctly rounded, error at most 5e-31",
+      "latex": "\\text{p\\_chi} = \\operatorname{chi2\\_sf}\\left(\\text{x2},\\ \\text{three}\\right) = \\operatorname{chi2\\_sf}\\left(0.47,\\ 3\\right) \\approx 0.925431080317467882784111588149",
+      "node": "p_chi",
+      "step": 20,
+      "text": "p_chi = chi2_sf(x2, three) = chi2_sf(0.47, 3) ≈ 0.925431080317467882784111588149"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{k} = 6",
+      "node": "k",
+      "step": 21,
+      "text": "k = 6"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{n} = 20",
+      "node": "n",
+      "step": 22,
+      "text": "n = 20"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{half} = 0.5",
+      "node": "half",
+      "step": 23,
+      "text": "half = 0.5"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{tail} = \\operatorname{binomial\\_sf}\\left(\\text{k},\\ \\text{n},\\ \\text{half}\\right) = \\operatorname{binomial\\_sf}\\left(6,\\ 20,\\ 0.5\\right) = 0.942340850830078125",
+      "node": "tail",
+      "step": 24,
+      "text": "tail = binomial_sf(k, n, half) = binomial_sf(6, 20, 0.5) = 0.942340850830078125"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{r} = \\text{n} \\bmod \\text{k} = 20 \\bmod 6 = 2",
+      "node": "r",
+      "step": 25,
+      "text": "r = n mod k = 20 mod 6 = 2"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{prime} = \\operatorname{is\\_prime}\\left(\\text{n}\\right) = \\operatorname{is\\_prime}\\left(20\\right) = \\text{false}",
+      "node": "prime",
+      "step": 26,
+      "text": "prime = is_prime(n) = is_prime(20) = false"
+    }
+  ]
+}
