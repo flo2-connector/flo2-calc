@@ -60,17 +60,22 @@ def test_a_regression_is_a_few_nodes_with_an_exact_slope_and_correctly_rounded_s
 
 
 def test_a_256_by_256_grid_integral_and_2d_fft_answer_inside_the_hosts_limits():
-    (r,) = anyio.run(calls, [("evaluate_graph", {"graph": GRID})])
+    """0.11.0: a reply fits its reader (answer.py). The grid's answer is about 42,600 characters, past any chat's
+    budget, so the nodes this test reads are asked for as RESULTS, which a reply always carries whole; the other
+    values fill what is left and `withheld` names the rest."""
+    graph = {**GRID, "result": ["peak", "field", "spectrum", "total"]}
+    (r,) = anyio.run(calls, [("evaluate_graph", {"graph": graph})])
     a = answer_of(r)
     assert a["status"] == "ok", a.get("refused")
-    by = {v["node"]: v for v in a["values"]}
+    said = a.get("how_bounds_were_found", [])
+    by = {v["node"]: v for v in a["results"]}
     assert by["field"]["array"]["shape"] == [N, N] and by["field"]["array"]["kind"] == "float64"
     assert "values" not in by["field"]["array"] and by["field"]["array"]["sha256"].startswith("sha256:")
     assert by["spectrum"]["array"]["kind"] == "complex"
-    assert any("Higham" in h and "Theorem 24.2" in h for h in by["spectrum"]["float64"]["how"])
+    assert any("Higham" in said[h] and "Theorem 24.2" in said[h] for h in by["spectrum"]["float64"]["how"])
     total = by["total"]
     assert total["value"].endswith(" mm^2") is False and "float64" in total  # a sum of a plain field is plain
-    assert a["result"]["float64"]["from"] and float(a["result"]["value"]) == pytest.approx(float(total["value"]), rel=1e-12)
+    assert by["peak"]["float64"]["from"] and float(by["peak"]["value"]) == pytest.approx(float(total["value"]), rel=1e-12)
     assert "float64" in a["exactness"]
 
 

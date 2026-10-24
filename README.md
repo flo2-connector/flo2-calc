@@ -1134,7 +1134,7 @@ recorded and re-run 6.58 s), and one more runaway call, Fisher's sample size for
 working on the arrays above, costs about 14 MiB more than 0.5.0. A cap of **128m** is still above the peak, with 22 MiB to spare,
 and the array budget (16 MiB in the image) keeps a call's arrays inside it. CI runs the image under 128m, and asks it
 every limit's questions there (`tests/test_limits.py`, `tests/test_pending_record.py`) and the arrays' questions
-(`tests/test_arrays_server.py`).
+(`tests/test_arrays_server.py`). 0.11.0 (the answer budget, which holds every reply's text to 24,000 characters in the image) ran the same 55-call session on 2026-10-24 under 128m: it peaked at 108.1 MiB, every runaway call stopped with its limit and the container alive after.
 
 ## Working on it
 
