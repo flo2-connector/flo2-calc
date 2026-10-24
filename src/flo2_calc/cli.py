@@ -18,7 +18,8 @@ The LIMITS (limits.py) are set the same way, each by a flag or its variable:
 (FLO2_CALC_MAX_ARRAY_BYTES), --max-exact-elements
 (FLO2_CALC_MAX_EXACT_ELEMENTS), --max-arrangements (FLO2_CALC_MAX_ARRANGEMENTS)
 --max-shapley-factors (FLO2_CALC_MAX_SHAPLEY_FACTORS), --max-prime-digits
-(FLO2_CALC_MAX_PRIME_DIGITS) and --max-factor-digits (FLO2_CALC_MAX_FACTOR_DIGITS). Unset, they are the laptop
+(FLO2_CALC_MAX_PRIME_DIGITS), --max-factor-digits (FLO2_CALC_MAX_FACTOR_DIGITS) and --max-answer-chars
+(FLO2_CALC_MAX_ANSWER_CHARS). Unset, they are the laptop
 defaults; the image sets flo2.io's lower profile. A setting flo2-calc cannot
 use stops it at start-up with the reason, never silently replaced.
 """
@@ -141,12 +142,22 @@ def main(argv: list[str] | None = None) -> None:
             f"{defaults.max_factor_digits}; flo2.io's sandbox: {L.FLO2_IO.max_factor_digits})"
         ),
     )
+    parser.add_argument(
+        "--max-answer-chars",
+        default=os.environ.get("FLO2_CALC_MAX_ANSWER_CHARS"),
+        help=(
+            f"the most characters a reply's text answer may hold: its outcome comes whole, and the formula, the "
+            f"working and the values fill the rest, with what is left out named (default: $FLO2_CALC_MAX_ANSWER_CHARS, "
+            f"else {defaults.max_answer_chars}; flo2.io's sandbox: {L.FLO2_IO.max_answer_chars})"
+        ),
+    )
     args = parser.parse_args(argv)
     root = resolve_root(args.root)
     try:
         limits = L.from_settings(
             args.deadline, args.max_digits, args.max_reply_bytes, args.max_array_bytes, args.max_exact_elements,
             args.max_arrangements, args.max_shapley_factors, args.max_prime_digits, args.max_factor_digits,
+            args.max_answer_chars,
         )
     except ValueError as e:
         sys.exit(f"flo2-calc: {e}")

@@ -12,6 +12,12 @@ unit, spelled as the design spells units. These kinds are spelled as follows. Th
   EUR. To convert, give the rate as an input with its date and source,
   `{"id": "rate", "value": "0.92 EUR/USD", "source": "ECB reference rate, 2026-10-02"}`, and multiply by it.
 - **Gallons:** `gal_us` or `gal_imp`. A bare `gal` is refused, because it is two different units.
+- **Areas:** `acre` is the international acre (43,560 ft^2) and `ha` the hectare. A US survey acre is refused, because
+  an area in "acres" does not say which acre it is: give an area your source states in survey measure in `ft^2` or
+  `m^2`, as the source states it.
+- **Heat:** `Btu` is the International Table Btu, and `Btu/h` a rate (`"18000 Btu/h"`, a U-factor
+  `"0.056 Btu/(h*ft^2*delta_degF)"`). The ISO and thermochemical Btus are refused. `ton_refrigeration` is the
+  refrigeration ton (12,000 Btu/h). A bare `ton` is refused: it is a mass in other systems, never a refrigeration ton.
 - **Precious metals:** `ozt` (the troy ounce), `dwt` (the pennyweight) and `grain`. `oz` is the avoirdupois ounce,
   a different mass. A bare `gr` is refused, because it is written for both the grain and the gram.
 - **Decibels:** a gain or loss is `"6 dB"` (`"0.2 dB/m"` per length); a power level is `"-30 dBm"` or `"10 dBW"`.

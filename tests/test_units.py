@@ -413,7 +413,7 @@ def test_an_unknown_unit_pint_reads_is_named_with_the_units_of_its_kind_and_noth
 
 def test_a_kind_flo2_calc_does_not_carry_is_said_so():
     with pytest.raises(CallError) as caught:
-        read_graph(graph(inp("a", "2 acre")))
+        read_graph(graph(inp("a", "2 tesla")))  # "2 acre" until 0.11.0 added the acre
     assert "carries no unit of that kind" in caught.value.problem
 
 

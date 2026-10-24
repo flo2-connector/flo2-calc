@@ -1,0 +1,1793 @@
+{
+ "nodes": [
+  {
+   "id": "btuh_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.2930711"
+  },
+  {
+   "id": "air_factor",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1.08"
+  },
+  {
+   "id": "btu_j",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1055.056 J"
+  },
+  {
+   "id": "wh",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1 Wh"
+  },
+  {
+   "args": [
+    "air_factor",
+    "btuh_w"
+   ],
+   "id": "air_num",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "btuh_w"
+   ],
+   "id": "k_u",
+   "op": "with_unit",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "unit": "W/(ft^2*delta_degF)"
+  },
+  {
+   "args": [
+    "btuh_w"
+   ],
+   "id": "k_f",
+   "op": "with_unit",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "unit": "W/(ft*delta_degF)"
+  },
+  {
+   "args": [
+    "air_num"
+   ],
+   "id": "k_air",
+   "op": "with_unit",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "unit": "W*min/(ft^3*delta_degF)"
+  },
+  {
+   "args": [
+    "btuh_w"
+   ],
+   "id": "k_w",
+   "op": "with_unit",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "unit": "W"
+  },
+  {
+   "id": "ceiling",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "20 ft"
+  },
+  {
+   "id": "win_gap",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "4 in"
+  },
+  {
+   "id": "win_h",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "18 in"
+  },
+  {
+   "id": "flash",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "6 in"
+  },
+  {
+   "id": "shop_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "40 ft"
+  },
+  {
+   "id": "shop_l",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "60 ft"
+  },
+  {
+   "id": "wing_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "13 ft"
+  },
+  {
+   "id": "wing_l",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "60 ft"
+  },
+  {
+   "id": "util_len",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "20 ft"
+  },
+  {
+   "id": "adu_len",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "40 ft"
+  },
+  {
+   "id": "gf_h",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "9 ft"
+  },
+  {
+   "id": "room_ceiling",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "8 ft"
+  },
+  {
+   "id": "loft_h",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "7.396 ft"
+  },
+  {
+   "id": "n_clere",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "12"
+  },
+  {
+   "id": "clere_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "6 ft"
+  },
+  {
+   "id": "bay_n",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2"
+  },
+  {
+   "id": "bay_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "12 ft"
+  },
+  {
+   "id": "bay_h",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "14 ft"
+  },
+  {
+   "id": "man_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "3 ft"
+  },
+  {
+   "id": "man_h",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "7 ft"
+  },
+  {
+   "id": "sz_doors",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2"
+  },
+  {
+   "id": "loft_win",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "48 ft^2"
+  },
+  {
+   "id": "util_win",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "12 ft^2"
+  },
+  {
+   "id": "adu_win",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "60 ft^2"
+  },
+  {
+   "id": "gh_len",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "24 ft"
+  },
+  {
+   "id": "gh_dep",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "12 ft"
+  },
+  {
+   "id": "gh_high",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "10.5 ft"
+  },
+  {
+   "id": "gh_low",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "7 ft"
+  },
+  {
+   "id": "u_wall",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.056"
+  },
+  {
+   "id": "u_ceil",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.024"
+  },
+  {
+   "id": "u_win",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.30"
+  },
+  {
+   "id": "f_slab",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.54"
+  },
+  {
+   "id": "u_bay",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.30"
+  },
+  {
+   "id": "u_door",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.20"
+  },
+  {
+   "id": "r8",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1.7"
+  },
+  {
+   "id": "r10",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1.9"
+  },
+  {
+   "id": "r16",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2.5"
+  },
+  {
+   "id": "one",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1"
+  },
+  {
+   "id": "two",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2"
+  },
+  {
+   "id": "curtain_frac",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.6"
+  },
+  {
+   "id": "ach_bldg",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.2 h^-1"
+  },
+  {
+   "id": "ach_gh",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.75 h^-1"
+  },
+  {
+   "id": "hrv_cfm",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "110 ft^3/min"
+  },
+  {
+   "id": "erv_cfm",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "30 ft^3/min"
+  },
+  {
+   "id": "recov",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.7"
+  },
+  {
+   "id": "t_out",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "11 degF"
+  },
+  {
+   "id": "t_shop",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "65 degF"
+  },
+  {
+   "id": "t_adu",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "70 degF"
+  },
+  {
+   "id": "t_gh",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "50 degF"
+  },
+  {
+   "id": "hdd65",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "4850.86 delta_degF*d"
+  },
+  {
+   "id": "cdd65",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "857.76 delta_degF*d"
+  },
+  {
+   "id": "tmin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "25.98",
+     "29.94",
+     "35.08",
+     "40.85",
+     "47.78",
+     "54.19",
+     "59.55",
+     "57.99",
+     "50.13",
+     "41.00",
+     "33.84",
+     "28.37"
+    ],
+    "unit": "degF"
+   }
+  },
+  {
+   "id": "mdays",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "31",
+     "28",
+     "31",
+     "30",
+     "31",
+     "30",
+     "31",
+     "31",
+     "30",
+     "31",
+     "30",
+     "31"
+    ],
+    "unit": "d"
+   }
+  },
+  {
+   "id": "night_h",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "14 h/d"
+  },
+  {
+   "id": "zero_dt",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0 delta_degF"
+  },
+  {
+   "id": "hspf_ducted",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "8.1"
+  },
+  {
+   "id": "hspf_ductless",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "8.5"
+  },
+  {
+   "id": "seer2",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "15.2"
+  },
+  {
+   "id": "cool_gain",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2"
+  },
+  {
+   "id": "cop_ground",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "3.5"
+  },
+  {
+   "id": "cap5",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.70"
+  },
+  {
+   "id": "hp_shop_btuh",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "60000"
+  },
+  {
+   "id": "hp_adu_btuh",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "18000"
+  },
+  {
+   "id": "hp_gh_btuh",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "18000"
+  },
+  {
+   "args": [
+    "shop_w",
+    "shop_w",
+    "shop_l"
+   ],
+   "id": "perim3",
+   "op": "add"
+  },
+  {
+   "args": [
+    "perim3",
+    "ceiling"
+   ],
+   "id": "shop_walls_gross",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ceiling",
+    "win_gap"
+   ],
+   "id": "w1",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "w1",
+    "win_h"
+   ],
+   "id": "w2",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "w2",
+    "flash"
+   ],
+   "id": "wing_high",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "ceiling",
+    "wing_high"
+   ],
+   "id": "band",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "shop_l",
+    "band"
+   ],
+   "id": "east_band",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "n_clere",
+    "clere_w",
+    "win_h"
+   ],
+   "id": "clere_area",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "bay_n",
+    "bay_w",
+    "bay_h"
+   ],
+   "id": "bay_area",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "man_w",
+    "man_h"
+   ],
+   "id": "man_area",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "shop_walls_gross",
+    "east_band"
+   ],
+   "id": "shop_gross",
+   "op": "add"
+  },
+  {
+   "args": [
+    "clere_area",
+    "bay_area",
+    "man_area"
+   ],
+   "id": "shop_open",
+   "op": "add"
+  },
+  {
+   "args": [
+    "shop_gross",
+    "shop_open"
+   ],
+   "id": "shop_opaque",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "gf_h",
+    "loft_h"
+   ],
+   "id": "wing_full_h",
+   "op": "add"
+  },
+  {
+   "args": [
+    "wing_w",
+    "wing_full_h"
+   ],
+   "id": "wing_south",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "util_len",
+    "gf_h"
+   ],
+   "id": "util_east",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "wing_l",
+    "loft_h"
+   ],
+   "id": "loft_east",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "wing_w",
+    "loft_h"
+   ],
+   "id": "loft_north",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "wing_south",
+    "util_east",
+    "loft_east",
+    "loft_north"
+   ],
+   "id": "wing_gross",
+   "op": "add"
+  },
+  {
+   "args": [
+    "loft_win",
+    "util_win",
+    "man_area"
+   ],
+   "id": "wing_open",
+   "op": "add"
+  },
+  {
+   "args": [
+    "wing_gross",
+    "wing_open"
+   ],
+   "id": "wing_opaque",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "shop_opaque",
+    "wing_opaque"
+   ],
+   "id": "walls_sz",
+   "op": "add"
+  },
+  {
+   "args": [
+    "shop_w",
+    "shop_l"
+   ],
+   "id": "shop_floor",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "wing_w",
+    "wing_l"
+   ],
+   "id": "wing_floor",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "shop_floor",
+    "wing_floor"
+   ],
+   "id": "ceil_sz",
+   "op": "add"
+  },
+  {
+   "args": [
+    "clere_area",
+    "loft_win",
+    "util_win"
+   ],
+   "id": "win_sz",
+   "op": "add"
+  },
+  {
+   "args": [
+    "sz_doors",
+    "man_area"
+   ],
+   "id": "doors_sz",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "perim3",
+    "wing_w",
+    "util_len"
+   ],
+   "id": "slab_sz",
+   "op": "add"
+  },
+  {
+   "args": [
+    "shop_floor",
+    "ceiling"
+   ],
+   "id": "vol_shop",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "wing_w",
+    "util_len",
+    "room_ceiling"
+   ],
+   "id": "vol_util",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "wing_floor",
+    "loft_h"
+   ],
+   "id": "vol_loft",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "vol_shop",
+    "vol_util",
+    "vol_loft"
+   ],
+   "id": "vol_sz",
+   "op": "add"
+  },
+  {
+   "args": [
+    "walls_sz",
+    "u_wall",
+    "k_u"
+   ],
+   "id": "ua_sz_walls",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ceil_sz",
+    "u_ceil",
+    "k_u"
+   ],
+   "id": "ua_sz_ceil",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "win_sz",
+    "u_win",
+    "k_u"
+   ],
+   "id": "ua_sz_win",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "bay_area",
+    "u_bay",
+    "k_u"
+   ],
+   "id": "ua_sz_bay",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "doors_sz",
+    "u_door",
+    "k_u"
+   ],
+   "id": "ua_sz_door",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "slab_sz",
+    "f_slab",
+    "k_f"
+   ],
+   "id": "ua_sz_slab",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "vol_sz",
+    "ach_bldg"
+   ],
+   "id": "inf_sz_h",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "inf_sz_h"
+   ],
+   "id": "inf_sz",
+   "op": "convert",
+   "unit": "ft^3/min"
+  },
+  {
+   "args": [
+    "inf_sz",
+    "k_air"
+   ],
+   "id": "ua_sz_inf",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "one",
+    "recov"
+   ],
+   "id": "loss_frac",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "hrv_cfm",
+    "loss_frac"
+   ],
+   "id": "hrv_eff",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "hrv_eff",
+    "k_air"
+   ],
+   "id": "ua_sz_vent",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ua_sz_walls",
+    "ua_sz_ceil",
+    "ua_sz_win",
+    "ua_sz_bay",
+    "ua_sz_door",
+    "ua_sz_slab",
+    "ua_sz_inf",
+    "ua_sz_vent"
+   ],
+   "id": "ua_sz_raw",
+   "op": "add"
+  },
+  {
+   "args": [
+    "ua_sz_raw"
+   ],
+   "id": "ua_sz",
+   "op": "convert",
+   "unit": "W/delta_degF"
+  },
+  {
+   "args": [
+    "t_shop",
+    "t_out"
+   ],
+   "id": "dt_sz",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "ua_sz",
+    "dt_sz"
+   ],
+   "id": "load_sz_w",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "load_sz_w"
+   ],
+   "id": "load_sz",
+   "op": "convert",
+   "unit": "kW"
+  },
+  {
+   "args": [
+    "ua_sz",
+    "hdd65"
+   ],
+   "id": "heat_sz_wd",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "heat_sz_wd"
+   ],
+   "id": "heat_sz",
+   "op": "convert",
+   "unit": "kWh"
+  },
+  {
+   "args": [
+    "hspf_ducted",
+    "btu_j"
+   ],
+   "id": "cop_ducted_j",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "cop_ducted_j",
+    "wh"
+   ],
+   "id": "cop_ducted",
+   "op": "div"
+  },
+  {
+   "args": [
+    "heat_sz",
+    "cop_ducted"
+   ],
+   "id": "elec_heat_sz",
+   "op": "div"
+  },
+  {
+   "args": [
+    "hp_shop_btuh",
+    "k_w"
+   ],
+   "id": "hp_sz_w",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "hp_sz_w",
+    "cap5"
+   ],
+   "id": "hp_sz_cap5_w",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "hp_sz_cap5_w"
+   ],
+   "id": "hp_sz_cap5",
+   "op": "convert",
+   "unit": "kW"
+  },
+  {
+   "args": [
+    "hp_sz_cap5",
+    "load_sz"
+   ],
+   "id": "ok_sz",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "wing_w",
+    "gf_h"
+   ],
+   "id": "adu_north",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "adu_len",
+    "gh_len"
+   ],
+   "id": "adu_ext_len",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "adu_ext_len",
+    "gf_h"
+   ],
+   "id": "adu_east_ext",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_len",
+    "gf_h"
+   ],
+   "id": "adu_east_gh",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "adu_north",
+    "adu_east_ext"
+   ],
+   "id": "adu_gross",
+   "op": "add"
+  },
+  {
+   "args": [
+    "adu_win",
+    "man_area"
+   ],
+   "id": "adu_openings",
+   "op": "add"
+  },
+  {
+   "args": [
+    "adu_gross",
+    "adu_openings"
+   ],
+   "id": "adu_opaque",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "adu_opaque",
+    "u_wall",
+    "k_u"
+   ],
+   "id": "ua_adu_walls",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "adu_east_gh",
+    "u_wall",
+    "k_u"
+   ],
+   "id": "ua_adu_ghwall",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "adu_win",
+    "u_win",
+    "k_u"
+   ],
+   "id": "ua_adu_win",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "man_area",
+    "u_door",
+    "k_u"
+   ],
+   "id": "ua_adu_door",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "wing_w",
+    "adu_len"
+   ],
+   "id": "adu_perim",
+   "op": "add"
+  },
+  {
+   "args": [
+    "adu_perim",
+    "f_slab",
+    "k_f"
+   ],
+   "id": "ua_adu_slab",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "wing_w",
+    "adu_len",
+    "room_ceiling"
+   ],
+   "id": "vol_adu",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "vol_adu",
+    "ach_bldg"
+   ],
+   "id": "inf_adu_h",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "inf_adu_h"
+   ],
+   "id": "inf_adu",
+   "op": "convert",
+   "unit": "ft^3/min"
+  },
+  {
+   "args": [
+    "inf_adu",
+    "k_air"
+   ],
+   "id": "ua_adu_inf",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "erv_cfm",
+    "loss_frac"
+   ],
+   "id": "erv_eff",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "erv_eff",
+    "k_air"
+   ],
+   "id": "ua_adu_vent",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ua_adu_walls",
+    "ua_adu_win",
+    "ua_adu_door",
+    "ua_adu_slab",
+    "ua_adu_inf",
+    "ua_adu_vent"
+   ],
+   "id": "ua_adu_raw",
+   "op": "add"
+  },
+  {
+   "args": [
+    "ua_adu_raw"
+   ],
+   "id": "ua_adu",
+   "op": "convert",
+   "unit": "W/delta_degF"
+  },
+  {
+   "args": [
+    "ua_adu_ghwall"
+   ],
+   "id": "ua_adu_ghw",
+   "op": "convert",
+   "unit": "W/delta_degF"
+  },
+  {
+   "args": [
+    "t_adu",
+    "t_out"
+   ],
+   "id": "dt_adu",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "t_adu",
+    "t_gh"
+   ],
+   "id": "dt_adu_gh",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "ua_adu",
+    "dt_adu"
+   ],
+   "id": "load_adu_a",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ua_adu_ghw",
+    "dt_adu_gh"
+   ],
+   "id": "load_adu_b",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "load_adu_a",
+    "load_adu_b"
+   ],
+   "id": "load_adu_w",
+   "op": "add"
+  },
+  {
+   "args": [
+    "load_adu_w"
+   ],
+   "id": "load_adu",
+   "op": "convert",
+   "unit": "kW"
+  },
+  {
+   "args": [
+    "ua_adu",
+    "ua_adu_ghw"
+   ],
+   "id": "ua_adu_all",
+   "op": "add"
+  },
+  {
+   "args": [
+    "ua_adu_all",
+    "hdd65"
+   ],
+   "id": "heat_adu_wd",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "heat_adu_wd"
+   ],
+   "id": "heat_adu",
+   "op": "convert",
+   "unit": "kWh"
+  },
+  {
+   "args": [
+    "hspf_ductless",
+    "btu_j"
+   ],
+   "id": "cop_ductless_j",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "cop_ductless_j",
+    "wh"
+   ],
+   "id": "cop_ductless",
+   "op": "div"
+  },
+  {
+   "args": [
+    "heat_adu",
+    "cop_ductless"
+   ],
+   "id": "elec_heat_adu",
+   "op": "div"
+  },
+  {
+   "args": [
+    "hp_adu_btuh",
+    "k_w"
+   ],
+   "id": "hp_adu_w",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "hp_adu_w",
+    "cap5"
+   ],
+   "id": "hp_adu_cap5_w",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "hp_adu_cap5_w"
+   ],
+   "id": "hp_adu_cap5",
+   "op": "convert",
+   "unit": "kW"
+  },
+  {
+   "args": [
+    "hp_adu_cap5",
+    "load_adu"
+   ],
+   "id": "ok_adu",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "ua_sz",
+    "ua_adu_all"
+   ],
+   "id": "ua_bldg",
+   "op": "add"
+  },
+  {
+   "args": [
+    "ua_bldg",
+    "cdd65"
+   ],
+   "id": "cool_env_wd",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "cool_env_wd"
+   ],
+   "id": "cool_env",
+   "op": "convert",
+   "unit": "kWh"
+  },
+  {
+   "args": [
+    "cool_env",
+    "cool_gain"
+   ],
+   "id": "cool_total",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "seer2",
+    "btu_j"
+   ],
+   "id": "cop_cool_j",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "cop_cool_j",
+    "wh"
+   ],
+   "id": "cop_cool",
+   "op": "div"
+  },
+  {
+   "args": [
+    "cool_total",
+    "cop_cool"
+   ],
+   "id": "elec_cool",
+   "op": "div"
+  },
+  {
+   "args": [
+    "gh_high",
+    "gh_low"
+   ],
+   "id": "gh_rise",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "gh_dep",
+    "gh_dep"
+   ],
+   "id": "gh_dep_sq",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_rise",
+    "gh_rise"
+   ],
+   "id": "gh_rise_sq",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_dep_sq",
+    "gh_rise_sq"
+   ],
+   "id": "gh_sq",
+   "op": "add"
+  },
+  {
+   "args": [
+    "gh_sq"
+   ],
+   "id": "gh_slope_len",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "gh_len",
+    "gh_slope_len"
+   ],
+   "id": "gh_roof",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_len",
+    "gh_low"
+   ],
+   "id": "gh_outer",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_high",
+    "gh_low"
+   ],
+   "id": "gh_hsum",
+   "op": "add"
+  },
+  {
+   "args": [
+    "gh_dep",
+    "gh_hsum"
+   ],
+   "id": "gh_ends",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_roof",
+    "gh_outer",
+    "gh_ends"
+   ],
+   "id": "gh_glaze",
+   "op": "add"
+  },
+  {
+   "args": [
+    "one",
+    "r8"
+   ],
+   "id": "u8",
+   "op": "div"
+  },
+  {
+   "args": [
+    "one",
+    "r10"
+   ],
+   "id": "u10",
+   "op": "div"
+  },
+  {
+   "args": [
+    "one",
+    "r16"
+   ],
+   "id": "u16",
+   "op": "div"
+  },
+  {
+   "args": [
+    "gh_len",
+    "gh_dep",
+    "gh_dep"
+   ],
+   "id": "gh_perim",
+   "op": "add"
+  },
+  {
+   "args": [
+    "gh_perim",
+    "f_slab",
+    "k_f"
+   ],
+   "id": "ua_gh_slab",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_hsum",
+    "two"
+   ],
+   "id": "gh_mean_h",
+   "op": "div"
+  },
+  {
+   "args": [
+    "gh_len",
+    "gh_dep",
+    "gh_mean_h"
+   ],
+   "id": "vol_gh",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "vol_gh",
+    "ach_gh"
+   ],
+   "id": "inf_gh_h",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "inf_gh_h"
+   ],
+   "id": "inf_gh",
+   "op": "convert",
+   "unit": "ft^3/min"
+  },
+  {
+   "args": [
+    "inf_gh",
+    "k_air"
+   ],
+   "id": "ua_gh_inf",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ua_gh_slab",
+    "ua_gh_inf"
+   ],
+   "id": "ua_gh_other_raw",
+   "op": "add"
+  },
+  {
+   "args": [
+    "ua_gh_other_raw"
+   ],
+   "id": "ua_gh_other",
+   "op": "convert",
+   "unit": "W/delta_degF"
+  },
+  {
+   "args": [
+    "gh_glaze",
+    "u8",
+    "k_u",
+    "curtain_frac"
+   ],
+   "id": "gl8",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_glaze",
+    "u10",
+    "k_u",
+    "curtain_frac"
+   ],
+   "id": "gl10",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_glaze",
+    "u16",
+    "k_u",
+    "curtain_frac"
+   ],
+   "id": "gl16",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_glaze",
+    "u10",
+    "k_u"
+   ],
+   "id": "gl10_open",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gl8",
+    "ua_gh_other"
+   ],
+   "id": "ua_gh8",
+   "op": "add"
+  },
+  {
+   "args": [
+    "gl10",
+    "ua_gh_other"
+   ],
+   "id": "ua_gh10",
+   "op": "add"
+  },
+  {
+   "args": [
+    "gl16",
+    "ua_gh_other"
+   ],
+   "id": "ua_gh16",
+   "op": "add"
+  },
+  {
+   "args": [
+    "gl10_open",
+    "ua_gh_other"
+   ],
+   "id": "ua_gh10_open",
+   "op": "add"
+  },
+  {
+   "args": [
+    "t_gh",
+    "t_out"
+   ],
+   "id": "dt_gh",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "ua_gh10",
+    "dt_gh"
+   ],
+   "id": "load_gh_w",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "load_gh_w"
+   ],
+   "id": "load_gh",
+   "op": "convert",
+   "unit": "kW"
+  },
+  {
+   "args": [
+    "ua_gh10_open",
+    "dt_gh"
+   ],
+   "id": "load_gh_open_w",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "load_gh_open_w"
+   ],
+   "id": "load_gh_open",
+   "op": "convert",
+   "unit": "kW"
+  },
+  {
+   "args": [
+    "t_gh",
+    "tmin"
+   ],
+   "id": "gh_dt_month",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "gh_dt_month",
+    "zero_dt"
+   ],
+   "id": "gh_dt_pos",
+   "op": "max"
+  },
+  {
+   "args": [
+    "gh_dt_pos",
+    "mdays"
+   ],
+   "id": "gh_dd_month",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_dd_month"
+   ],
+   "id": "gh_dd",
+   "op": "sum"
+  },
+  {
+   "args": [
+    "gh_dd",
+    "night_h"
+   ],
+   "id": "gh_dh",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ua_gh8",
+    "gh_dh"
+   ],
+   "id": "heat_gh8_wh",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ua_gh10",
+    "gh_dh"
+   ],
+   "id": "heat_gh10_wh",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ua_gh16",
+    "gh_dh"
+   ],
+   "id": "heat_gh16_wh",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "heat_gh8_wh"
+   ],
+   "id": "heat_gh8",
+   "op": "convert",
+   "unit": "kWh"
+  },
+  {
+   "args": [
+    "heat_gh10_wh"
+   ],
+   "id": "heat_gh10",
+   "op": "convert",
+   "unit": "kWh"
+  },
+  {
+   "args": [
+    "heat_gh16_wh"
+   ],
+   "id": "heat_gh16",
+   "op": "convert",
+   "unit": "kWh"
+  },
+  {
+   "args": [
+    "heat_gh8",
+    "cop_ductless"
+   ],
+   "id": "elec_gh8",
+   "op": "div"
+  },
+  {
+   "args": [
+    "heat_gh10",
+    "cop_ductless"
+   ],
+   "id": "elec_gh10",
+   "op": "div"
+  },
+  {
+   "args": [
+    "heat_gh16",
+    "cop_ductless"
+   ],
+   "id": "elec_gh16",
+   "op": "div"
+  },
+  {
+   "args": [
+    "elec_gh10",
+    "elec_gh16"
+   ],
+   "id": "save_16_vs_10",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "heat_gh10",
+    "cop_ground"
+   ],
+   "id": "elec_gh_ground",
+   "op": "div"
+  },
+  {
+   "args": [
+    "elec_gh10",
+    "elec_gh_ground"
+   ],
+   "id": "save_ground",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "hp_gh_btuh",
+    "k_w"
+   ],
+   "id": "hp_gh_w",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "hp_gh_w",
+    "cap5"
+   ],
+   "id": "hp_gh_cap5_w",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "hp_gh_cap5_w"
+   ],
+   "id": "hp_gh_cap5",
+   "op": "convert",
+   "unit": "kW"
+  },
+  {
+   "args": [
+    "hp_gh_cap5",
+    "load_gh"
+   ],
+   "id": "ok_gh",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "elec_heat_sz",
+    "elec_heat_adu",
+    "elec_cool",
+    "elec_gh10"
+   ],
+   "id": "elec_heat_cool_total",
+   "op": "add"
+  },
+  {
+   "args": [
+    "ok_sz",
+    "ok_adu",
+    "ok_gh"
+   ],
+   "id": "all_ok",
+   "op": "and"
+  }
+ ],
+ "result": [
+  "walls_sz",
+  "ceil_sz",
+  "win_sz",
+  "slab_sz",
+  "vol_sz",
+  "ua_sz",
+  "load_sz",
+  "heat_sz",
+  "cop_ducted",
+  "elec_heat_sz",
+  "hp_sz_cap5",
+  "ok_sz",
+  "ua_adu_all",
+  "load_adu",
+  "heat_adu",
+  "cop_ductless",
+  "elec_heat_adu",
+  "hp_adu_cap5",
+  "ok_adu",
+  "cool_total",
+  "elec_cool",
+  "gh_glaze",
+  "ua_gh10",
+  "load_gh",
+  "load_gh_open",
+  "gh_dd",
+  "heat_gh8",
+  "heat_gh10",
+  "heat_gh16",
+  "elec_gh8",
+  "elec_gh10",
+  "elec_gh16",
+  "save_16_vs_10",
+  "save_ground",
+  "hp_gh_cap5",
+  "ok_gh",
+  "elec_heat_cool_total",
+  "all_ok"
+ ]
+}

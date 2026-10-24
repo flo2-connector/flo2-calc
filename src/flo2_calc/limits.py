@@ -20,6 +20,15 @@ THE LIMITS (cli.py reads them, like --root, from a flag or the environment):
   max_shapley_factors --max-shapley-factors N  FLO2_CALC_MAX_SHAPLEY_FACTORS  the factors of one Shapley table
   max_prime_digits --max-prime-digits N      FLO2_CALC_MAX_PRIME_DIGITS   the digits of a number proven prime
   max_factor_digits --max-factor-digits N    FLO2_CALC_MAX_FACTOR_DIGITS  the digits of the part factoring splits
+  max_answer_chars --max-answer-chars N      FLO2_CALC_MAX_ANSWER_CHARS   the characters of a reply's text answer
+
+max_answer_chars (flo2-calc 0.11.0, dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget) is
+the READER's budget, not a runaway guard: what one reply's text answer may hold, as the text is sent. It never
+stops a calculation. A reply keeps its outcome whole and fills the rest of it (answer.py), naming what it left out
+and where it is. Like the others it is the host's, but unlike them it is never written into a record: a
+not-yet-computed record's limits_in_force is describe(), schema 10's, unchanged. 30,000 characters on a laptop
+(reflow2's reply budget, the one chat clients are known to take), 24,000 in flo2.io's image, which leaves room
+for what flo2's door wraps around a reply within its own 30,000.
 
 max_arrangements and max_shapley_factors (flo2-calc 0.8.0,
 dec:v0-8-0-bayes-randomization-shapley-choices, choice 5) are checked BEFORE
@@ -94,6 +103,7 @@ SETTINGS: dict[str, tuple[str, str]] = {
     "max_shapley_factors": ("--max-shapley-factors", "FLO2_CALC_MAX_SHAPLEY_FACTORS"),
     "max_prime_digits": ("--max-prime-digits", "FLO2_CALC_MAX_PRIME_DIGITS"),
     "max_factor_digits": ("--max-factor-digits", "FLO2_CALC_MAX_FACTOR_DIGITS"),
+    "max_answer_chars": ("--max-answer-chars", "FLO2_CALC_MAX_ANSWER_CHARS"),
 }
 # What each count-like limit counts, as a not-yet-computed record says what it needs.
 COUNTS = {"max_digits": "digits", "max_arrangements": "arrangements", "max_shapley_factors": "factors",
@@ -107,6 +117,7 @@ MAX_ARRANGEMENTS_RANGE = (1, 10**12)  # 10^12 arrangements at about 0.6 us each 
 MAX_SHAPLEY_FACTORS_RANGE = (1, 21)  # 2^21 outcomes is the most elements any one array has (arrays.MAX_ELEMENTS)
 MAX_PRIME_DIGITS_RANGE = (1, 2_000)  # proving a 700-digit prime took 4 minutes of one CPU (README, "Limits")
 MAX_FACTOR_DIGITS_RANGE = (1, 100)  # a 60-digit part took 18 s; FLINT's quadratic sieve is practical to about 100
+MAX_ANSWER_CHARS_RANGE = (1_000, 256 * MIB)  # below about 1,000 characters even a small outcome does not fit
 
 
 @dataclass(frozen=True)
@@ -122,6 +133,7 @@ class Limits:
     max_shapley_factors: int = 16  # 2^16 outcomes: max_exact_elements, so the table stays exact
     max_prime_digits: int = 300  # a 300-digit prime is proven in about 10 s here, against the 45 s deadline
     max_factor_digits: int = 50  # the hardest 50-digit part (two 25-digit primes) splits in 2 to 3 s here
+    max_answer_chars: int = 30_000  # a reply's text answer (0.11.0): reflow2's reply budget, which chat clients take
 
     def describe(self) -> dict[str, Any]:
         """As replies and not-yet-computed records write them: the deadline in
@@ -138,8 +150,13 @@ class Limits:
             "max_factor_digits": self.max_factor_digits,
         }
 
+    def settings(self) -> dict[str, Any]:
+        """Every limit the host sets, as describe() writes them, and the answer budget, which a record never
+        holds (0.11.0)."""
+        return {**self.describe(), "max_answer_chars": self.max_answer_chars}
+
     def value_of(self, name: str) -> Any:
-        return self.describe()[name]
+        return self.settings()[name]
 
     def in_words(self) -> str:
         return (
@@ -149,7 +166,8 @@ class Limits:
             f"{self.max_exact_elements:,} elements (larger ones are float64, labelled), at most "
             f"{self.max_arrangements:,} arrangements in one randomization test, Shapley values of at most "
             f"{self.max_shapley_factors} factors, primality proven for numbers of up to {self.max_prime_digits:,} digits, "
-            f"and factoring that splits a part of up to {self.max_factor_digits:,} digits"
+            f"factoring that splits a part of up to {self.max_factor_digits:,} digits, "
+            f"and an answer of at most {self.max_answer_chars:,} characters (its outcome whole, the rest named)"
         )
 
 
@@ -157,7 +175,8 @@ class Limits:
 LAPTOP = Limits()
 # flo2.io's sandbox: a 128m memory cap, one CPU, and a gateway that stops a helper call at 60 s.
 FLO2_IO = Limits(deadline_ms=20_000, max_digits=2_000, max_reply_bytes=2 * MIB, max_array_bytes=16 * MIB, max_exact_elements=4_096,
-                 max_arrangements=1_000_000, max_shapley_factors=12, max_prime_digits=200, max_factor_digits=40)
+                 max_arrangements=1_000_000, max_shapley_factors=12, max_prime_digits=200, max_factor_digits=40,
+                 max_answer_chars=24_000)
 
 
 def seconds_text(ms: int) -> str:
@@ -203,6 +222,7 @@ def from_settings(
     max_shapley_factors: str | None = None,
     max_prime_digits: str | None = None,
     max_factor_digits: str | None = None,
+    max_answer_chars: str | None = None,
 ) -> Limits:
     """The limits from start-up settings (None or "" keeps the laptop default).
     Raises ValueError naming the setting and why."""
@@ -212,6 +232,7 @@ def from_settings(
         ("max_array_bytes", max_array_bytes), ("max_exact_elements", max_exact_elements),
         ("max_arrangements", max_arrangements), ("max_shapley_factors", max_shapley_factors),
         ("max_prime_digits", max_prime_digits), ("max_factor_digits", max_factor_digits),
+        ("max_answer_chars", max_answer_chars),
     )
     for name, raw in settings:
         if raw is None or raw.strip() == "":
@@ -234,8 +255,10 @@ def from_settings(
                 out["max_shapley_factors"] = parse_count(raw, "limit on a Shapley table's factors", MAX_SHAPLEY_FACTORS_RANGE)
             elif name == "max_prime_digits":
                 out["max_prime_digits"] = parse_count(raw, "limit on the digits of a primality proof", MAX_PRIME_DIGITS_RANGE)
-            else:
+            elif name == "max_factor_digits":
                 out["max_factor_digits"] = parse_count(raw, "limit on the digits of the part factoring splits", MAX_FACTOR_DIGITS_RANGE)
+            else:
+                out["max_answer_chars"] = parse_count(raw, "answer budget in characters", MAX_ANSWER_CHARS_RANGE)
         except ValueError as e:
             raise ValueError(f"{flag} (or {env}): {e}.") from None
     return Limits(**out)

@@ -64,12 +64,12 @@ def heavy_graph(n: int = 500) -> dict:
 
 def test_the_defaults_suit_a_laptop_and_flo2_io_has_a_lower_profile():
     assert L.from_settings(None, None, None) == L.LAPTOP == L.Limits(45_000, 20_000, 8 * 1024 * 1024)
-    assert L.FLO2_IO == L.Limits(20_000, 2_000, 2 * 1024 * 1024, 16 * 1024 * 1024, 4_096, 1_000_000, 12, 200, 40)
+    assert L.FLO2_IO == L.Limits(20_000, 2_000, 2 * 1024 * 1024, 16 * 1024 * 1024, 4_096, 1_000_000, 12, 200, 40, 24_000)
     assert L.LAPTOP.max_array_bytes == 512 * 1024 * 1024
     assert (L.LAPTOP.max_arrangements, L.LAPTOP.max_shapley_factors) == (10_000_000, 16)
     assert (L.LAPTOP.max_prime_digits, L.LAPTOP.max_factor_digits) == (300, 50)
     for field in ("deadline_ms", "max_digits", "max_reply_bytes", "max_array_bytes", "max_arrangements", "max_shapley_factors",
-                  "max_prime_digits", "max_factor_digits"):
+                  "max_prime_digits", "max_factor_digits", "max_answer_chars"):
         assert getattr(L.FLO2_IO, field) < getattr(L.LAPTOP, field), field
     # A Shapley table of the most factors stays exact: 2^k outcomes within max_exact_elements.
     for limits in (L.LAPTOP, L.FLO2_IO):
@@ -525,5 +525,5 @@ def test_every_limit_is_in_the_readmes_table_and_the_images_profile():
     dockerfile = (repo / "Dockerfile").read_text(encoding="utf-8")
     for name, (flag, env) in L.SETTINGS.items():
         assert f"`{flag}" in table and f"`{env}`" in table, name
-        value = L.FLO2_IO.describe()[name]
+        value = L.FLO2_IO.value_of(name)  # 0.11.0: the answer budget is a setting, never a record's
         assert f"{env}={str(value).removesuffix(' s')}" in dockerfile, (name, value)

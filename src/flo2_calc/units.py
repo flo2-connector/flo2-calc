@@ -19,7 +19,12 @@ THE DECISIONS THIS HOLDS (design 0bee0c00b35845f6):
     week; delta_K, a change of temperature in kelvin, so that a change stays a
     change through convert (`converted_unit`) and through a product; and an
     unknown spelling that pint reads is named for what pint reads it as, with
-    the units of that kind flo2-calc carries, and nothing substituted.
+    the units of that kind flo2-calc carries, and nothing substituted;
+  - the Shop sample trial (flo2-calc 0.11.0, Anthony's rulings of 2026-10-24,
+    dec:the-international-acre-and-the-hectare-the-survey-acre-refused and
+    dec:the-international-table-btu-and-the-refrigeration-ton): the acre, the
+    hectare, the Btu and the refrigeration ton, each exact, and the US survey
+    acre and every other Btu refused as ambiguous.
 
 WHO DOES WHAT. The vocabulary below maps each spelling to a pint unit. pint,
 loaded with exact fractions, says what each unit measures (its dimension) and
@@ -55,6 +60,15 @@ DELIBERATE DEPARTURES FROM pint:
   - "mil" is the thousandth of an inch (pint's "thou"), not pint's angular mil.
   - "furlong" is the international furlong, 660 ft (exactly 201.168 m). pint's
     furlong is the US survey furlong (40 rods of 16.5 survey feet, 201.1684 m).
+  - "acre" is the international acre, 43,560 ft^2 (exactly 4,046.8564224 m^2).
+    pint's acre is the US survey acre (10 square survey chains, about
+    4,046.8726 m^2), which flo2-calc refuses by name as ambiguous (AMBIGUOUS):
+    a value in "acres" from a US land record does not say which it is.
+  - "Btu" is the International Table Btu, exactly 1055.05585262 J (NIST SP 811,
+    Btu_IT). pint's "Btu" and "BTU" are the ISO Btu, 1055.056 J; they and the
+    thermochemical Btu are refused as ambiguous. "ton_refrigeration" is 12,000
+    Btu per hour, exactly; a bare "ton" is pint's short ton of mass, which
+    flo2-calc does not carry, and is never read as a refrigeration ton.
   - Decibels. "dB" is its own dimension, like a currency: dB adds to dB, dB/m
     times m is dB, and dB with a plain ratio is refused, because a gain in dB
     and a linear ratio are different things (10 dB is a ratio of 10 in power
@@ -143,6 +157,9 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
     "ozt": ("troy_ounce", "mass"),  # the troy ounce, exactly 31.1034768 g (NIST Handbook 44, Appendix C)
     "dwt": ("pennyweight", "mass"),  # the pennyweight, 1/20 troy ounce, exactly 1.55517384 g
     "grain": ("grain", "mass"),  # exactly 64.79891 mg ("gr" alone is not read: AMBIGUOUS)
+    # area (flo2-calc 0.11.0: the acre and the hectare, DEFINED below)
+    "acre": (None, "area"),  # the international acre, 43,560 ft^2, not pint's survey acre
+    "ha": (None, "area"),  # the hectare, 10,000 m^2
     # time
     "s": ("second", "time"),
     "ms": ("millisecond", "time"),
@@ -171,6 +188,7 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
     "kW": ("kilowatt", "power"),
     "mW": ("milliwatt", "power"),
     "uW": ("microwatt", "power"),
+    "ton_refrigeration": (None, "power"),  # 12,000 Btu per hour, exactly (DEFINED below); a bare "ton" is never this
     # energy
     "J": ("joule", "energy"),
     "kJ": ("kilojoule", "energy"),
@@ -182,6 +200,7 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
     "kWh": ("kilowatt_hour", "energy"),
     "MWh": ("megawatt_hour", "energy"),
     "eV": ("electron_volt", "energy"),
+    "Btu": (None, "energy"),  # the International Table Btu, exactly 1055.05585262 J (DEFINED below), not pint's ISO Btu
     # electric charge ("C" alone is not read: AMBIGUOUS)
     "coulomb": ("coulomb", "charge"),
     "Ah": ("ampere_hour", "charge"),
@@ -248,7 +267,7 @@ VOCABULARY: dict[str, tuple[str | None, str]] = {
 # prefix and one of these (or an SI symbol in OTHER_SYMBOLS), and means
 # exactly that: tests/test_units.py holds each to it.
 UNPREFIXED: frozenset[str] = frozenset({
-    "m", "in", "ft", "mil", "furlong", "g", "t", "ct", "lb", "oz", "ozt", "dwt", "grain", "s", "min", "h", "d", "week",
+    "m", "in", "ft", "mil", "furlong", "acre", "ha", "Btu", "ton_refrigeration", "g", "t", "ct", "lb", "oz", "ozt", "dwt", "grain", "s", "min", "h", "d", "week",
     "fortnight", "A", "V", "W", "J", "Wh", "eV", "coulomb", "Ah", "ohm", "farad", "H", "Hz", "N", "lbf", "Pa", "bar",
     "psi", "ksi", "K", "degC", "degF", "delta_degC", "delta_degF", "delta_K", "L", "gal_us", "gal_imp", "deg", "arcmin",
     "arcsec", "rad", "%", "dB", "dBm", "dBW", *CURRENCIES,
@@ -269,7 +288,7 @@ SI_PREFIXES: dict[str, int] = {
 OTHER_SYMBOLS: dict[str, str] = {
     "C": "coulomb", "F": "farad", "S": "siemens", "T": "tesla", "Wb": "weber", "mol": "mole", "cd": "candela",
     "lm": "lumen", "lx": "lux", "Bq": "becquerel", "Gy": "gray", "Sv": "sievert", "kat": "katal",
-    "sr": "steradian", "Da": "dalton", "ha": "hectare", "au": "astronomical_unit", "l": "liter", "Ω": "ohm",
+    "sr": "steradian", "Da": "dalton", "au": "astronomical_unit", "l": "liter", "Ω": "ohm",
     "M": "molar", "a": "year",
 }
 
@@ -286,6 +305,7 @@ NEAR_MISSES: dict[str, str] = {
     "mins": "min", "minute": "min", "minutes": "min", "day": "d", "days": "d",
     "inch": "in", "inches": "in", '"': "in", "feet": "ft", "foot": "ft", "thou": "mil", "furlongs": "furlong",
     "fortnights": "fortnight", "weeks": "week", "decibel": "dB", "decibels": "dB",
+    "acres": "acre", "hectare": "ha", "hectares": "ha", "Btu_it": "Btu",
     "troy_ounce": "ozt", "troy_ounces": "ozt", "pennyweight": "dwt", "pennyweights": "dwt", "grains": "grain",
     "°": "deg", "degree": "deg", "degrees": "deg", "radian": "rad", "radians": "rad",
     "arcminute": "arcmin", "arcminutes": "arcmin", "arcsecond": "arcsec", "arcseconds": "arcsec",
@@ -328,6 +348,20 @@ AMBIGUOUS: dict[str, str] = {
         "Write the ISO 4217 code of the one you mean."
     ),
     "¥": '"¥" is the sign of both the Japanese yen (JPY) and the Chinese renminbi (CNY). Write the code of the one you mean.',
+    **dict.fromkeys(
+        ("survey_acre", "us_survey_acre", "US_survey_acre"),
+        "The US survey acre (10 square survey chains, about 4,046.8726 m^2) and the international acre (\"acre\", "
+        "43,560 ft^2, exactly 4,046.8564224 m^2) differ by 2 parts in a million, and an area in \"acres\" does not say "
+        "which it is, so flo2-calc carries only the international acre. When your source states an area in US survey "
+        "measure, give it as that source states it in ft^2 or m^2, with the source.",
+    ),
+    **dict.fromkeys(
+        ("BTU", "Btu_iso", "Btu_th", "british_thermal_unit"),
+        "A Btu is three different units: the International Table Btu (\"Btu\", exactly 1055.05585262 J, the one "
+        "U-factors, heating loads and heat-pump ratings are given in), the ISO Btu (1055.056 J, what pint calls "
+        "\"Btu\" and \"BTU\") and the thermochemical Btu (about 1054.35 J). flo2-calc carries only the International "
+        "Table Btu: write \"Btu\" when your source means it, or give the value in J or Wh from the source.",
+    ),
     "£": '"£" is the sign of the pound sterling (GBP) and of other pounds. Write the ISO 4217 code of the one you mean.',
 }
 
@@ -339,8 +373,14 @@ ANGLES: dict[str, tuple[str, Fraction]] = {
     "rad": ("[angle, in rad]", Fraction(1)),
 }
 # Units flo2-calc defines itself, as an exact multiple of another vocabulary unit, where pint's differs.
-DEFINED: dict[str, tuple[Fraction, str]] = {
-    "furlong": (Fraction(660), "ft"),  # the international furlong; pint's is the US survey one
+# (times, of, power): the unit is `times` x `of`^`power`. Where pint has the unit, pint's differs.
+BTU_IT_J = Fraction(105505585262, 10**8)  # the International Table Btu in J, exactly (NIST SP 811, Btu_IT)
+DEFINED: dict[str, tuple[Fraction, str, int]] = {
+    "furlong": (Fraction(660), "ft", 1),  # the international furlong; pint's is the US survey one
+    "acre": (Fraction(43560), "ft", 2),  # the international acre; pint's is the US survey one (0.11.0)
+    "ha": (Fraction(10000), "m", 2),  # the hectare (0.11.0)
+    "Btu": (BTU_IT_J, "J", 1),  # the International Table Btu; pint's is the ISO one (0.11.0)
+    "ton_refrigeration": (12000 * BTU_IT_J / 3600, "W", 1),  # 12,000 Btu_IT per hour (0.11.0)
 }
 # Decibels, each its own dimension (decibels.py holds the levels' rules).
 DECIBELS: dict[str, str] = {"dB": "[gain, in dB]", "dBm": "[power level, in dB above 1 mW]", "dBW": "[power level, in dB above 1 W]"}
@@ -353,6 +393,8 @@ MAX_POWER = 12
 CALLED: dict[str, str] = {
     "oz": "the avoirdupois ounce", "ozt": "the troy ounce", "dwt": "the pennyweight", "lb": "the avoirdupois pound",
     "ct": "the metric carat", "t": "the tonne", "mil": "a thousandth of an inch", "furlong": "660 ft",
+    "acre": "the international acre", "Btu": "the International Table Btu",
+    "ton_refrigeration": "the refrigeration ton",
     "gal_us": "the US gallon", "gal_imp": "the imperial gallon", "K": "a temperature or a change",
     "degC": "a temperature", "degF": "a temperature", "delta_degC": "a change", "delta_degF": "a change",
     "delta_K": "a change",
@@ -433,9 +475,9 @@ def atom(spelling: str) -> Atom:
     if spelling in DECIBELS:
         return Atom(spelling, Fraction(1), ((DECIBELS[spelling], 1),))
     if spelling in DEFINED:
-        times, of = DEFINED[spelling]
+        times, of, power = DEFINED[spelling]
         base = atom(of)
-        return Atom(spelling, times * base.factor, base.dimension)
+        return Atom(spelling, times * base.factor**power, tuple((d, e * power) for d, e in base.dimension))
     assert pint_name is not None
     return _pint_atom(spelling, pint_name)
 
