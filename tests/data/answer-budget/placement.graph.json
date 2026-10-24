@@ -1,0 +1,2370 @@
+{
+ "nodes": [
+  {
+   "id": "a",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "6378137 m"
+  },
+  {
+   "id": "inv_f",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "298.257223563"
+  },
+  {
+   "id": "one",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1"
+  },
+  {
+   "id": "two",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2"
+  },
+  {
+   "id": "lat0",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "40.000 deg"
+  },
+  {
+   "id": "lon0",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "-100.00 deg"
+  },
+  {
+   "args": [
+    "one",
+    "inv_f"
+   ],
+   "id": "f",
+   "op": "div"
+  },
+  {
+   "args": [
+    "two",
+    "f"
+   ],
+   "id": "two_minus_f",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "f",
+    "two_minus_f"
+   ],
+   "id": "e2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "lat0"
+   ],
+   "id": "sin_lat0",
+   "op": "sin"
+  },
+  {
+   "args": [
+    "sin_lat0",
+    "sin_lat0"
+   ],
+   "id": "sin2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "e2",
+    "sin2"
+   ],
+   "id": "e2_sin2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "one",
+    "e2_sin2"
+   ],
+   "id": "w",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "w"
+   ],
+   "id": "sqrt_w",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "w",
+    "sqrt_w"
+   ],
+   "id": "w_1_5",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "one",
+    "e2"
+   ],
+   "id": "one_minus_e2",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "a",
+    "one_minus_e2"
+   ],
+   "id": "a_1me2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "a_1me2",
+    "w_1_5"
+   ],
+   "id": "M",
+   "op": "div"
+  },
+  {
+   "args": [
+    "a",
+    "sqrt_w"
+   ],
+   "id": "N",
+   "op": "div"
+  },
+  {
+   "args": [
+    "lat0"
+   ],
+   "id": "cos_lat0",
+   "op": "cos"
+  },
+  {
+   "args": [
+    "N",
+    "cos_lat0"
+   ],
+   "id": "N_cos",
+   "op": "mul"
+  },
+  {
+   "id": "parcel_lon",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "-99.999395957661",
+     "-99.999508569856",
+     "-99.999706439656",
+     "-99.999706918429",
+     "-100.000726670424",
+     "-100.000725881472",
+     "-100.000715995533",
+     "-100.000698820808",
+     "-100.00069506203"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "id": "parcel_lat",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "40.0006927183652",
+     "40.0002321099708",
+     "39.9994250709988",
+     "39.9994230407622",
+     "39.9998583303273",
+     "39.999877802245",
+     "40.0001776480111",
+     "40.0006985465771",
+     "40.0008183639204"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "args": [
+    "parcel_lon",
+    "lon0"
+   ],
+   "id": "parcel_dlon",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "parcel_dlon"
+   ],
+   "id": "parcel_dlon_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "N_cos",
+    "parcel_dlon_rad"
+   ],
+   "id": "parcel_x_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "parcel_x_m"
+   ],
+   "id": "parcel_x",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "args": [
+    "parcel_lat",
+    "lat0"
+   ],
+   "id": "parcel_dlat",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "parcel_dlat"
+   ],
+   "id": "parcel_dlat_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "M",
+    "parcel_dlat_rad"
+   ],
+   "id": "parcel_y_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "parcel_y_m"
+   ],
+   "id": "parcel_y",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "id": "parcel_next_lon",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "-99.999508569856",
+     "-99.999706439656",
+     "-99.999706918429",
+     "-100.000726670424",
+     "-100.000725881472",
+     "-100.000715995533",
+     "-100.000698820808",
+     "-100.00069506203",
+     "-99.999395957661"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "id": "parcel_next_lat",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "40.0002321099708",
+     "39.9994250709988",
+     "39.9994230407622",
+     "39.9998583303273",
+     "39.999877802245",
+     "40.0001776480111",
+     "40.0006985465771",
+     "40.0008183639204",
+     "40.0006927183652"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "args": [
+    "parcel_next_lon",
+    "lon0"
+   ],
+   "id": "parcel_next_dlon",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "parcel_next_dlon"
+   ],
+   "id": "parcel_next_dlon_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "N_cos",
+    "parcel_next_dlon_rad"
+   ],
+   "id": "parcel_next_x_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "parcel_next_x_m"
+   ],
+   "id": "parcel_next_x",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "args": [
+    "parcel_next_lat",
+    "lat0"
+   ],
+   "id": "parcel_next_dlat",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "parcel_next_dlat"
+   ],
+   "id": "parcel_next_dlat_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "M",
+    "parcel_next_dlat_rad"
+   ],
+   "id": "parcel_next_y_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "parcel_next_y_m"
+   ],
+   "id": "parcel_next_y",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "id": "county_lon",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "-100.000197999816",
+     "-100.000075999955",
+     "-99.999944999979",
+     "-100.000066999869"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "id": "county_lat",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "39.9996059989804",
+     "39.9997799991382",
+     "39.9997349989468",
+     "39.9995619991697"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "args": [
+    "county_lon",
+    "lon0"
+   ],
+   "id": "county_dlon",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "county_dlon"
+   ],
+   "id": "county_dlon_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "N_cos",
+    "county_dlon_rad"
+   ],
+   "id": "county_x_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "county_x_m"
+   ],
+   "id": "county_x",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "args": [
+    "county_lat",
+    "lat0"
+   ],
+   "id": "county_dlat",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "county_dlat"
+   ],
+   "id": "county_dlat_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "M",
+    "county_dlat_rad"
+   ],
+   "id": "county_y_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "county_y_m"
+   ],
+   "id": "county_y",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "id": "south_line_i",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "3"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "south_line_i"
+   ],
+   "id": "south_line_ax",
+   "op": "element"
+  },
+  {
+   "args": [
+    "parcel_y",
+    "south_line_i"
+   ],
+   "id": "south_line_ay",
+   "op": "element"
+  },
+  {
+   "id": "south_line_j",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "4"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "south_line_j"
+   ],
+   "id": "south_line_bx",
+   "op": "element"
+  },
+  {
+   "args": [
+    "parcel_y",
+    "south_line_j"
+   ],
+   "id": "south_line_by",
+   "op": "element"
+  },
+  {
+   "args": [
+    "south_line_bx",
+    "south_line_ax"
+   ],
+   "id": "south_line_dx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "south_line_by",
+    "south_line_ay"
+   ],
+   "id": "south_line_dy",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "south_line_dx",
+    "south_line_dx"
+   ],
+   "id": "south_line_dx2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "south_line_dy",
+    "south_line_dy"
+   ],
+   "id": "south_line_dy2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "south_line_dx2",
+    "south_line_dy2"
+   ],
+   "id": "south_line_len2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "south_line_len2"
+   ],
+   "id": "south_line_len",
+   "op": "sqrt"
+  },
+  {
+   "id": "east_line_i",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "east_line_i"
+   ],
+   "id": "east_line_ax",
+   "op": "element"
+  },
+  {
+   "args": [
+    "parcel_y",
+    "east_line_i"
+   ],
+   "id": "east_line_ay",
+   "op": "element"
+  },
+  {
+   "id": "east_line_j",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "east_line_j"
+   ],
+   "id": "east_line_bx",
+   "op": "element"
+  },
+  {
+   "args": [
+    "parcel_y",
+    "east_line_j"
+   ],
+   "id": "east_line_by",
+   "op": "element"
+  },
+  {
+   "args": [
+    "east_line_bx",
+    "east_line_ax"
+   ],
+   "id": "east_line_dx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "east_line_by",
+    "east_line_ay"
+   ],
+   "id": "east_line_dy",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "east_line_dx",
+    "east_line_dx"
+   ],
+   "id": "east_line_dx2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "east_line_dy",
+    "east_line_dy"
+   ],
+   "id": "east_line_dy2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "east_line_dx2",
+    "east_line_dy2"
+   ],
+   "id": "east_line_len2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "east_line_len2"
+   ],
+   "id": "east_line_len",
+   "op": "sqrt"
+  },
+  {
+   "id": "west_line_i",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "5"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "west_line_i"
+   ],
+   "id": "west_line_ax",
+   "op": "element"
+  },
+  {
+   "args": [
+    "parcel_y",
+    "west_line_i"
+   ],
+   "id": "west_line_ay",
+   "op": "element"
+  },
+  {
+   "id": "west_line_j",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "7"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "west_line_j"
+   ],
+   "id": "west_line_bx",
+   "op": "element"
+  },
+  {
+   "args": [
+    "parcel_y",
+    "west_line_j"
+   ],
+   "id": "west_line_by",
+   "op": "element"
+  },
+  {
+   "args": [
+    "west_line_bx",
+    "west_line_ax"
+   ],
+   "id": "west_line_dx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "west_line_by",
+    "west_line_ay"
+   ],
+   "id": "west_line_dy",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "west_line_dx",
+    "west_line_dx"
+   ],
+   "id": "west_line_dx2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "west_line_dy",
+    "west_line_dy"
+   ],
+   "id": "west_line_dy2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "west_line_dx2",
+    "west_line_dy2"
+   ],
+   "id": "west_line_len2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "west_line_len2"
+   ],
+   "id": "west_line_len",
+   "op": "sqrt"
+  },
+  {
+   "id": "north_line_i",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "8"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "north_line_i"
+   ],
+   "id": "north_line_ax",
+   "op": "element"
+  },
+  {
+   "args": [
+    "parcel_y",
+    "north_line_i"
+   ],
+   "id": "north_line_ay",
+   "op": "element"
+  },
+  {
+   "id": "north_line_j",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "north_line_j"
+   ],
+   "id": "north_line_bx",
+   "op": "element"
+  },
+  {
+   "args": [
+    "parcel_y",
+    "north_line_j"
+   ],
+   "id": "north_line_by",
+   "op": "element"
+  },
+  {
+   "args": [
+    "north_line_bx",
+    "north_line_ax"
+   ],
+   "id": "north_line_dx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "north_line_by",
+    "north_line_ay"
+   ],
+   "id": "north_line_dy",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "north_line_dx",
+    "north_line_dx"
+   ],
+   "id": "north_line_dx2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "north_line_dy",
+    "north_line_dy"
+   ],
+   "id": "north_line_dy2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "north_line_dx2",
+    "north_line_dy2"
+   ],
+   "id": "north_line_len2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "north_line_len2"
+   ],
+   "id": "north_line_len",
+   "op": "sqrt"
+  },
+  {
+   "id": "c0",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0"
+  },
+  {
+   "args": [
+    "county_x",
+    "c0"
+   ],
+   "id": "cx0",
+   "op": "element"
+  },
+  {
+   "args": [
+    "county_y",
+    "c0"
+   ],
+   "id": "cy0",
+   "op": "element"
+  },
+  {
+   "id": "c1",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1"
+  },
+  {
+   "args": [
+    "county_x",
+    "c1"
+   ],
+   "id": "cx1",
+   "op": "element"
+  },
+  {
+   "args": [
+    "county_y",
+    "c1"
+   ],
+   "id": "cy1",
+   "op": "element"
+  },
+  {
+   "id": "c2",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2"
+  },
+  {
+   "args": [
+    "county_x",
+    "c2"
+   ],
+   "id": "cx2",
+   "op": "element"
+  },
+  {
+   "args": [
+    "county_y",
+    "c2"
+   ],
+   "id": "cy2",
+   "op": "element"
+  },
+  {
+   "id": "c3",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "3"
+  },
+  {
+   "args": [
+    "county_x",
+    "c3"
+   ],
+   "id": "cx3",
+   "op": "element"
+  },
+  {
+   "args": [
+    "county_y",
+    "c3"
+   ],
+   "id": "cy3",
+   "op": "element"
+  },
+  {
+   "args": [
+    "cx3",
+    "cx0"
+   ],
+   "id": "ms_x2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "ms_x2",
+    "two"
+   ],
+   "id": "ms_x",
+   "op": "div"
+  },
+  {
+   "args": [
+    "cy3",
+    "cy0"
+   ],
+   "id": "ms_y2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "ms_y2",
+    "two"
+   ],
+   "id": "ms_y",
+   "op": "div"
+  },
+  {
+   "args": [
+    "cx1",
+    "cx2"
+   ],
+   "id": "mn_x2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "mn_x2",
+    "two"
+   ],
+   "id": "mn_x",
+   "op": "div"
+  },
+  {
+   "args": [
+    "cy1",
+    "cy2"
+   ],
+   "id": "mn_y2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "mn_y2",
+    "two"
+   ],
+   "id": "mn_y",
+   "op": "div"
+  },
+  {
+   "args": [
+    "mn_x",
+    "ms_x"
+   ],
+   "id": "ax_dx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "mn_y",
+    "ms_y"
+   ],
+   "id": "ax_dy",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "ax_dx",
+    "ax_dx"
+   ],
+   "id": "ax_dx2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ax_dy",
+    "ax_dy"
+   ],
+   "id": "ax_dy2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ax_dx2",
+    "ax_dy2"
+   ],
+   "id": "ax_len2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "ax_len2"
+   ],
+   "id": "ax_len",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "ax_dx",
+    "ax_len"
+   ],
+   "id": "vhx",
+   "op": "div"
+  },
+  {
+   "args": [
+    "ax_dy",
+    "ax_len"
+   ],
+   "id": "vhy",
+   "op": "div"
+  },
+  {
+   "args": [
+    "vhx"
+   ],
+   "id": "uhy",
+   "op": "neg"
+  },
+  {
+   "args": [
+    "ax_dx",
+    "ax_dy"
+   ],
+   "id": "axis_bearing",
+   "op": "atan2",
+   "unit": "deg"
+  },
+  {
+   "args": [
+    "vhx",
+    "south_line_dy"
+   ],
+   "id": "vn_a",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "vhy",
+    "south_line_dx"
+   ],
+   "id": "vn_b",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "vn_a",
+    "vn_b"
+   ],
+   "id": "vn_c",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "vn_c",
+    "south_line_len"
+   ],
+   "id": "v_dot_n",
+   "op": "div"
+  },
+  {
+   "args": [
+    "vhy",
+    "south_line_dy"
+   ],
+   "id": "un_a",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "uhy",
+    "south_line_dx"
+   ],
+   "id": "un_b",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "un_a",
+    "un_b"
+   ],
+   "id": "un_c",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "un_c",
+    "south_line_len"
+   ],
+   "id": "u_dot_n",
+   "op": "div"
+  },
+  {
+   "args": [
+    "ms_x",
+    "south_line_ax"
+   ],
+   "id": "ms_north_rx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "ms_y",
+    "south_line_ay"
+   ],
+   "id": "ms_north_ry",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "south_line_dx",
+    "ms_north_ry"
+   ],
+   "id": "ms_north_c1",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "south_line_dy",
+    "ms_north_rx"
+   ],
+   "id": "ms_north_c2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ms_north_c2",
+    "ms_north_c1"
+   ],
+   "id": "ms_north_cross",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "ms_north_cross",
+    "south_line_len"
+   ],
+   "id": "ms_north",
+   "op": "div"
+  },
+  {
+   "id": "margin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "5 ft"
+  },
+  {
+   "id": "shop_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "40 ft"
+  },
+  {
+   "args": [
+    "shop_w",
+    "two"
+   ],
+   "id": "half_w",
+   "op": "div"
+  },
+  {
+   "args": [
+    "half_w"
+   ],
+   "id": "u_west",
+   "op": "neg"
+  },
+  {
+   "args": [
+    "margin",
+    "ms_north"
+   ],
+   "id": "s_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "u_west",
+    "u_dot_n"
+   ],
+   "id": "s_b",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "s_a",
+    "s_b"
+   ],
+   "id": "s_c",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "s_c",
+    "v_dot_n"
+   ],
+   "id": "s_along_axis",
+   "op": "div"
+  },
+  {
+   "args": [
+    "s_along_axis",
+    "vhx"
+   ],
+   "id": "bsx",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ms_x",
+    "bsx"
+   ],
+   "id": "b_x",
+   "op": "add"
+  },
+  {
+   "args": [
+    "s_along_axis",
+    "vhy"
+   ],
+   "id": "bsy",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ms_y",
+    "bsy"
+   ],
+   "id": "b_y",
+   "op": "add"
+  },
+  {
+   "id": "U",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "-20",
+     "20",
+     "20",
+     "-20",
+     "20",
+     "33",
+     "33",
+     "20",
+     "20",
+     "33",
+     "33",
+     "20",
+     "-50",
+     "-20",
+     "-20",
+     "-50",
+     "-50",
+     "-20",
+     "-20",
+     "-50",
+     "33",
+     "45",
+     "45",
+     "33",
+     "64",
+     "76",
+     "76",
+     "64",
+     "51",
+     "57",
+     "57",
+     "51",
+     "52",
+     "73",
+     "73",
+     "52",
+     "30",
+     "51",
+     "51",
+     "30",
+     "-156",
+     "-126",
+     "-126",
+     "-156"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "V",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "0",
+     "0",
+     "60",
+     "60",
+     "0",
+     "0",
+     "60",
+     "60",
+     "20",
+     "20",
+     "60",
+     "60",
+     "24",
+     "24",
+     "60",
+     "60",
+     "24",
+     "24",
+     "36",
+     "36",
+     "32",
+     "32",
+     "56",
+     "56",
+     "38",
+     "38",
+     "50",
+     "50",
+     "50",
+     "50",
+     "60",
+     "60",
+     "64",
+     "64",
+     "131",
+     "131",
+     "100",
+     "100",
+     "167",
+     "167",
+     "60",
+     "60",
+     "72",
+     "72"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "args": [
+    "U",
+    "vhy"
+   ],
+   "id": "uux",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "V",
+    "vhx"
+   ],
+   "id": "vvx",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "uux",
+    "vvx"
+   ],
+   "id": "uv_x",
+   "op": "add"
+  },
+  {
+   "args": [
+    "b_x",
+    "uv_x"
+   ],
+   "id": "X",
+   "op": "add"
+  },
+  {
+   "args": [
+    "U",
+    "uhy"
+   ],
+   "id": "uuy",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "V",
+    "vhy"
+   ],
+   "id": "vvy",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "uuy",
+    "vvy"
+   ],
+   "id": "uv_y",
+   "op": "add"
+  },
+  {
+   "args": [
+    "b_y",
+    "uv_y"
+   ],
+   "id": "Y",
+   "op": "add"
+  },
+  {
+   "args": [
+    "X",
+    "south_line_ax"
+   ],
+   "id": "north_of_row_edge_rx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "Y",
+    "south_line_ay"
+   ],
+   "id": "north_of_row_edge_ry",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "south_line_dx",
+    "north_of_row_edge_ry"
+   ],
+   "id": "north_of_row_edge_c1",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "south_line_dy",
+    "north_of_row_edge_rx"
+   ],
+   "id": "north_of_row_edge_c2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "north_of_row_edge_c2",
+    "north_of_row_edge_c1"
+   ],
+   "id": "north_of_row_edge_cross",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "north_of_row_edge_cross",
+    "south_line_len"
+   ],
+   "id": "north_of_row_edge",
+   "op": "div"
+  },
+  {
+   "args": [
+    "X",
+    "east_line_ax"
+   ],
+   "id": "inside_east_line_rx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "Y",
+    "east_line_ay"
+   ],
+   "id": "inside_east_line_ry",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "east_line_dx",
+    "inside_east_line_ry"
+   ],
+   "id": "inside_east_line_c1",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "east_line_dy",
+    "inside_east_line_rx"
+   ],
+   "id": "inside_east_line_c2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "inside_east_line_c2",
+    "inside_east_line_c1"
+   ],
+   "id": "inside_east_line_cross",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "inside_east_line_cross",
+    "east_line_len"
+   ],
+   "id": "inside_east_line",
+   "op": "div"
+  },
+  {
+   "args": [
+    "X",
+    "west_line_ax"
+   ],
+   "id": "inside_west_line_rx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "Y",
+    "west_line_ay"
+   ],
+   "id": "inside_west_line_ry",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "west_line_dx",
+    "inside_west_line_ry"
+   ],
+   "id": "inside_west_line_c1",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "west_line_dy",
+    "inside_west_line_rx"
+   ],
+   "id": "inside_west_line_c2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "inside_west_line_c2",
+    "inside_west_line_c1"
+   ],
+   "id": "inside_west_line_cross",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "inside_west_line_cross",
+    "west_line_len"
+   ],
+   "id": "inside_west_line",
+   "op": "div"
+  },
+  {
+   "args": [
+    "X",
+    "north_line_ax"
+   ],
+   "id": "inside_north_line_rx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "Y",
+    "north_line_ay"
+   ],
+   "id": "inside_north_line_ry",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "north_line_dx",
+    "inside_north_line_ry"
+   ],
+   "id": "inside_north_line_c1",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "north_line_dy",
+    "inside_north_line_rx"
+   ],
+   "id": "inside_north_line_c2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "inside_north_line_c2",
+    "inside_north_line_c1"
+   ],
+   "id": "inside_north_line_cross",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "inside_north_line_cross",
+    "north_line_len"
+   ],
+   "id": "inside_north_line",
+   "op": "div"
+  },
+  {
+   "id": "row_width",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "60 ft"
+  },
+  {
+   "args": [
+    "north_of_row_edge",
+    "row_width"
+   ],
+   "id": "from_rear_line",
+   "op": "add"
+  },
+  {
+   "id": "ohwm_offset",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "40 ft"
+  },
+  {
+   "args": [
+    "north_of_row_edge",
+    "ohwm_offset"
+   ],
+   "id": "from_canal_ohwm",
+   "op": "add"
+  },
+  {
+   "id": "need_from_row_edge",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "need_side",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "30",
+     "30",
+     "30",
+     "30",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "30",
+     "30",
+     "30",
+     "30"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "need_rear",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "15",
+     "15",
+     "15",
+     "15",
+     "10",
+     "10",
+     "10",
+     "10",
+     "30",
+     "30",
+     "30",
+     "30",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "10",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "30",
+     "30",
+     "30",
+     "30"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "need_north",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "30",
+     "30",
+     "30",
+     "30",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "25",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "5",
+     "30",
+     "30",
+     "30",
+     "30"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "need_from_canal",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "0",
+     "50",
+     "50",
+     "50",
+     "50",
+     "100",
+     "100",
+     "100",
+     "100",
+     "100",
+     "100",
+     "100",
+     "100",
+     "0",
+     "0",
+     "0",
+     "0"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "args": [
+    "north_of_row_edge",
+    "need_from_row_edge"
+   ],
+   "id": "row_ok_each",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "row_ok_each"
+   ],
+   "id": "row_ok",
+   "op": "all"
+  },
+  {
+   "args": [
+    "inside_east_line",
+    "need_side"
+   ],
+   "id": "east_ok_each",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "east_ok_each"
+   ],
+   "id": "east_ok",
+   "op": "all"
+  },
+  {
+   "args": [
+    "inside_west_line",
+    "need_side"
+   ],
+   "id": "west_ok_each",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "west_ok_each"
+   ],
+   "id": "west_ok",
+   "op": "all"
+  },
+  {
+   "args": [
+    "from_rear_line",
+    "need_rear"
+   ],
+   "id": "rear_ok_each",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "rear_ok_each"
+   ],
+   "id": "rear_ok",
+   "op": "all"
+  },
+  {
+   "args": [
+    "inside_north_line",
+    "need_north"
+   ],
+   "id": "north_ok_each",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "north_ok_each"
+   ],
+   "id": "north_ok",
+   "op": "all"
+  },
+  {
+   "args": [
+    "from_canal_ohwm",
+    "need_from_canal"
+   ],
+   "id": "canal_ok_each",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "canal_ok_each"
+   ],
+   "id": "canal_ok",
+   "op": "all"
+  },
+  {
+   "args": [
+    "north_of_row_edge"
+   ],
+   "id": "min_north_of_row_edge",
+   "op": "min"
+  },
+  {
+   "args": [
+    "inside_east_line"
+   ],
+   "id": "min_inside_east",
+   "op": "min"
+  },
+  {
+   "args": [
+    "inside_west_line"
+   ],
+   "id": "min_inside_west",
+   "op": "min"
+  },
+  {
+   "args": [
+    "inside_north_line"
+   ],
+   "id": "min_inside_north",
+   "op": "min"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "parcel_next_y"
+   ],
+   "id": "xy1",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "parcel_next_x",
+    "parcel_y"
+   ],
+   "id": "xy2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "xy1",
+    "xy2"
+   ],
+   "id": "cross",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "cross"
+   ],
+   "id": "cross_sum",
+   "op": "sum"
+  },
+  {
+   "args": [
+    "cross_sum"
+   ],
+   "id": "cross_abs",
+   "op": "abs"
+  },
+  {
+   "args": [
+    "cross_abs",
+    "two"
+   ],
+   "id": "county_parcel_area",
+   "op": "div"
+  },
+  {
+   "id": "shop_l",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "60 ft"
+  },
+  {
+   "id": "wing_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "13 ft"
+  },
+  {
+   "id": "t_out",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "30 ft"
+  },
+  {
+   "id": "t_depth",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "36 ft"
+  },
+  {
+   "id": "gh_depth",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "12 ft"
+  },
+  {
+   "id": "gh_len",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "24 ft"
+  },
+  {
+   "id": "encl_side",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "12 ft"
+  },
+  {
+   "id": "shelter_len",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "30 ft"
+  },
+  {
+   "id": "shelter_depth",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "12 ft"
+  },
+  {
+   "id": "house_area",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "3316 ft^2"
+  },
+  {
+   "args": [
+    "shop_w",
+    "shop_l"
+   ],
+   "id": "a_shop",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "wing_w",
+    "shop_l"
+   ],
+   "id": "a_wing",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "t_out",
+    "t_depth"
+   ],
+   "id": "a_t",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "gh_depth",
+    "gh_len"
+   ],
+   "id": "a_gh",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "encl_side",
+    "encl_side"
+   ],
+   "id": "a_encl",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "shelter_len",
+    "shelter_depth"
+   ],
+   "id": "a_shelter",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "a_shop",
+    "a_wing"
+   ],
+   "id": "new_1",
+   "op": "add"
+  },
+  {
+   "args": [
+    "new_1",
+    "a_t"
+   ],
+   "id": "new_2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "new_2",
+    "a_gh"
+   ],
+   "id": "new_3",
+   "op": "add"
+  },
+  {
+   "args": [
+    "new_3",
+    "a_encl"
+   ],
+   "id": "new_4",
+   "op": "add"
+  },
+  {
+   "args": [
+    "new_4",
+    "a_shelter"
+   ],
+   "id": "new_footprint",
+   "op": "add"
+  },
+  {
+   "args": [
+    "new_footprint",
+    "house_area"
+   ],
+   "id": "covered_with_house",
+   "op": "add"
+  },
+  {
+   "id": "coverage_max",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.60"
+  },
+  {
+   "args": [
+    "county_parcel_area",
+    "coverage_max"
+   ],
+   "id": "allowed_cover",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "allowed_cover",
+    "covered_with_house"
+   ],
+   "id": "room_left_for_other_existing_structures",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "covered_with_house",
+    "allowed_cover"
+   ],
+   "id": "coverage_ok",
+   "op": "le"
+  },
+  {
+   "args": [
+    "covered_with_house",
+    "county_parcel_area"
+   ],
+   "id": "coverage_fraction",
+   "op": "div"
+  },
+  {
+   "id": "adu_len",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "40 ft"
+  },
+  {
+   "args": [
+    "wing_w",
+    "adu_len"
+   ],
+   "id": "adu_area",
+   "op": "mul"
+  },
+  {
+   "id": "adu_house_share",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.40"
+  },
+  {
+   "id": "adu_cap",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "800 ft^2"
+  },
+  {
+   "args": [
+    "house_area",
+    "adu_house_share"
+   ],
+   "id": "adu_share_area",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "adu_share_area",
+    "adu_cap"
+   ],
+   "id": "adu_limit",
+   "op": "min"
+  },
+  {
+   "args": [
+    "adu_area",
+    "adu_limit"
+   ],
+   "id": "adu_ok",
+   "op": "le"
+  },
+  {
+   "id": "interior_h",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "20 ft"
+  },
+  {
+   "id": "structure_h",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2 ft"
+  },
+  {
+   "id": "height_limit",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "40 ft"
+  },
+  {
+   "args": [
+    "interior_h",
+    "structure_h"
+   ],
+   "id": "eave_h",
+   "op": "add"
+  },
+  {
+   "args": [
+    "height_limit",
+    "eave_h"
+   ],
+   "id": "rise_room",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "rise_room",
+    "half_w"
+   ],
+   "id": "max_pitch_rise_per_run",
+   "op": "div"
+  },
+  {
+   "id": "twelve",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "12 in"
+  },
+  {
+   "args": [
+    "max_pitch_rise_per_run",
+    "twelve"
+   ],
+   "id": "max_pitch_in_per_12",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "row_ok",
+    "east_ok",
+    "west_ok",
+    "rear_ok",
+    "north_ok",
+    "canal_ok",
+    "coverage_ok",
+    "adu_ok"
+   ],
+   "id": "all_parcel_checks",
+   "op": "and"
+  }
+ ],
+ "result": [
+  "axis_bearing",
+  "s_along_axis",
+  "north_of_row_edge",
+  "from_rear_line",
+  "inside_east_line",
+  "inside_west_line",
+  "inside_north_line",
+  "from_canal_ohwm",
+  "row_ok",
+  "east_ok",
+  "west_ok",
+  "rear_ok",
+  "north_ok",
+  "canal_ok",
+  "min_north_of_row_edge",
+  "min_inside_east",
+  "min_inside_west",
+  "min_inside_north",
+  "county_parcel_area",
+  "new_footprint",
+  "covered_with_house",
+  "allowed_cover",
+  "room_left_for_other_existing_structures",
+  "coverage_fraction",
+  "coverage_ok",
+  "adu_area",
+  "adu_limit",
+  "adu_ok",
+  "max_pitch_in_per_12",
+  "all_parcel_checks"
+ ]
+}

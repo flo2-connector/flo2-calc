@@ -1,0 +1,1382 @@
+{
+ "nodes": [
+  {
+   "id": "well_u",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "-35 ft"
+  },
+  {
+   "id": "well_v",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "12 ft"
+  },
+  {
+   "id": "zero",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0 ft"
+  },
+  {
+   "id": "umin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "-20",
+     "20",
+     "20",
+     "-50",
+     "-50",
+     "33",
+     "64",
+     "51",
+     "52",
+     "30",
+     "-156"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "umax",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "20",
+     "33",
+     "33",
+     "-20",
+     "-20",
+     "45",
+     "76",
+     "57",
+     "73",
+     "51",
+     "-126"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "vmin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "0",
+     "0",
+     "20",
+     "24",
+     "24",
+     "32",
+     "38",
+     "50",
+     "64",
+     "100",
+     "60"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "vmax",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "60",
+     "60",
+     "60",
+     "60",
+     "36",
+     "56",
+     "50",
+     "60",
+     "131",
+     "167",
+     "72"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "args": [
+    "umin",
+    "well_u"
+   ],
+   "id": "du_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "well_u",
+    "umax"
+   ],
+   "id": "du_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "du_a",
+    "zero",
+    "du_b"
+   ],
+   "id": "du",
+   "op": "max"
+  },
+  {
+   "args": [
+    "vmin",
+    "well_v"
+   ],
+   "id": "dv_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "well_v",
+    "vmax"
+   ],
+   "id": "dv_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "dv_a",
+    "zero",
+    "dv_b"
+   ],
+   "id": "dv",
+   "op": "max"
+  },
+  {
+   "args": [
+    "du",
+    "du"
+   ],
+   "id": "du2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "dv",
+    "dv"
+   ],
+   "id": "dv2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "du2",
+    "dv2"
+   ],
+   "id": "d2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "d2"
+   ],
+   "id": "well_to_part",
+   "op": "sqrt"
+  },
+  {
+   "id": "need_from_well",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "5",
+     "5",
+     "5",
+     "5",
+     "100",
+     "5",
+     "100",
+     "50",
+     "100",
+     "100",
+     "100"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "args": [
+    "well_to_part",
+    "need_from_well"
+   ],
+   "id": "well_ok_each",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "well_ok_each"
+   ],
+   "id": "well_parts_ok",
+   "op": "count_true"
+  },
+  {
+   "args": [
+    "well_ok_each"
+   ],
+   "id": "well_all_ok",
+   "op": "all"
+  },
+  {
+   "args": [
+    "well_to_part",
+    "need_from_well"
+   ],
+   "id": "well_margin",
+   "op": "sub"
+  },
+  {
+   "id": "sewer_u",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "33 ft"
+  },
+  {
+   "args": [
+    "sewer_u",
+    "well_u"
+   ],
+   "id": "sewer_from_well",
+   "op": "sub"
+  },
+  {
+   "id": "sewer_need",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "50 ft"
+  },
+  {
+   "args": [
+    "sewer_from_well",
+    "sewer_need"
+   ],
+   "id": "sewer_ok",
+   "op": "ge"
+  },
+  {
+   "id": "b_umin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "-20",
+     "20",
+     "-50",
+     "33",
+     "64"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "b_umax",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "20",
+     "33",
+     "-20",
+     "45",
+     "76"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "b_vmin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "0",
+     "0",
+     "24",
+     "32",
+     "38"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "b_vmax",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "60",
+     "60",
+     "60",
+     "56",
+     "50"
+    ],
+    "unit": "ft"
+   }
+  },
+  {
+   "id": "field_umin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "52 ft"
+  },
+  {
+   "id": "field_umax",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "73 ft"
+  },
+  {
+   "id": "field_vmin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "64 ft"
+  },
+  {
+   "id": "field_vmax",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "131 ft"
+  },
+  {
+   "args": [
+    "b_umin",
+    "field_umax"
+   ],
+   "id": "field_gu_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "field_umin",
+    "b_umax"
+   ],
+   "id": "field_gu_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "field_gu_a",
+    "zero",
+    "field_gu_b"
+   ],
+   "id": "field_gu",
+   "op": "max"
+  },
+  {
+   "args": [
+    "b_vmin",
+    "field_vmax"
+   ],
+   "id": "field_gv_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "field_vmin",
+    "b_vmax"
+   ],
+   "id": "field_gv_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "field_gv_a",
+    "zero",
+    "field_gv_b"
+   ],
+   "id": "field_gv",
+   "op": "max"
+  },
+  {
+   "args": [
+    "field_gu",
+    "field_gu"
+   ],
+   "id": "field_gu2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "field_gv",
+    "field_gv"
+   ],
+   "id": "field_gv2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "field_gu2",
+    "field_gv2"
+   ],
+   "id": "field_g2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "field_g2"
+   ],
+   "id": "field_to_foundations",
+   "op": "sqrt"
+  },
+  {
+   "id": "field_need",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "10 ft"
+  },
+  {
+   "args": [
+    "field_to_foundations"
+   ],
+   "id": "field_nearest_foundation",
+   "op": "min"
+  },
+  {
+   "args": [
+    "field_nearest_foundation",
+    "field_need"
+   ],
+   "id": "field_foundation_ok",
+   "op": "ge"
+  },
+  {
+   "id": "reserve_umin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "30 ft"
+  },
+  {
+   "id": "reserve_umax",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "51 ft"
+  },
+  {
+   "id": "reserve_vmin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "100 ft"
+  },
+  {
+   "id": "reserve_vmax",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "167 ft"
+  },
+  {
+   "args": [
+    "b_umin",
+    "reserve_umax"
+   ],
+   "id": "reserve_gu_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "reserve_umin",
+    "b_umax"
+   ],
+   "id": "reserve_gu_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "reserve_gu_a",
+    "zero",
+    "reserve_gu_b"
+   ],
+   "id": "reserve_gu",
+   "op": "max"
+  },
+  {
+   "args": [
+    "b_vmin",
+    "reserve_vmax"
+   ],
+   "id": "reserve_gv_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "reserve_vmin",
+    "b_vmax"
+   ],
+   "id": "reserve_gv_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "reserve_gv_a",
+    "zero",
+    "reserve_gv_b"
+   ],
+   "id": "reserve_gv",
+   "op": "max"
+  },
+  {
+   "args": [
+    "reserve_gu",
+    "reserve_gu"
+   ],
+   "id": "reserve_gu2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "reserve_gv",
+    "reserve_gv"
+   ],
+   "id": "reserve_gv2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "reserve_gu2",
+    "reserve_gv2"
+   ],
+   "id": "reserve_g2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "reserve_g2"
+   ],
+   "id": "reserve_to_foundations",
+   "op": "sqrt"
+  },
+  {
+   "id": "reserve_need",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "10 ft"
+  },
+  {
+   "args": [
+    "reserve_to_foundations"
+   ],
+   "id": "reserve_nearest_foundation",
+   "op": "min"
+  },
+  {
+   "args": [
+    "reserve_nearest_foundation",
+    "reserve_need"
+   ],
+   "id": "reserve_foundation_ok",
+   "op": "ge"
+  },
+  {
+   "id": "tank_umin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "51 ft"
+  },
+  {
+   "id": "tank_umax",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "57 ft"
+  },
+  {
+   "id": "tank_vmin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "50 ft"
+  },
+  {
+   "id": "tank_vmax",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "60 ft"
+  },
+  {
+   "args": [
+    "b_umin",
+    "tank_umax"
+   ],
+   "id": "tank_gu_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "tank_umin",
+    "b_umax"
+   ],
+   "id": "tank_gu_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "tank_gu_a",
+    "zero",
+    "tank_gu_b"
+   ],
+   "id": "tank_gu",
+   "op": "max"
+  },
+  {
+   "args": [
+    "b_vmin",
+    "tank_vmax"
+   ],
+   "id": "tank_gv_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "tank_vmin",
+    "b_vmax"
+   ],
+   "id": "tank_gv_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "tank_gv_a",
+    "zero",
+    "tank_gv_b"
+   ],
+   "id": "tank_gv",
+   "op": "max"
+  },
+  {
+   "args": [
+    "tank_gu",
+    "tank_gu"
+   ],
+   "id": "tank_gu2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "tank_gv",
+    "tank_gv"
+   ],
+   "id": "tank_gv2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "tank_gu2",
+    "tank_gv2"
+   ],
+   "id": "tank_g2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "tank_g2"
+   ],
+   "id": "tank_to_foundations",
+   "op": "sqrt"
+  },
+  {
+   "id": "tank_need",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "5 ft"
+  },
+  {
+   "args": [
+    "tank_to_foundations"
+   ],
+   "id": "tank_nearest_foundation",
+   "op": "min"
+  },
+  {
+   "args": [
+    "tank_nearest_foundation",
+    "tank_need"
+   ],
+   "id": "tank_foundation_ok",
+   "op": "ge"
+  },
+  {
+   "id": "house_tank_north",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "140 ft"
+  },
+  {
+   "id": "axis_bearing",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "26.025892322024745 deg"
+  },
+  {
+   "args": [
+    "axis_bearing"
+   ],
+   "id": "sin_b",
+   "op": "sin"
+  },
+  {
+   "args": [
+    "axis_bearing"
+   ],
+   "id": "cos_b",
+   "op": "cos"
+  },
+  {
+   "args": [
+    "house_tank_north",
+    "sin_b"
+   ],
+   "id": "ht_du_pos",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ht_du_pos"
+   ],
+   "id": "ht_du",
+   "op": "neg"
+  },
+  {
+   "args": [
+    "house_tank_north",
+    "cos_b"
+   ],
+   "id": "ht_dv",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "well_u",
+    "ht_du"
+   ],
+   "id": "ht_u",
+   "op": "add"
+  },
+  {
+   "args": [
+    "well_v",
+    "ht_dv"
+   ],
+   "id": "ht_v",
+   "op": "add"
+  },
+  {
+   "id": "utility_u",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "33 ft"
+  },
+  {
+   "id": "back_v",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0 ft"
+  },
+  {
+   "args": [
+    "well_u",
+    "utility_u"
+   ],
+   "id": "l1_umin",
+   "op": "min"
+  },
+  {
+   "args": [
+    "well_u",
+    "utility_u"
+   ],
+   "id": "l1_umax",
+   "op": "max"
+  },
+  {
+   "args": [
+    "back_v",
+    "well_v"
+   ],
+   "id": "l1_vmin",
+   "op": "min"
+  },
+  {
+   "args": [
+    "back_v",
+    "well_v"
+   ],
+   "id": "l1_vmax",
+   "op": "max"
+  },
+  {
+   "args": [
+    "well_u",
+    "ht_u"
+   ],
+   "id": "l2_umin",
+   "op": "min"
+  },
+  {
+   "args": [
+    "well_u",
+    "ht_u"
+   ],
+   "id": "l2_umax",
+   "op": "max"
+  },
+  {
+   "args": [
+    "well_v",
+    "ht_v"
+   ],
+   "id": "l2_vmin",
+   "op": "min"
+  },
+  {
+   "args": [
+    "well_v",
+    "ht_v"
+   ],
+   "id": "l2_vmax",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l1_umin",
+    "tank_umax"
+   ],
+   "id": "l1_to_tank_gu_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "tank_umin",
+    "l1_umax"
+   ],
+   "id": "l1_to_tank_gu_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l1_to_tank_gu_a",
+    "zero",
+    "l1_to_tank_gu_b"
+   ],
+   "id": "l1_to_tank_gu",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l1_vmin",
+    "tank_vmax"
+   ],
+   "id": "l1_to_tank_gv_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "tank_vmin",
+    "l1_vmax"
+   ],
+   "id": "l1_to_tank_gv_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l1_to_tank_gv_a",
+    "zero",
+    "l1_to_tank_gv_b"
+   ],
+   "id": "l1_to_tank_gv",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l1_to_tank_gu",
+    "l1_to_tank_gu"
+   ],
+   "id": "l1_to_tank_gu2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l1_to_tank_gv",
+    "l1_to_tank_gv"
+   ],
+   "id": "l1_to_tank_gv2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l1_to_tank_gu2",
+    "l1_to_tank_gv2"
+   ],
+   "id": "l1_to_tank_g2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "l1_to_tank_g2"
+   ],
+   "id": "l1_to_tank",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "l1_umin",
+    "field_umax"
+   ],
+   "id": "l1_to_field_gu_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "field_umin",
+    "l1_umax"
+   ],
+   "id": "l1_to_field_gu_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l1_to_field_gu_a",
+    "zero",
+    "l1_to_field_gu_b"
+   ],
+   "id": "l1_to_field_gu",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l1_vmin",
+    "field_vmax"
+   ],
+   "id": "l1_to_field_gv_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "field_vmin",
+    "l1_vmax"
+   ],
+   "id": "l1_to_field_gv_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l1_to_field_gv_a",
+    "zero",
+    "l1_to_field_gv_b"
+   ],
+   "id": "l1_to_field_gv",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l1_to_field_gu",
+    "l1_to_field_gu"
+   ],
+   "id": "l1_to_field_gu2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l1_to_field_gv",
+    "l1_to_field_gv"
+   ],
+   "id": "l1_to_field_gv2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l1_to_field_gu2",
+    "l1_to_field_gv2"
+   ],
+   "id": "l1_to_field_g2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "l1_to_field_g2"
+   ],
+   "id": "l1_to_field",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "l1_umin",
+    "reserve_umax"
+   ],
+   "id": "l1_to_reserve_gu_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "reserve_umin",
+    "l1_umax"
+   ],
+   "id": "l1_to_reserve_gu_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l1_to_reserve_gu_a",
+    "zero",
+    "l1_to_reserve_gu_b"
+   ],
+   "id": "l1_to_reserve_gu",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l1_vmin",
+    "reserve_vmax"
+   ],
+   "id": "l1_to_reserve_gv_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "reserve_vmin",
+    "l1_vmax"
+   ],
+   "id": "l1_to_reserve_gv_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l1_to_reserve_gv_a",
+    "zero",
+    "l1_to_reserve_gv_b"
+   ],
+   "id": "l1_to_reserve_gv",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l1_to_reserve_gu",
+    "l1_to_reserve_gu"
+   ],
+   "id": "l1_to_reserve_gu2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l1_to_reserve_gv",
+    "l1_to_reserve_gv"
+   ],
+   "id": "l1_to_reserve_gv2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l1_to_reserve_gu2",
+    "l1_to_reserve_gv2"
+   ],
+   "id": "l1_to_reserve_g2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "l1_to_reserve_g2"
+   ],
+   "id": "l1_to_reserve",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "l2_umin",
+    "tank_umax"
+   ],
+   "id": "l2_to_tank_gu_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "tank_umin",
+    "l2_umax"
+   ],
+   "id": "l2_to_tank_gu_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l2_to_tank_gu_a",
+    "zero",
+    "l2_to_tank_gu_b"
+   ],
+   "id": "l2_to_tank_gu",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l2_vmin",
+    "tank_vmax"
+   ],
+   "id": "l2_to_tank_gv_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "tank_vmin",
+    "l2_vmax"
+   ],
+   "id": "l2_to_tank_gv_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l2_to_tank_gv_a",
+    "zero",
+    "l2_to_tank_gv_b"
+   ],
+   "id": "l2_to_tank_gv",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l2_to_tank_gu",
+    "l2_to_tank_gu"
+   ],
+   "id": "l2_to_tank_gu2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l2_to_tank_gv",
+    "l2_to_tank_gv"
+   ],
+   "id": "l2_to_tank_gv2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l2_to_tank_gu2",
+    "l2_to_tank_gv2"
+   ],
+   "id": "l2_to_tank_g2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "l2_to_tank_g2"
+   ],
+   "id": "l2_to_tank",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "l2_umin",
+    "field_umax"
+   ],
+   "id": "l2_to_field_gu_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "field_umin",
+    "l2_umax"
+   ],
+   "id": "l2_to_field_gu_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l2_to_field_gu_a",
+    "zero",
+    "l2_to_field_gu_b"
+   ],
+   "id": "l2_to_field_gu",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l2_vmin",
+    "field_vmax"
+   ],
+   "id": "l2_to_field_gv_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "field_vmin",
+    "l2_vmax"
+   ],
+   "id": "l2_to_field_gv_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l2_to_field_gv_a",
+    "zero",
+    "l2_to_field_gv_b"
+   ],
+   "id": "l2_to_field_gv",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l2_to_field_gu",
+    "l2_to_field_gu"
+   ],
+   "id": "l2_to_field_gu2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l2_to_field_gv",
+    "l2_to_field_gv"
+   ],
+   "id": "l2_to_field_gv2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l2_to_field_gu2",
+    "l2_to_field_gv2"
+   ],
+   "id": "l2_to_field_g2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "l2_to_field_g2"
+   ],
+   "id": "l2_to_field",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "l2_umin",
+    "reserve_umax"
+   ],
+   "id": "l2_to_reserve_gu_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "reserve_umin",
+    "l2_umax"
+   ],
+   "id": "l2_to_reserve_gu_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l2_to_reserve_gu_a",
+    "zero",
+    "l2_to_reserve_gu_b"
+   ],
+   "id": "l2_to_reserve_gu",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l2_vmin",
+    "reserve_vmax"
+   ],
+   "id": "l2_to_reserve_gv_a",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "reserve_vmin",
+    "l2_vmax"
+   ],
+   "id": "l2_to_reserve_gv_b",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l2_to_reserve_gv_a",
+    "zero",
+    "l2_to_reserve_gv_b"
+   ],
+   "id": "l2_to_reserve_gv",
+   "op": "max"
+  },
+  {
+   "args": [
+    "l2_to_reserve_gu",
+    "l2_to_reserve_gu"
+   ],
+   "id": "l2_to_reserve_gu2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l2_to_reserve_gv",
+    "l2_to_reserve_gv"
+   ],
+   "id": "l2_to_reserve_gv2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "l2_to_reserve_gu2",
+    "l2_to_reserve_gv2"
+   ],
+   "id": "l2_to_reserve_g2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "l2_to_reserve_g2"
+   ],
+   "id": "l2_to_reserve",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "l1_to_tank",
+    "l1_to_field"
+   ],
+   "id": "water_line_gap_a",
+   "op": "min"
+  },
+  {
+   "args": [
+    "l1_to_reserve",
+    "l2_to_tank"
+   ],
+   "id": "water_line_gap_b",
+   "op": "min"
+  },
+  {
+   "args": [
+    "l2_to_field",
+    "l2_to_reserve"
+   ],
+   "id": "water_line_gap_c",
+   "op": "min"
+  },
+  {
+   "args": [
+    "water_line_gap_a",
+    "water_line_gap_b"
+   ],
+   "id": "water_line_gap_ab",
+   "op": "min"
+  },
+  {
+   "args": [
+    "water_line_gap_ab",
+    "water_line_gap_c"
+   ],
+   "id": "nearest_water_line_to_septic",
+   "op": "min"
+  },
+  {
+   "id": "water_line_need",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "10 ft"
+  },
+  {
+   "args": [
+    "nearest_water_line_to_septic",
+    "water_line_need"
+   ],
+   "id": "water_line_ok",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "sewer_ok",
+    "field_foundation_ok",
+    "reserve_foundation_ok",
+    "tank_foundation_ok",
+    "water_line_ok"
+   ],
+   "id": "septic_ok",
+   "op": "and"
+  }
+ ],
+ "result": [
+  "well_to_part",
+  "well_margin",
+  "well_ok_each",
+  "well_parts_ok",
+  "well_all_ok",
+  "sewer_from_well",
+  "sewer_ok",
+  "field_to_foundations",
+  "reserve_to_foundations",
+  "tank_to_foundations",
+  "field_nearest_foundation",
+  "reserve_nearest_foundation",
+  "tank_nearest_foundation",
+  "ht_u",
+  "ht_v",
+  "nearest_water_line_to_septic",
+  "water_line_ok",
+  "septic_ok"
+ ]
+}

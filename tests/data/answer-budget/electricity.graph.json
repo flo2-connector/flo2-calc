@@ -1,0 +1,844 @@
+{
+ "nodes": [
+  {
+   "id": "heat_sz",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "10813.48 kWh"
+  },
+  {
+   "id": "heat_adu",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1338.04 kWh"
+  },
+  {
+   "id": "cool",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2302.53 kWh"
+  },
+  {
+   "id": "heat_gh",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1600.77 kWh"
+  },
+  {
+   "id": "other",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "2500",
+     "700",
+     "2160",
+     "400",
+     "1500",
+     "700.8",
+     "876",
+     "175.2",
+     "216",
+     "216",
+     "650",
+     "300",
+     "200",
+     "400"
+    ],
+    "unit": "kWh"
+   }
+  },
+  {
+   "id": "margin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1.10"
+  },
+  {
+   "id": "e_ese_m",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "29.92",
+     "57.05",
+     "99.84",
+     "136.29",
+     "162.8",
+     "167.25",
+     "179.25",
+     "157.98",
+     "116.86",
+     "80.6",
+     "39.75",
+     "26.93"
+    ],
+    "unit": "kWh/kW"
+   }
+  },
+  {
+   "id": "e_wnw_m",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "17.36",
+     "38.52",
+     "75.69",
+     "114.12",
+     "147.68",
+     "156.83",
+     "166.72",
+     "138.34",
+     "93.31",
+     "55.91",
+     "24.25",
+     "13.98"
+    ],
+    "unit": "kWh/kW"
+   }
+  },
+  {
+   "id": "hdd_m",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "996.43",
+     "741.65",
+     "569.03",
+     "326.94",
+     "143.41",
+     "29.89",
+     "2.19",
+     "5.28",
+     "77.95",
+     "356.74",
+     "683.61",
+     "934.58"
+    ],
+    "unit": "delta_degF*d"
+   }
+  },
+  {
+   "id": "cdd_m",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "0.00",
+     "0.00",
+     "0.01",
+     "2.88",
+     "42.60",
+     "138.34",
+     "327.64",
+     "272.70",
+     "71.84",
+     "2.86",
+     "0.07",
+     "0.01"
+    ],
+    "unit": "delta_degF*d"
+   }
+  },
+  {
+   "id": "gh_dd_m",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "744.62",
+     "561.68",
+     "462.52",
+     "274.5",
+     "68.82",
+     "0",
+     "0",
+     "0",
+     "0",
+     "279",
+     "484.8",
+     "670.53"
+    ],
+    "unit": "delta_degF*d"
+   }
+  },
+  {
+   "id": "mdays",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "31",
+     "28",
+     "31",
+     "30",
+     "31",
+     "30",
+     "31",
+     "31",
+     "30",
+     "31",
+     "30",
+     "31"
+    ],
+    "unit": "d"
+   }
+  },
+  {
+   "id": "slope_len",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "22.136 ft"
+  },
+  {
+   "id": "roof_len",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "62 ft"
+  },
+  {
+   "id": "plan_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "42 ft"
+  },
+  {
+   "id": "ridge_setback",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "36 in"
+  },
+  {
+   "id": "eave_margin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "18 in"
+  },
+  {
+   "id": "pathway",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "36 in"
+  },
+  {
+   "id": "end_margin",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "18 in"
+  },
+  {
+   "id": "mod_len",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1.722 m"
+  },
+  {
+   "id": "mod_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1.134 m"
+  },
+  {
+   "id": "mod_kw",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.41 kW"
+  },
+  {
+   "id": "cos_pitch",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.948683298"
+  },
+  {
+   "id": "third",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1/3"
+  },
+  {
+   "id": "crit_w",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "185 W"
+  },
+  {
+   "id": "outage_days",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2 d"
+  },
+  {
+   "id": "batt_kwh",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "13.5 kWh"
+  },
+  {
+   "id": "reserve",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0.9"
+  },
+  {
+   "id": "unit_limit",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "20 kWh"
+  },
+  {
+   "id": "garage_limit",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "80 kWh"
+  },
+  {
+   "id": "dc_ac",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1.2"
+  },
+  {
+   "id": "nm_cap",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "100 kW"
+  },
+  {
+   "id": "zero",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "0 kWh"
+  },
+  {
+   "id": "days_year",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "365 d"
+  },
+  {
+   "args": [
+    "other"
+   ],
+   "id": "other_total",
+   "op": "sum"
+  },
+  {
+   "args": [
+    "heat_sz",
+    "heat_adu"
+   ],
+   "id": "heat_bldg",
+   "op": "add"
+  },
+  {
+   "args": [
+    "heat_bldg",
+    "cool",
+    "heat_gh",
+    "other_total"
+   ],
+   "id": "use",
+   "op": "add"
+  },
+  {
+   "args": [
+    "use",
+    "margin"
+   ],
+   "id": "target",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "e_ese_m"
+   ],
+   "id": "e_ese",
+   "op": "sum"
+  },
+  {
+   "args": [
+    "e_wnw_m"
+   ],
+   "id": "e_wnw",
+   "op": "sum"
+  },
+  {
+   "args": [
+    "slope_len",
+    "ridge_setback"
+   ],
+   "id": "s1",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "s1",
+    "eave_margin"
+   ],
+   "id": "usable_slope",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "roof_len",
+    "pathway"
+   ],
+   "id": "l1",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "l1",
+    "end_margin"
+   ],
+   "id": "usable_len",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "usable_slope",
+    "mod_len"
+   ],
+   "id": "rows_raw",
+   "op": "div"
+  },
+  {
+   "args": [
+    "rows_raw"
+   ],
+   "id": "rows",
+   "op": "floor"
+  },
+  {
+   "args": [
+    "usable_len",
+    "mod_w"
+   ],
+   "id": "cols_raw",
+   "op": "div"
+  },
+  {
+   "args": [
+    "cols_raw"
+   ],
+   "id": "cols",
+   "op": "floor"
+  },
+  {
+   "args": [
+    "rows",
+    "cols"
+   ],
+   "id": "per_plane",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "per_plane",
+    "mod_kw"
+   ],
+   "id": "ese_kw",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ese_kw",
+    "e_ese"
+   ],
+   "id": "ese_kwh",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "target",
+    "ese_kwh"
+   ],
+   "id": "rest",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "rest",
+    "e_wnw"
+   ],
+   "id": "wnw_kw_need",
+   "op": "div"
+  },
+  {
+   "args": [
+    "wnw_kw_need",
+    "mod_kw"
+   ],
+   "id": "wnw_mods_raw",
+   "op": "div"
+  },
+  {
+   "args": [
+    "wnw_mods_raw"
+   ],
+   "id": "wnw_mods",
+   "op": "ceil"
+  },
+  {
+   "args": [
+    "wnw_mods",
+    "per_plane"
+   ],
+   "id": "wnw_fits",
+   "op": "le"
+  },
+  {
+   "args": [
+    "wnw_mods",
+    "mod_kw"
+   ],
+   "id": "wnw_kw",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "per_plane",
+    "wnw_mods"
+   ],
+   "id": "modules",
+   "op": "add"
+  },
+  {
+   "args": [
+    "ese_kw",
+    "wnw_kw"
+   ],
+   "id": "array_kw",
+   "op": "add"
+  },
+  {
+   "args": [
+    "wnw_kw",
+    "e_wnw"
+   ],
+   "id": "wnw_kwh",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "ese_kwh",
+    "wnw_kwh"
+   ],
+   "id": "production",
+   "op": "add"
+  },
+  {
+   "args": [
+    "production",
+    "use"
+   ],
+   "id": "net_zero",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "production",
+    "target"
+   ],
+   "id": "meets_target",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "production",
+    "use"
+   ],
+   "id": "surplus",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "mod_len",
+    "mod_w"
+   ],
+   "id": "mod_area",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "modules",
+    "mod_area"
+   ],
+   "id": "array_area",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "array_area",
+    "cos_pitch"
+   ],
+   "id": "array_plan",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "roof_len",
+    "plan_w"
+   ],
+   "id": "roof_plan",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "array_plan",
+    "roof_plan"
+   ],
+   "id": "plan_share",
+   "op": "div"
+  },
+  {
+   "args": [
+    "plan_share",
+    "third"
+   ],
+   "id": "setback_36_applies",
+   "op": "gt"
+  },
+  {
+   "args": [
+    "ese_kw",
+    "e_ese_m"
+   ],
+   "id": "prod_m_a",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "wnw_kw",
+    "e_wnw_m"
+   ],
+   "id": "prod_m_b",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "prod_m_a",
+    "prod_m_b"
+   ],
+   "id": "prod_m",
+   "op": "add"
+  },
+  {
+   "args": [
+    "hdd_m"
+   ],
+   "id": "hdd_sum",
+   "op": "sum"
+  },
+  {
+   "args": [
+    "cdd_m"
+   ],
+   "id": "cdd_sum",
+   "op": "sum"
+  },
+  {
+   "args": [
+    "gh_dd_m"
+   ],
+   "id": "ghdd_sum",
+   "op": "sum"
+  },
+  {
+   "args": [
+    "heat_bldg",
+    "hdd_m"
+   ],
+   "id": "use_heat_m_a",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "use_heat_m_a",
+    "hdd_sum"
+   ],
+   "id": "use_heat_m",
+   "op": "div"
+  },
+  {
+   "args": [
+    "cool",
+    "cdd_m"
+   ],
+   "id": "use_cool_m_a",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "use_cool_m_a",
+    "cdd_sum"
+   ],
+   "id": "use_cool_m",
+   "op": "div"
+  },
+  {
+   "args": [
+    "heat_gh",
+    "gh_dd_m"
+   ],
+   "id": "use_gh_m_a",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "use_gh_m_a",
+    "ghdd_sum"
+   ],
+   "id": "use_gh_m",
+   "op": "div"
+  },
+  {
+   "args": [
+    "other_total",
+    "mdays"
+   ],
+   "id": "use_other_m_a",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "use_other_m_a",
+    "days_year"
+   ],
+   "id": "use_other_m",
+   "op": "div"
+  },
+  {
+   "args": [
+    "use_heat_m",
+    "use_cool_m"
+   ],
+   "id": "use_m_1",
+   "op": "add"
+  },
+  {
+   "args": [
+    "use_m_1",
+    "use_gh_m"
+   ],
+   "id": "use_m_2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "use_m_2",
+    "use_other_m"
+   ],
+   "id": "use_m",
+   "op": "add"
+  },
+  {
+   "args": [
+    "prod_m",
+    "use_m"
+   ],
+   "id": "net_m",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "net_m",
+    "zero"
+   ],
+   "id": "deficit_m",
+   "op": "min"
+  },
+  {
+   "args": [
+    "deficit_m"
+   ],
+   "id": "winter_deficit",
+   "op": "sum"
+  },
+  {
+   "args": [
+    "net_m"
+   ],
+   "id": "worst_month",
+   "op": "min"
+  },
+  {
+   "args": [
+    "crit_w",
+    "outage_days"
+   ],
+   "id": "crit_need",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "crit_need"
+   ],
+   "id": "crit_need_kwh",
+   "op": "convert",
+   "unit": "kWh"
+  },
+  {
+   "args": [
+    "batt_kwh",
+    "reserve"
+   ],
+   "id": "batt_avail",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "batt_avail",
+    "crit_need_kwh"
+   ],
+   "id": "batt_ok",
+   "op": "ge"
+  },
+  {
+   "args": [
+    "batt_kwh",
+    "unit_limit"
+   ],
+   "id": "unit_ok",
+   "op": "le"
+  },
+  {
+   "args": [
+    "batt_kwh",
+    "garage_limit"
+   ],
+   "id": "garage_ok",
+   "op": "le"
+  },
+  {
+   "args": [
+    "array_kw",
+    "dc_ac"
+   ],
+   "id": "inverter_kw",
+   "op": "div"
+  },
+  {
+   "args": [
+    "inverter_kw",
+    "nm_cap"
+   ],
+   "id": "nm_ok",
+   "op": "le"
+  },
+  {
+   "args": [
+    "wnw_fits",
+    "net_zero",
+    "meets_target",
+    "batt_ok",
+    "unit_ok",
+    "garage_ok",
+    "nm_ok"
+   ],
+   "id": "all_ok",
+   "op": "and"
+  }
+ ],
+ "result": [
+  "other_total",
+  "use",
+  "target",
+  "e_ese",
+  "e_wnw",
+  "rows",
+  "cols",
+  "per_plane",
+  "ese_kw",
+  "wnw_mods",
+  "wnw_kw",
+  "modules",
+  "array_kw",
+  "production",
+  "net_zero",
+  "meets_target",
+  "surplus",
+  "plan_share",
+  "setback_36_applies",
+  "net_m",
+  "winter_deficit",
+  "worst_month",
+  "crit_need_kwh",
+  "batt_avail",
+  "batt_ok",
+  "unit_ok",
+  "garage_ok",
+  "inverter_kw",
+  "nm_ok",
+  "all_ok"
+ ]
+}

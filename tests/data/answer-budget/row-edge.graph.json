@@ -1,0 +1,821 @@
+{
+ "nodes": [
+  {
+   "id": "a",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "6378137 m"
+  },
+  {
+   "id": "inv_f",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "298.257223563"
+  },
+  {
+   "id": "one",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "1"
+  },
+  {
+   "id": "two",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "2"
+  },
+  {
+   "id": "lat0",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "40.000 deg"
+  },
+  {
+   "id": "lon0",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "-100.00 deg"
+  },
+  {
+   "args": [
+    "one",
+    "inv_f"
+   ],
+   "id": "f",
+   "op": "div"
+  },
+  {
+   "args": [
+    "two",
+    "f"
+   ],
+   "id": "two_minus_f",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "f",
+    "two_minus_f"
+   ],
+   "id": "e2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "lat0"
+   ],
+   "id": "sin_lat0",
+   "op": "sin"
+  },
+  {
+   "args": [
+    "sin_lat0",
+    "sin_lat0"
+   ],
+   "id": "sin2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "e2",
+    "sin2"
+   ],
+   "id": "e2_sin2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "one",
+    "e2_sin2"
+   ],
+   "id": "w",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "w"
+   ],
+   "id": "sqrt_w",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "w",
+    "sqrt_w"
+   ],
+   "id": "w_1_5",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "one",
+    "e2"
+   ],
+   "id": "one_minus_e2",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "a",
+    "one_minus_e2"
+   ],
+   "id": "a_1me2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "a_1me2",
+    "w_1_5"
+   ],
+   "id": "M",
+   "op": "div"
+  },
+  {
+   "args": [
+    "a",
+    "sqrt_w"
+   ],
+   "id": "N",
+   "op": "div"
+  },
+  {
+   "args": [
+    "lat0"
+   ],
+   "id": "cos_lat0",
+   "op": "cos"
+  },
+  {
+   "args": [
+    "N",
+    "cos_lat0"
+   ],
+   "id": "N_cos",
+   "op": "mul"
+  },
+  {
+   "id": "parcel_lon",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "-99.999395957661",
+     "-99.999508569856",
+     "-99.999706439656",
+     "-99.999706918429",
+     "-100.000726670424",
+     "-100.000725881472",
+     "-100.000715995533",
+     "-100.000698820808",
+     "-100.00069506203"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "id": "parcel_lat",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "40.0006927183652",
+     "40.0002321099708",
+     "39.9994250709988",
+     "39.9994230407622",
+     "39.9998583303273",
+     "39.999877802245",
+     "40.0001776480111",
+     "40.0006985465771",
+     "40.0008183639204"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "args": [
+    "parcel_lon",
+    "lon0"
+   ],
+   "id": "parcel_dlon",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "parcel_dlon"
+   ],
+   "id": "parcel_dlon_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "N_cos",
+    "parcel_dlon_rad"
+   ],
+   "id": "parcel_x_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "parcel_x_m"
+   ],
+   "id": "parcel_x",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "args": [
+    "parcel_lat",
+    "lat0"
+   ],
+   "id": "parcel_dlat",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "parcel_dlat"
+   ],
+   "id": "parcel_dlat_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "M",
+    "parcel_dlat_rad"
+   ],
+   "id": "parcel_y_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "parcel_y_m"
+   ],
+   "id": "parcel_y",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "id": "parcel_next_lon",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "-99.999508569856",
+     "-99.999706439656",
+     "-99.999706918429",
+     "-100.000726670424",
+     "-100.000725881472",
+     "-100.000715995533",
+     "-100.000698820808",
+     "-100.00069506203",
+     "-99.999395957661"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "id": "parcel_next_lat",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "40.0002321099708",
+     "39.9994250709988",
+     "39.9994230407622",
+     "39.9998583303273",
+     "39.999877802245",
+     "40.0001776480111",
+     "40.0006985465771",
+     "40.0008183639204",
+     "40.0006927183652"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "args": [
+    "parcel_next_lon",
+    "lon0"
+   ],
+   "id": "parcel_next_dlon",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "parcel_next_dlon"
+   ],
+   "id": "parcel_next_dlon_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "N_cos",
+    "parcel_next_dlon_rad"
+   ],
+   "id": "parcel_next_x_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "parcel_next_x_m"
+   ],
+   "id": "parcel_next_x",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "args": [
+    "parcel_next_lat",
+    "lat0"
+   ],
+   "id": "parcel_next_dlat",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "parcel_next_dlat"
+   ],
+   "id": "parcel_next_dlat_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "M",
+    "parcel_next_dlat_rad"
+   ],
+   "id": "parcel_next_y_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "parcel_next_y_m"
+   ],
+   "id": "parcel_next_y",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "id": "county_lon",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "-100.000197999816",
+     "-100.000075999955",
+     "-99.999944999979",
+     "-100.000066999869"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "id": "county_lat",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "39.9996059989804",
+     "39.9997799991382",
+     "39.9997349989468",
+     "39.9995619991697"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "args": [
+    "county_lon",
+    "lon0"
+   ],
+   "id": "county_dlon",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "county_dlon"
+   ],
+   "id": "county_dlon_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "N_cos",
+    "county_dlon_rad"
+   ],
+   "id": "county_x_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "county_x_m"
+   ],
+   "id": "county_x",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "args": [
+    "county_lat",
+    "lat0"
+   ],
+   "id": "county_dlat",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "county_dlat"
+   ],
+   "id": "county_dlat_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "M",
+    "county_dlat_rad"
+   ],
+   "id": "county_y_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "county_y_m"
+   ],
+   "id": "county_y",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "id": "survey_lon",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "-100.000088",
+     "-100.000206",
+     "-100.000085",
+     "-99.999968"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "id": "survey_lat",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": {
+    "array": [
+     "39.999578",
+     "39.99962",
+     "39.999784",
+     "39.999743"
+    ],
+    "unit": "deg"
+   }
+  },
+  {
+   "args": [
+    "survey_lon",
+    "lon0"
+   ],
+   "id": "survey_dlon",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "survey_dlon"
+   ],
+   "id": "survey_dlon_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "N_cos",
+    "survey_dlon_rad"
+   ],
+   "id": "survey_x_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "survey_x_m"
+   ],
+   "id": "survey_x",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "args": [
+    "survey_lat",
+    "lat0"
+   ],
+   "id": "survey_dlat",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "survey_dlat"
+   ],
+   "id": "survey_dlat_rad",
+   "op": "magnitude",
+   "unit": "rad"
+  },
+  {
+   "args": [
+    "M",
+    "survey_dlat_rad"
+   ],
+   "id": "survey_y_m",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "survey_y_m"
+   ],
+   "id": "survey_y",
+   "op": "convert",
+   "unit": "ft"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "parcel_next_y"
+   ],
+   "id": "xy1",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "parcel_next_x",
+    "parcel_y"
+   ],
+   "id": "xy2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "xy1",
+    "xy2"
+   ],
+   "id": "cross",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "cross"
+   ],
+   "id": "cross_sum",
+   "op": "sum"
+  },
+  {
+   "args": [
+    "cross_sum"
+   ],
+   "id": "cross_abs",
+   "op": "abs"
+  },
+  {
+   "args": [
+    "cross_abs",
+    "two"
+   ],
+   "id": "county_parcel_area",
+   "op": "div"
+  },
+  {
+   "id": "south_line_i",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "3"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "south_line_i"
+   ],
+   "id": "south_line_ax",
+   "op": "element"
+  },
+  {
+   "args": [
+    "parcel_y",
+    "south_line_i"
+   ],
+   "id": "south_line_ay",
+   "op": "element"
+  },
+  {
+   "id": "south_line_j",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "4"
+  },
+  {
+   "args": [
+    "parcel_x",
+    "south_line_j"
+   ],
+   "id": "south_line_bx",
+   "op": "element"
+  },
+  {
+   "args": [
+    "parcel_y",
+    "south_line_j"
+   ],
+   "id": "south_line_by",
+   "op": "element"
+  },
+  {
+   "args": [
+    "south_line_bx",
+    "south_line_ax"
+   ],
+   "id": "south_line_dx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "south_line_by",
+    "south_line_ay"
+   ],
+   "id": "south_line_dy",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "south_line_dx",
+    "south_line_dx"
+   ],
+   "id": "south_line_dx2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "south_line_dy",
+    "south_line_dy"
+   ],
+   "id": "south_line_dy2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "south_line_dx2",
+    "south_line_dy2"
+   ],
+   "id": "south_line_len2",
+   "op": "add"
+  },
+  {
+   "args": [
+    "south_line_len2"
+   ],
+   "id": "south_line_len",
+   "op": "sqrt"
+  },
+  {
+   "args": [
+    "county_x",
+    "south_line_ax"
+   ],
+   "id": "county_corners_north_of_south_line_rx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "county_y",
+    "south_line_ay"
+   ],
+   "id": "county_corners_north_of_south_line_ry",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "south_line_dx",
+    "county_corners_north_of_south_line_ry"
+   ],
+   "id": "county_corners_north_of_south_line_c1",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "south_line_dy",
+    "county_corners_north_of_south_line_rx"
+   ],
+   "id": "county_corners_north_of_south_line_c2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "county_corners_north_of_south_line_c2",
+    "county_corners_north_of_south_line_c1"
+   ],
+   "id": "county_corners_north_of_south_line_cross",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "county_corners_north_of_south_line_cross",
+    "south_line_len"
+   ],
+   "id": "county_corners_north_of_south_line",
+   "op": "div"
+  },
+  {
+   "args": [
+    "survey_x",
+    "south_line_ax"
+   ],
+   "id": "survey_corners_north_of_south_line_rx",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "survey_y",
+    "south_line_ay"
+   ],
+   "id": "survey_corners_north_of_south_line_ry",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "south_line_dx",
+    "survey_corners_north_of_south_line_ry"
+   ],
+   "id": "survey_corners_north_of_south_line_c1",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "south_line_dy",
+    "survey_corners_north_of_south_line_rx"
+   ],
+   "id": "survey_corners_north_of_south_line_c2",
+   "op": "mul"
+  },
+  {
+   "args": [
+    "survey_corners_north_of_south_line_c2",
+    "survey_corners_north_of_south_line_c1"
+   ],
+   "id": "survey_corners_north_of_south_line_cross",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "survey_corners_north_of_south_line_cross",
+    "south_line_len"
+   ],
+   "id": "survey_corners_north_of_south_line",
+   "op": "div"
+  },
+  {
+   "args": [
+    "county_corners_north_of_south_line"
+   ],
+   "id": "county_min_north",
+   "op": "min"
+  },
+  {
+   "args": [
+    "survey_corners_north_of_south_line"
+   ],
+   "id": "survey_min_north",
+   "op": "min"
+  },
+  {
+   "id": "legal_area",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "142441 ft^2"
+  },
+  {
+   "id": "row_width",
+   "source": "test fixture: a 2026-10-24 trial graph, anonymized",
+   "value": "60 ft"
+  },
+  {
+   "args": [
+    "legal_area",
+    "county_parcel_area"
+   ],
+   "id": "area_short_of_legal",
+   "op": "sub"
+  },
+  {
+   "args": [
+    "area_short_of_legal",
+    "south_line_len"
+   ],
+   "id": "mean_strip_width",
+   "op": "div"
+  },
+  {
+   "args": [
+    "mean_strip_width",
+    "row_width"
+   ],
+   "id": "strip_minus_row",
+   "op": "sub"
+  }
+ ],
+ "result": [
+  "county_parcel_area",
+  "south_line_len",
+  "area_short_of_legal",
+  "mean_strip_width",
+  "strip_minus_row",
+  "county_corners_north_of_south_line",
+  "survey_corners_north_of_south_line",
+  "county_min_north",
+  "survey_min_north"
+ ]
+}
