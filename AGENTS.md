@@ -72,6 +72,19 @@
   every test: the class is pinned in `tests/test_hypothesis.py` and `tests/test_power.py`. The units side (more units, degC/degF, currencies, dB) is
   `units.py`'s, not the evaluator's.
 - **Results** may be one node or a list (`"result": ["lo", "hi"]`), each reported by name as `results`.
+- **A reply fits its reader** (0.11.0, `dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget`,
+  Anthony's ruling of 2026-10-24; `answer.py`). This came from a defect: until 0.11.0 a reply carried every node's
+  value and was bounded only by the 2 MiB runaway guard, so a chat could not read its own result
+  (`fact:root-cause-a-calc-reply-is-sized-by-the-graph-not-by-the-reader-2026-10-24`).
+  - Every reply carries its OUTCOME whole: the status or refusal, the result(s) with their labels, `exactness`, the
+    record's facts, `next`.
+  - The formula and working views and the other values fill the host's answer budget (`max_answer_chars`). A
+    `withheld` block names what was left out and where it is.
+  - `record_computation` never repeats the values its record holds.
+  - A result too large on its own is shown by its shape, sha256 and first and last elements.
+  - A float64 `how` is said once a reply (`how_bounds_were_found`).
+  - The record format does not change for any of this. Never answer a reply over the budget, and never cut the
+    outcome before everything else is gone.
 - **Two ways in** (`dec:graph-submission-modes`): a whole graph, or node by node through `add_node`. Both end in
   `evaluator.evaluate`, which is why they agree. `add_node` is stateless.
 - **Units** (`dec:optional-units`, `dec:unit-mismatch-rejects`, `dec:units-use-reflow2-spellings`):
@@ -81,6 +94,13 @@
     prefix's case is its size (`tests/test_unit_hints.py` walks every prefix, symbol and case).
   - Each currency is its own dimension, with no exchange rates; only a sourced rate the caller gives converts.
   - `degC` and `degF` are temperatures with an offset (`temperature.py`); a bare `C` or `F` is refused as ambiguous.
+  - 0.11.0 (`dec:the-international-acre-and-the-hectare-the-survey-acre-refused`,
+    `dec:the-international-table-btu-and-the-refrigeration-ton`):
+    - `acre` is the international acre (exactly 43,560 ft^2) and `ha` the hectare.
+    - `Btu` is the International Table Btu (exactly 1055.05585262 J), and `ton_refrigeration` is exactly 12,000 Btu/h.
+    - flo2-calc defines each itself (`units.DEFINED`), since pint's acre and Btu are other ones.
+    - The US survey acre and the ISO and thermochemical Btus are refused as ambiguous.
+    - A bare `ton` is never a refrigeration ton.
   - A `K` known to be a change of temperature is `delta_K` (a change converted to K, a product in K through a
     compound, K minus a temperature), so it never converts to `degC` or `degF` as a temperature (round 3, q036).
     Records of version 6 and older re-run under the rules before it (`units.before_delta_k`, `record.rules_of`).
@@ -94,7 +114,8 @@
 - **Host-set limits; a calculation never runs away**
   (`req:a-calculation-past-the-hosts-limits-is-stopped-and-handed-on`, options (b), (c) and (d) of
   `dec:idea-estimate-compute-before-calculating`; an up-front cost estimate, (a), is NOT built):
-  - The host sets a deadline, a digits budget, a reply budget, an array budget, the exact-array size, the most
+  - The host sets a deadline, a digits budget, a reply budget, an answer budget (0.11.0: a reply's text, the reader's
+    budget, never written into a record), an array budget, the exact-array size, the most
     arrangements a randomization test counts, the most factors of a Shapley table, the digits of a primality proof and
     the digits of the part a factorization splits at start-up (`limits.py`, README
     "Limits"). The
@@ -206,6 +227,7 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | `src/flo2_calc/units.py` | the unit vocabulary, dimensions, exact conversion, the near-miss hint | `cmp:units` |
 | `src/flo2_calc/temperature.py` | degC and degF: what a temperature with an offset may do | `cmp:units` |
 | `src/flo2_calc/decibels.py` | dB, and the power levels dBm and dBW: what a level may do | `cmp:units`, `cap:decibels-are-their-own-kind-and-their-ratio-is-stated` |
+| `src/flo2_calc/answer.py` | a reply held to the host's answer budget: the outcome whole, the rest named (0.11.0) | `cmp:mcp-server`, `dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget` |
 | `src/flo2_calc/formula.py` | the computation shown back: its formula and its numbered working, plain text and LaTeX | `cmp:computation-record`, `cap:every-reply-shows-its-formula-and-working` |
 | `src/flo2_calc/skill.py` | the served skill: an MCP prompt and a resource, and its reference files as resources, read from `skills/` | `cap:serve-over-mcp` |
 | `src/flo2_calc/record.py`, `src/flo2_calc/schemas/` | the computation record (computed or not yet computed), its schemas, the root folder | `cmp:computation-record`, `cap:a-not-yet-computed-record-is-completed-on-a-larger-machine` |

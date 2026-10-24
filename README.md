@@ -44,6 +44,9 @@ when a question set or a real design needs them, never for parity (`dec:idea-wha
   instructions say so, because flo2-calc cannot tell where a number came from.
 - **Shown back.** Every reply and record shows the computation as a formula and as numbered steps, each in plain text
   with LaTeX beside it: `t = C / I = 450/13 h`. You can check it is the computation you meant.
+- **A reply a chat can read** (0.11.0). Every reply carries its outcome whole: the status, the result with its label,
+  what exact means there, and the record's facts. The rest fills the host's answer budget, and `withheld` names what
+  was left out and where it is. The record holds everything, so `record_computation` never repeats its values.
 - **Re-runnable.** A computation comes back as a **computation record**, a `.calc.json` file a decision can cite.
   Anyone can re-run it and get the same values, and an edited record is caught.
 - **Never runs away.** Each host sets limits at start-up: a deadline per call, budgets for the digits of any exact
@@ -131,6 +134,7 @@ reason**. It is never cut short, never guessed, and never killed by a sandbox as
 | factors of one Shapley table (2^k outcomes) | `--max-shapley-factors N` | `FLO2_CALC_MAX_SHAPLEY_FACTORS` | 16 | 12 |
 | digits of a number `is_prime` proves prime | `--max-prime-digits N` | `FLO2_CALC_MAX_PRIME_DIGITS` | 300 | 200 |
 | digits of the composite part `factorize` splits | `--max-factor-digits N` | `FLO2_CALC_MAX_FACTOR_DIGITS` | 50 | 40 |
+| characters in a reply's text answer (0.11.0; never stops a calculation) | `--max-answer-chars N` | `FLO2_CALC_MAX_ANSWER_CHARS` | 30,000 | 24,000 |
 
 Why each value:
 
@@ -187,6 +191,13 @@ Why each value:
   quadratic sieve) takes, on that laptop, 0.13 s at 40 digits, 1.5 to 3 s at 50 (two 25-digit primes, the hardest
   shape), 18 s at 60 and 89 s at 77, again in one call nothing interrupts. Past the limit the factorization is
   stopped, never answered in part. A host may set from 1 to 100.
+- **Answer, 30,000 characters on a laptop and 24,000 on flo2.io** (0.11.0,
+  `dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget`). This is the READER's budget, not a
+  runaway guard: it never stops a calculation and is never written into a record. 30,000 is reflow2's reply budget,
+  the one chat clients are known to take. flo2's door holds a chat's reply to 30,000 with its own wrapper and the
+  person's words around it, so its image leaves room for them. Until 0.11.0 a reply had no such bound. In the Shop
+  sample trial (2026-10-24) five `record_computation` replies came to 36,041 to 215,186 characters, and flo2 withheld
+  each one whole, its result with it. A host may set from 1,000 up (A reply fits its reader, below).
 
 **These are the only limits on a calculation.** A randomization test and a Shapley table are sized by theirs before any
 work (0.8.0), and a primality proof and a factorization by theirs (0.9.0); a power has no exponent cap of its own: flo2-calc 0.1.0 to 0.6.1
@@ -245,6 +256,31 @@ How they are kept (`src/flo2_calc/limits.py`):
 "Class" is the tool's `readOnlyHint`, which flo2's door reads: `record_computation` makes a file to keep. Nothing is
 kept between calls. `add_node` is stateless: the graph you pass is the whole state, so a graph built node by node is
 the same graph, and gives the same result, as the same nodes sent whole.
+
+### A reply fits its reader
+
+0.11.0 (`dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget`, `src/flo2_calc/answer.py`). Every
+reply is held to the host's answer budget (`--max-answer-chars`, Limits above), measured on the text block as it is
+sent.
+
+- **The outcome always comes whole.** That is the status or the refusal, the `result` or `results` with their labels,
+  `exactness`, the record's facts, `next`, and a re-run's verdict and differences.
+- **The rest fills what the outcome leaves, in this order:** the `formula`, the `working`, the nodes' `values`. Each
+  comes whole if it fits, else as many entries from its start as fit. `withheld` gives `budget_chars` and, for each
+  part cut, how many entries are `shown`, how many `left_out`, the `first_left_out` and `last_left_out` nodes, and
+  `where` the whole is: the record `record_computation` returns, or the record `rerun_record` was given.
+- **`record_computation` never repeats the values its record holds.** `withheld.values` says they are in the record.
+- **A result too large on its own** (only when the outcome alone is over the budget) is shown by its `shape`,
+  `sha256`, `unit` and its `first` and `last` three elements, with its whole in the record, and `withheld.results`
+  names it.
+- **How a float64 bound was found is said once.** In a reply, each label's `how` is a list of places in
+  `how_bounds_were_found`, where each sentence is said once. One trial reply spent 76,132 of its 213,408 characters
+  saying the same few sentences on every value. The record still writes every sentence in full: the record's format is
+  unchanged (schema version 10).
+
+The Shop sample trial's five largest graphs (`tests/data/answer-budget/`, anonymized) are its test: they are
+answered within flo2.io's 24,000 characters with their results whole. At 0.10.0 they answered 263,001, 98,173,
+66,886, 44,309 and 36,577 characters.
 
 ### A graph
 
@@ -501,10 +537,11 @@ Spelled as reflow2 spells them, one spelling each. The vocabulary is in `src/flo
 | Measures | Units |
 |---|---|
 | length | `m` `km` `cm` `mm` `um` `nm` `in` `ft` `mil` (a thousandth of an inch), `furlong` (660 ft, exactly 201.168 m) |
+| area (0.11.0) | `acre` (the international acre, 43,560 ft^2, exactly 4,046.8564224 m^2), `ha` (10,000 m^2) |
 | mass | `kg` `g` `mg` `ug` `t` `ct` `lb` `oz` (the avoirdupois ounce), `ozt` (the troy ounce, exactly 31.1034768 g), `dwt` (the pennyweight, 1/20 ozt), `grain` (exactly 64.79891 mg) |
 | time | `s` `ms` `us` `ns` `min` `h` `d` `week` (7 d) `fortnight` (14 d) |
 | electrical | `A` `kA` `mA` `uA` `nA` `pA`, `V` `kV` `mV` `uV`, `ohm` `mohm` `kohm` `Mohm`, `farad` `mF` `uF` `nF` `pF`, `H` `mH` `uH`, `coulomb` `Ah` `mAh` |
-| power, energy | `W` `MW` `kW` `mW` `uW`, `J` `kJ` `MJ` `mJ` `uJ` `Wh` `mWh` `kWh` `MWh` `eV` |
+| power, energy | `W` `MW` `kW` `mW` `uW`, `ton_refrigeration` (0.11.0: 12,000 Btu/h, exactly), `J` `kJ` `MJ` `mJ` `uJ` `Wh` `mWh` `kWh` `MWh` `eV`, `Btu` (0.11.0: the International Table Btu, exactly 1055.05585262 J) |
 | frequency, force | `Hz` `mHz` `kHz` `MHz` `GHz`, `N` `kN` `lbf` |
 | pressure | `Pa` `mPa` `kPa` `MPa` `GPa` `bar` `psi` `ksi` |
 | temperature | `K`, `degC` `degF` (a temperature), `delta_degC` `delta_degF` `delta_K` (a change of temperature) |
@@ -523,7 +560,9 @@ Spelled as reflow2 spells them, one spelling each. The vocabulary is in `src/flo
   - units that measure different things (`2 mm + 3 g`);
   - a unit against a plain number (`2 mm + 3`);
   - an unknown spelling, never guessed. A bare `gal` is two units, and the refusal names both; so is a bare `gr`
-    (the grain, or the gram). A spelling pint reads but flo2-calc does not carry (`mile`, `hp`) is named for what
+    (the grain, or the gram). The US survey acre (`survey_acre`) and every Btu but the International Table one
+    (`BTU`, `Btu_iso`, `Btu_th`) are refused with their reason (0.11.0), and a bare `ton` is never a refrigeration
+    ton. A spelling pint reads but flo2-calc does not carry (`mile`, `hp`) is named for what
     pint reads it as, with the units of that kind flo2-calc knows; nothing is substituted and no factor is offered
     (round 3: `ozt` got no hint, and the agent typed 31.1034768 g).
 - **Angles** are their own dimension, so `30 deg + 1` is refused. `arcmin` and `arcsec` are exact fractions of a
@@ -1109,6 +1148,12 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
   counting, several results, whole numbers, units for empirical formulas, furlong and fortnight, and the
   simplification rule (it never changes a dimension or a size, over every pair of units).
 - `tests/test_decibels.py`: dB as its own kind, the kind always stated, power levels, against mpmath.
+- `tests/test_answer_budget.py` (0.11.0): the Shop sample trial's five largest graphs (anonymized, in
+  `tests/data/answer-budget/`) answered within flo2.io's answer budget with their results whole, by every tool; what
+  is left out named and counted; a provenance sentence said once; a result too large on its own shown by its shape,
+  sha256 and ends; the record unchanged.
+- `tests/test_trial_units.py` (0.11.0): the acre, the hectare, the Btu and the refrigeration ton, each exact; the US
+  survey acre and every other Btu refused with their reason; a bare `ton` still refused.
 - `tests/test_formula.py`: the formula and the working, in plain text and LaTeX; large graphs; a refused one; the record
   holds every step, and a shown working that no longer follows from its graph does not reproduce.
 - `tests/test_unit_hints.py`: every SI prefix with every unit symbol, in every case, through the hint. No hint may
@@ -1208,6 +1253,19 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    `resources` beside `tools`). They are not tools, so the door's allow-list of four is untouched; the door may ignore
    them, since hosted on flo2.io the skill is served by flo2 itself. The image's size is unchanged (209 MB), and its
    measured peak, 91 MiB, still fits the 128m cap. 0.6.0 changes the skill's text again (arrays, statistics over data, the FFT); an array is a new shape of an input's value and its operators new `op` values. The record becomes schema version 5, still one `calcfile` per record (an array is kept inline in it). The image is about 69 MB larger (numpy), its limits gain `FLO2_CALC_MAX_ARRAY_BYTES=16777216`, and its measured peak still fits the 128m cap (Measurements). 0.6.1 makes the exact-array limit the host's (`FLO2_CALC_MAX_EXACT_ELEMENTS=4096` in the image, the value 0.6.0 had fixed, so the image computes as before), the record schema version 6, and `rerun_record`'s answer gains `outcome` and, for an FFT re-run on another processor, `"reproduces": "within_bound"`. 0.7.0 (round 3's fixes) changes the skill's text again (an empirical formula's constants come from the person or a cited document, never the agent's memory; ambiguous expressions; troy weight; the new operators) and the server's instructions; adds `op` values inside a graph (`choose`, `factorial`, `binomial_pmf`, `binomial_cdf`, `binomial_sf`, `to_number`, `length`) and the units `ozt`, `dwt`, `grain`, `week` and `delta_K`; and makes the record schema version 7. The four tools, their classes and their top-level arguments are unchanged; the image's limits are unchanged. 0.8.0 (the cure design's four requirements) changes the skill's text again (Bayesian updating, the randomization test, Shapley values, the skewed distributions) and the server's instructions; adds `op` values and node fields inside a graph (`scheme`, `statistic`, `alternative`, `factors`, `combinations`) and a value's `detail` inside a reply; makes the record schema version 8; and adds two limits to the image's profile (`FLO2_CALC_MAX_ARRANGEMENTS=1000000`, `FLO2_CALC_MAX_SHAPLEY_FACTORS=12`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies the skill file unchanged. 0.8.1 splits the skill for size, and nothing else changes: 0.8.0's SKILL.md, 27,693 bytes, came to 31,894 characters in flo2's served reply, past its 30,000, so SKILL.md now keeps the rules (under 15,000 bytes, which a test holds) and each operator's arguments, examples and edge cases move to `skills/support-a-decision-with-math/references/` (`when-to-use.md`, `units.md`, `operators.md`, `arrays.md`, `records.md`), each sentence in one place and none changed in meaning, served as resources beside the skill. The four tools, their behaviour and the record schema (version 8) are unchanged, and the image's profile too. flo2 copies SKILL.md unchanged, and the reference files beside it if it serves them. 0.9.0 (`req:integer-arithmetic-has-remainder-divisibility-and-primality`, from the primes trial on flo2.io) changes the skill's text again (an Integers line in SKILL.md, still under 15,000 bytes, and an Integers section in `references/operators.md`) and the server's instructions; adds `op` values inside a graph (`mod`, `divides`, `gcd`, `is_prime`, `factorize`, `integer_range`); makes the record schema version 9; and adds two limits to the image's profile (`FLO2_CALC_MAX_PRIME_DIGITS=200`, `FLO2_CALC_MAX_FACTOR_DIGITS=40`). The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies SKILL.md and `references/operators.md` and `references/records.md` unchanged. 0.10.0 (`req:calc-computes-named-hypothesis-tests-as-kept-records` and `req:calc-computes-power-and-sample-size-up-front`, phase 5) changes the skill's text again (a hypothesis-test line in SKILL.md's step 6, still under 15,000 bytes, a new reference file `references/hypothesis-tests.md`, and a sentence each moved into `references/operators.md` and `references/units.md`) and the server's instructions; adds `op` values inside a graph (the seven named tests and their 14 power and sample-size operators) and a node field (`variance`; `alternative` now on more operators); adds a block to a value's entry in a reply (`hypothesis_test`, `test_plan`) and a refusal kind (`assumption_fails`); and makes the record schema version 10. No limit is added, so the image's profile is unchanged. The four tools, their classes and their top-level arguments are unchanged, so the door is unchanged; flo2 copies SKILL.md, `references/hypothesis-tests.md` (new: it must be added to what flo2 serves beside the skill), `references/operators.md` and `references/units.md` unchanged.
+   0.11.0 (`dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget` and the units of
+   `dec:the-international-acre-and-the-hectare-the-survey-acre-refused` and
+   `dec:the-international-table-btu-and-the-refrigeration-ton`) changes what a reply carries and adds one limit to the
+   image's profile, `FLO2_CALC_MAX_ANSWER_CHARS=24000`.
+   - A reply keeps its outcome whole and fits that answer budget, naming what it left out in `withheld`.
+   - `record_computation`'s answer no longer has `values`.
+   - A float64 label's `how` in a reply is a list of places in `how_bounds_were_found`.
+   - The units `acre`, `ha`, `Btu` and `ton_refrigeration` are new.
+
+   The four tools, their classes and their top-level arguments are unchanged, so the door's allow-list is unchanged,
+   and the record format is unchanged (schema version 10). flo2's door should still keep a write's outcome if a reply
+   ever reaches its own budget, but flo2-calc's answer now fits inside it. flo2 copies `references/units.md` unchanged
+   (two lines added).
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.

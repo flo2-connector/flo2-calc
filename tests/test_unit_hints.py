@@ -216,6 +216,7 @@ BY_HAND = {
     "decibel": "pint's decibel is a logarithmic unit; flo2-calc's dB is its own dimension (decibels.py)",
     "decibels": "the same",
     "furlongs": "pint's furlong is the US survey furlong; flo2-calc's is the international 660 ft (tests/test_units.py)",
+    "acres": "pint's acre is the US survey acre; flo2-calc's is the international 43,560 ft^2 (tests/test_trial_units.py)",
 }
 PINT_NAME = {"degC": "degree_Celsius", "degF": "degree_Fahrenheit"}  # a reading, not a change
 
@@ -235,6 +236,10 @@ def test_every_listed_near_miss_means_what_its_target_means(source, target):
     written = as_written(source)
     if written:
         assert written == {meaning(target)}, (source, target)
+    if target in U.DEFINED:
+        # A unit flo2-calc defines itself (0.11.0: ha, Btu): pint's reading of the near miss is exactly it.
+        assert pint_meaning(U.registry().parse_units(source)) == meaning(target), (source, target)
+        return
     target_name = PINT_NAME.get(target, U.VOCABULARY[target][0])
     assert pint_meaning(U.registry().parse_units(source)) == pint_meaning(target_name), (source, target)
 

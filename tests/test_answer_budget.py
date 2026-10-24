@@ -209,3 +209,21 @@ def test_a_result_too_large_on_its_own_is_shown_by_its_shape_sha256_and_first_an
         assert shown["last"] == whole["values"][-len(shown["last"]):] and shown["last"]
         assert a["withheld"]["results"][0]["node"] == "y"
     assert "record" in answer_of(made)["withheld"]["results"][0]["where"]
+
+
+def test_a_reply_fits_even_when_its_outcome_is_more_than_any_reply_holds():
+    """The last resort (answer.py): more results than any reply holds come back as many from the start as fit, the
+    rest named. The budget is never passed, whatever the outcome."""
+    from flo2_calc.answer import fit, text
+
+    answer = {
+        "status": "ok",
+        "results": [{"node": f"n{i}", "value": f"{i}.123456789 mm"} for i in range(400)],
+        "formula": [{"node": "x", "text": "x = 1"}] * 50,
+        "exactness": "exact for these inputs",
+    }
+    fitted = fit(answer, 3000, "in the record")
+    assert len(text(fitted)) <= 3000
+    held = fitted["withheld"]["results_left_out"]
+    assert held["shown"] == len(fitted["results"]) and held["shown"] + held["left_out"] == 400
+    assert fitted["results"] == answer["results"][: held["shown"]], "the results shown are whole, from the start"

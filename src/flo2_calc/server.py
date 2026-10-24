@@ -2,7 +2,7 @@
 
 FOUR TOOLS, lower_snake_case (flo2's helper contract, point 5):
 
-  evaluate_graph       read-only   a whole graph in one call: its result and every node's value
+  evaluate_graph       read-only   a whole graph in one call: its result, and the values as far as the answer budget goes
   add_node             read-only   the graph so far plus one node: that node's value, and the grown graph
   record_computation   writes      evaluate, and return the computation record as a file
   rerun_record         read-only   re-run a record and say whether it reproduces
@@ -40,6 +40,13 @@ room completes it: it takes that record in place of a graph. The four tools,
 their names and their read/write classes are unchanged by this: flo2's door
 holds exactly these four.
 
+A REPLY FITS ITS READER (0.11.0, answer.py; dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget).
+Every reply carries its outcome whole: the status or the refusal, the result(s) with their labels, `exactness`,
+the record's facts, `next`. The formula and working views and the values fill what the host's answer budget
+(--max-answer-chars) leaves. A `withheld` block names what was left out and where it is.
+record_computation never repeats the values its record holds. A float64 bound's `how` sentences are said once a
+reply, in `how_bounds_were_found`.
+
 ERRORS (contract point 4; dec:unit-mismatch-rejects). A computation that
 cannot be done is a NORMAL reply: {"status": "refused", "refused": {node, op,
 kind, reason, units}}, with no result and no record. isError is reserved for
@@ -63,6 +70,7 @@ from mcp.types import CallToolResult, EmbeddedResource, TextContent, TextResourc
 from pydantic import Field
 
 from flo2_calc import __version__
+from flo2_calc.answer import fit
 from flo2_calc import limits as L
 from flo2_calc import record as R
 from flo2_calc import skill as SK
@@ -125,7 +133,12 @@ INSTRUCTIONS = (
     "least-squares fit with standard errors) and the FFT. An exact array stays exact through rational operations; an "
     "FFT, a function over an array, or a large array is float64, labelled \"float64\" with a rigorous "
     "\"error_at_most\" and how it was found. Every reply shows the computation back as a formula and as numbered "
-    "steps (plain text, with LaTeX beside it), so you can check it is the computation you meant. evaluate_graph takes "
+    "steps (plain text, with LaTeX beside it), so you can check it is the computation you meant. EVERY REPLY KEEPS "
+    "ITS OUTCOME WHOLE (the status or refusal, the result with its label, exactness, the record's facts) and fits "
+    "this host's answer budget: the formula, the working and the other values fill the rest, and \"withheld\" names "
+    "what was left out and where it is (record_computation's record holds every value; its reply never repeats "
+    "them). A float64 label's \"how\" is a list of places in \"how_bounds_were_found\", where each sentence is "
+    "said once. evaluate_graph takes "
     "a whole graph; add_node builds one node at a time; record_computation returns a computation record, a .calc.json "
     "file to link to the decision it supports; rerun_record checks that a record still reproduces. flo2-calc "
     "calculates and you reason: it never decides which equation applies, and a domain's own formulas (ring sizes, "
@@ -169,7 +182,8 @@ GRAPH_HELP = (
     'a single value, a row against a grid, a column against a row); sum, product, mean, min, max, count_true, any, all '
     'and length take one array and an optional "axis" (0: each column, 1: each row); abs of an FFT\'s complex values '
     'is their modulus. An array comes back as {"array": {"shape", "kind", "unit", "sha256", "values"}} (values only up '
-    'to 1,024 elements); a float64 value carries "float64": {"error_at_most", "how", "from"}. Operators: '
+    'to 1,024 elements); a float64 value carries "float64": {"error_at_most", "how", "from"} (in a reply, "how" lists '
+    'places in "how_bounds_were_found"). Operators: '
     + "; ".join(f"{k} ({v[3]})" for k, v in OPS.items())
     + ". Units: one '/', '*' between units, '^n' for powers, e.g. \"mm^2\", \"m/s^2\", \"kg/(m*s^2)\". Units "
     "flo2-calc knows: " + ", ".join(sorted(U_VOCABULARY, key=str.lower)) + "."
@@ -187,6 +201,13 @@ def _shown_pending(g: Any) -> dict[str, Any]:
 
 def _text(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=1)
+
+
+# Where what a reply leaves out to fit the host's answer budget can be read whole (answer.py).
+REST_NOT_KEPT = "not in this reply: record_computation keeps every value, line and step in its record"
+REST_RECORD = 'in the record this reply returns ("values", "formula" and "working" hold every one)'
+REST_PASSED = 'in the record you passed ("values", "formula" and "working" hold every one)'
+REST_PENDING = 'in the not-yet-computed record this reply returns ("formula" and "working" hold every line)'
 
 
 def _reply(payload: dict[str, Any], files: tuple[tuple[str, str], ...] = (), guard: L.Guard | None = None) -> CallToolResult:
@@ -247,6 +268,10 @@ def _reference_reader(path: str) -> Callable[[], str]:
 
 
 def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPServer:
+    def answering(payload: dict[str, Any], where: str, guard: L.Guard | None = None) -> CallToolResult:
+        """A reply held to the host's answer budget: its outcome whole, the rest as far as it goes, named."""
+        return _reply(fit(payload, limits.max_answer_chars, where), guard=guard)
+
     """The server. `root` is the one folder it may write records in and read
     them from (None: no files at all, as when hosted). `limits` are the host's
     limits for every call (limits.py)."""
@@ -284,7 +309,9 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
         annotations=reading,
         description=(
             "Evaluate a whole computation graph in one call, exactly for the inputs as written, with units. Returns "
-            "the result and every node's value in the order evaluated, and says what exact means (\"exactness\"). A "
+            "the result and the nodes' values in the order evaluated, and says what exact means (\"exactness\"). "
+            "The result comes whole; the values, the formula and the working fill the host's answer budget, and "
+            "\"withheld\" names what was left out. A "
             "value from pi, e, a root, exp, a logarithm, trigonometry or a distribution is labelled \"rounded\", with "
             "its digits and error bound, and is not exact. A computation that cannot be done (units that measure "
             "different things, division by zero, a number where true/false is needed, a comparison a rounded value's "
@@ -295,7 +322,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
     @_guarded
     def evaluate_graph(graph: Graph) -> CallToolResult:
         guard = L.Guard(limits)
-        return _reply(evaluation_json(evaluate(read_graph(graph, data_root=root, exact_limit=limits.max_exact_elements), guard)), guard=guard)
+        return answering(evaluation_json(evaluate(read_graph(graph, data_root=root, exact_limit=limits.max_exact_elements), guard)), REST_NOT_KEPT, guard)
 
     @server.tool(
         name="add_node",
@@ -304,7 +331,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
         description=(
             "Build a graph one node at a time, inspecting each value as you go. Pass the graph so far (as the last "
             "add_node returned it; leave it out for the first node) and one new node. Returns the new node's value, "
-            "every value so far, and the grown graph to pass next time. Nothing is kept between calls: the graph you "
+            "the values so far (as far as the host's answer budget goes), and the grown graph to pass next time. Nothing is kept between calls: the graph you "
             "pass is the whole state, so the graph built this way is the same graph, and gives the same result, as "
             "sending it whole to evaluate_graph. A node that would be refused is not added: the graph comes back "
             "unchanged with the reason."
@@ -341,7 +368,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
         else:
             answer["graph"] = {"nodes": [n for n in before]}
             answer["note"] = "The node was not added; the graph is as you sent it."
-        return _reply(answer, guard=guard)
+        return answering(answer, REST_NOT_KEPT, guard)
 
     @server.tool(
         name="record_computation",
@@ -403,7 +430,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                 why = (["its content hash does not match its content"] if not hash_ok else []) + (
                     [f"{len(problems)} field(s) do not follow from its graph"] if problems else []
                 )
-                return _reply(
+                return answering(
                     {
                         "status": "refused",
                         "refused": {
@@ -418,7 +445,8 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                         },
                         "result": None,
                     },
-                    guard=guard,
+                    REST_NOT_KEPT,
+                    guard,
                 )
             name_, supports_ = pending["name"], pending.get("supports")
             g = read_graph(pending["graph"], "record.graph", root, limits.max_exact_elements)
@@ -437,7 +465,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
         if not ev.ok and not ev.stopped:
             answer = evaluation_json(ev)
             answer["note"] = "No record was made: a record holds only a computation that answered."
-            return _reply(answer, guard=guard)
+            return answering(answer, REST_NOT_KEPT, guard)
         file_name = f"{name_}{R.SUFFIX}"
         if ev.ok:
             try:
@@ -447,15 +475,17 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                     "status": "ok",
                     **({"results": rec["results"]} if "results" in rec else {"result": rec["result"]}),
                     "record": _record_facts(rec, data, file_name),
-                    "values": rec["values"],
                     **shown_json(shown_back(ev, rec["values"]), WORKING_REST_RECORD),
                     "exactness": exactness(ev),
                     "next": "Link this record to the decision it supports in the design (an Artifact that documents "
                     "the decision), and quote its result there. rerun_record checks it any time later.",
+                    # 0.11.0: the record holds every value; the reply never repeats them (answer.py).
+                    "withheld": {"values": {"shown": 0, "left_out": len(rec["values"]), "where": REST_RECORD}},
                 }
-                guard.check_reply(len(_text(answer).encode("utf-8")) + len(data))
                 if output_path is not None:
                     answer["record"]["saved"] = R.write(root, output_path, data)
+                answer = fit(answer, limits.max_answer_chars, REST_RECORD)
+                guard.check_reply(len(_text(answer).encode("utf-8")) + len(data))
                 return _reply(answer, ((file_name, data.decode("utf-8")),))
             except LimitExceeded as e:
                 stop = e.refusal
@@ -488,6 +518,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
             "and complete it on a machine with more room: pass it as `record` to record_computation on a flo2-calc "
             "started with a higher limit. The completed record is the one a direct computation gives.",
         }
+        answer = fit(answer, limits.max_answer_chars, REST_PENDING)
         if len(data) + len(_text(answer).encode("utf-8")) > limits.max_reply_bytes:
             answer["record"] = None
             answer["next"] = (
@@ -532,7 +563,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
             loaded = R.load(R.read_file(root, path, guard, "path"), "path", guard)
         else:
             loaded = R.load(record, "record", guard)
-        return _reply(R.rerun(loaded, guard, root), guard=guard)
+        return answering(R.rerun(loaded, guard, root), REST_PASSED, guard)
 
     return server
 
