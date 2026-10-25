@@ -121,8 +121,8 @@ def test_every_tool_shows_it_and_the_kept_record_stays_exact():
         v = answer_of(reply)[key]
         assert v["readable"]["values"] == ["0.333333", "0.666667", "1.16667", "1"], key
     assert answer_of(again)["reproduces"] is True
-    # The kept record: the exact values only, in schema 10's format, unchanged.
-    assert record["schema_version"] == 10
+    # The kept record: the exact values only, in the current schema's format (11 since 0.13.0).
+    assert record["schema_version"] == 11
     jsonschema.Draft202012Validator(R.schema()).validate(record)
     assert record["result"]["array"]["values"] == ["1/3", "2/3", "7/6", "1"]
     assert nowhere_in(record, "readable"), "the record holds no rendering"

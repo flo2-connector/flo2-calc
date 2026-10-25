@@ -480,7 +480,7 @@ def test_the_formula_writes_mod_divides_gcd_and_the_range_as_mathematics():
 def test_a_record_of_the_trial_validates_under_the_current_schema_and_re_runs_byte_for_byte():
     g = read_graph(euler_graph(0, 39))
     rec = R.build(evaluate(g), "euler-41", "the primes trial")
-    assert rec["schema_version"] == 10
+    assert rec["schema_version"] == 11
     jsonschema.Draft202012Validator(R.schema()).validate(rec)
     again = R.rerun(R.load(json.loads(R.file_bytes(rec))))
     assert again["reproduces"] is True, again["differences"]

@@ -169,7 +169,8 @@ GRAPH_HELP = (
     '("12.50 USD"); currencies are never converted except by '
     'a rate you give as an input with its source ("0.92 EUR/USD"). A gain or loss is in dB ("6 dB", "0.2 dB/m"), '
     'and a power level in dBm or dBW ("-30 dBm"); convert turns a level into mW or W and back. '
-    'The source is free text or {"design_node": "con:..."} naming a node in a reflow2 design (recorded, never '
+    'The source is free text, {"design_node": "con:..."} naming a node in a reflow2 design, or, on an input, '
+    '{"design_quantity": "cst:..."} naming the design quantity whose value it holds (recorded, never '
     'resolved). An operation node is {"id": "margin", "op": "sub", "args": ["cavity", "bend"]}; "convert" also '
     'takes "unit", as do asin, acos, atan and atan2 ("deg" or "rad", the unit of the angle they give), phase (the '
     'same, for the angle of a complex value), magnitude (the unit to take a quantity\'s number in) and with_unit (the '
@@ -482,8 +483,10 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
                     "record": _record_facts(rec, data, file_name),
                     **shown_json(shown_back(ev, rec["values"]), WORKING_REST_RECORD),
                     "exactness": exactness(ev),
+                    "inputs_bound": R.inputs_bound(rec),
                     "next": "Link this record to the decision it supports in the design (an Artifact that documents "
-                    "the decision), and quote its result there. rerun_record checks it any time later.",
+                    "the decision), and quote its result there; name each bound input as one of the record's inputs "
+                    "there, with the value it holds (inputs_bound). rerun_record checks it any time later.",
                     # 0.11.0: the record holds every value; the reply never repeats them (answer.py).
                     "withheld": {"values": {"shown": 0, "left_out": len(rec["values"]), "where": REST_RECORD}},
                 }
@@ -518,6 +521,7 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
             "result": None,
             **_shown_pending(g),
             "record": _record_facts(pending, data, file_name),
+            "inputs_bound": R.inputs_bound(pending),
             "next": "The record came back NOT YET COMPUTED: it holds the graph, the inputs with their sources and the "
             f"limit it passed, and no result. It needs {R.needs_of(pending['stopped'])}. Keep it with the decision, "
             "and complete it on a machine with more room: pass it as `record` to record_computation on a flo2-calc "
