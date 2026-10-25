@@ -1,0 +1,106 @@
+{
+  "arithmetic": "Exact rational arithmetic on the inputs as written: no binary floating point. + - * / and integer powers are exact, and so is every unit conversion but deg-rad and dBm-mW, so every value not marked \"rounded\" is exact FOR THESE INPUTS and no more accurate than they are: a decimal typed for an irrational number (a truncated pi or e) is taken as exactly that decimal, not as the number it stands for (the pi and e operators are the constants themselves). A whole number is written in full. Any other value whose decimal ends (at most 40 significant digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact value for these inputs is given beside it as a fraction. A computed value whose compound unit is exactly a simpler unit is shown in it (\"simplified_from\" names the unit it was computed in); the value does not change. Comparisons use exact values. A value marked \"rounded\" is NOT exact: it comes from pi, e, a root, exp, ln, log10, a non-whole power (or a whole one asked for \"digits\" past the digits budget), trigonometry, a deg-rad conversion, a decibel conversion or a distribution, or from arithmetic on such a value. It is a decimal of the stated number of significant digits, every one written, given no \"exact\" fraction, and \"error_at_most\" bounds its distance from the true value. Where it says \"correctly_rounded\", it is the true value rounded half-even, decided from a rigorous enclosure (Arb ball arithmetic, python-flint). A comparison, ceil, floor or round of a rounded value is answered only when its error bound decides it, and refused otherwise.",
+  "content_hash": "sha256:971a93520e97038e2dce1bd362fdc33c476ed84fdadb9ba7e4d8936d29081e10",
+  "formula": [
+    {
+      "latex": "\\text{area} = \\text{persons} \\cdot \\text{area\\_per\\_person} = 32\\,\\mathrm{m}^{2}",
+      "node": "area",
+      "text": "area = persons * area_per_person = 32 m^2"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "persons",
+        "source": {
+          "design_node": "req:the-farm-feeds-its-household"
+        },
+        "value": "4"
+      },
+      {
+        "id": "area_per_person",
+        "source": "a grow-loop rule of thumb, copied",
+        "value": "8 m^2"
+      },
+      {
+        "args": [
+          "persons",
+          "area_per_person"
+        ],
+        "id": "area",
+        "op": "mul"
+      }
+    ],
+    "result": "area"
+  },
+  "inputs": [
+    {
+      "id": "persons",
+      "source": {
+        "design_node": "req:the-farm-feeds-its-household"
+      },
+      "unit": "",
+      "value": "4"
+    },
+    {
+      "id": "area_per_person",
+      "source": "a grow-loop rule of thumb, copied",
+      "unit": "m^2",
+      "value": "8 m^2"
+    }
+  ],
+  "name": "food",
+  "produced_by": {
+    "flo2_calc": "0.12.0",
+    "numpy": "2.5.3",
+    "pint": "0.26.1",
+    "python_flint": "0.9.0"
+  },
+  "record_format": "flo2-calc computation record",
+  "result": {
+    "node": "area",
+    "value": "32 m^2"
+  },
+  "schema_version": 10,
+  "status": "computed",
+  "supports": {
+    "design_node": "dec:growing-area"
+  },
+  "values": [
+    {
+      "node": "persons",
+      "value": "4"
+    },
+    {
+      "node": "area_per_person",
+      "value": "8 m^2"
+    },
+    {
+      "node": "area",
+      "value": "32 m^2"
+    }
+  ],
+  "working": [
+    {
+      "label": "given",
+      "latex": "\\text{persons} = 4",
+      "node": "persons",
+      "step": 1,
+      "text": "persons = 4"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{area\\_per\\_person} = 8\\,\\mathrm{m}^{2}",
+      "node": "area_per_person",
+      "step": 2,
+      "text": "area_per_person = 8 m^2"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{area} = \\text{persons} \\cdot \\text{area\\_per\\_person} = 4 \\cdot 8\\,\\mathrm{m}^{2} = 32\\,\\mathrm{m}^{2}",
+      "node": "area",
+      "step": 3,
+      "text": "area = persons * area_per_person = 4 * 8 m^2 = 32 m^2"
+    }
+  ]
+}

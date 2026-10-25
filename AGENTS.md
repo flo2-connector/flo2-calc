@@ -200,13 +200,14 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
   `max_exact_elements`; version 7 (0.7.0) every formula line's value, round 3's operators and `delta_K`; version 8
   (0.8.0) the cure design's operators, their node fields, a value's `detail` and two new limits; version 9 (0.9.0) the
   integer operators and two more limits; version 10 (0.10.0) the named tests, their plans, `variance`, and the
-  `hypothesis_test` and `test_plan` blocks. Every older
+  `hypothesis_test` and `test_plan` blocks; version 11 (0.13.0) an input's source naming the design quantity it is
+  bound to (`{"design_quantity": "<id>"}`). Every older
   version must still re-run, each under its own version's writing (`evaluator.LEGACY` for 1 to 3,
   `evaluator.FORMULA_RESULTS_ONLY` for 4 to 6) and rules (`record.rules_of`: before `delta_K` for 1 to 6):
   `tests/data/*.v1.calc.json` were made by 0.1.0, `tests/data/*.v2.calc.json` by 0.2.0,
   `tests/data/display.v3.calc.json` by 0.4.0, `tests/data/temperature-and-formula.v6.calc.json` by 0.6.1, and
-  `tests/data/statistics.v7.calc.json` by 0.7.0, `tests/data/divisibility.v8.calc.json` by 0.8.1, and
-  `tests/data/hand-composed-tests.v9.calc.json` by 0.9.0.
+  `tests/data/statistics.v7.calc.json` by 0.7.0, `tests/data/divisibility.v8.calc.json` by 0.8.1,
+  `tests/data/hand-composed-tests.v9.calc.json` by 0.9.0, and `tests/data/food.v10.calc.json` by 0.12.0.
 - Nothing goes to stdout except MCP messages.
 - The licence is Apache-2.0. No secrets.
 - Record what you build on the design:

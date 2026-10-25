@@ -48,10 +48,9 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
 1. **Write the computation as a graph.** Each node has an `id`.
    - An input has a `value` and a `source`: `{"id": "bend", "value": "1.4 mm", "source": "fiber datasheet"}`.
    - An operation has an `op` and its `args`: `{"id": "margin", "op": "sub", "args": ["cavity", "bend"]}`.
-   - When an input is one of the design's own quantities, make its source the node that holds it:
-     `"source": {"design_node": "con:cavity-depth"}`. That is how a later change to that quantity can be traced to
-     this computation. Otherwise say where the number came from in a few words: a datasheet, a measurement, or
-     "assumed".
+   - When an input is one of the design's own quantities, bind it: `"source": {"design_quantity": "cst:household"}`.
+     A change to that quantity then marks this record owed (the reply's `inputs_bound`). Otherwise say where the
+     number came from: a datasheet, a measurement, or "assumed"; such a copied value is unbound.
 2. **Write every number as text with its unit**, spelled as the design spells units: `"1.4 mm"`, `"3.3 V"`,
    `"20 mA"`, `"12 g"`. Write a plain number as text too (`"0.1"`, `"1/3"`), because a JSON `0.1` is refused: it
    arrives as a binary float.

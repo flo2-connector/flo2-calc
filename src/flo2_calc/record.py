@@ -1,17 +1,19 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-10.schema.json; version 1 to
-9 records, schemas/calc-record-1.schema.json to calc-record-9.schema.json,
+A record is one JSON object (schemas/calc-record-11.schema.json; version 1 to
+10 records, schemas/calc-record-1.schema.json to calc-record-10.schema.json,
 still re-run):
 
     record_format   "flo2-calc computation record"
-    schema_version  10
+    schema_version  11
     status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
     arithmetic      what exactness means here (numbers.ARITHMETIC_NOTE)
     graph           the graph exactly as read, every value as text
-    inputs          each input: id, value (with its unit), unit, source
+    inputs          each input: id, value (with its unit), unit, source; a
+                    source may name the design quantity the value is bound to
+                    ({"design_quantity": "<id>"}, version 11)
     values          every node's value, in the order evaluated: "exact" beside
                     an exact value whose text is rounded; "rounded" (digits,
                     correctly_rounded, error_at_most, from) on a value of the
@@ -79,6 +81,16 @@ plan's "test_plan". A version 9 record re-runs as it was made
 (tests/data/hand-composed-tests.v9.calc.json, made by 0.9.0). A record holds
 no time: when a test's criteria were fixed, and whether they moved after its
 data, is read from the design's history of alpha's source and of the record.
+
+VERSION 11 (flo2-calc 0.13.0, from reflow2's req:a-changed-quantity-names-
+every-kept-computation-that-used-it) allows an input's source to name the
+DESIGN QUANTITY whose value it holds: {"design_quantity": "<id>"}, with
+"design" for another design. The record keeps the id, so a design that keeps
+the record can name the input as one the record took, and say the record is
+owed a re-run when the quantity changes. A value copied with no design quantity
+stays legal and is UNBOUND; the reply says which inputs are which
+(`inputs_bound`). Like a design node, the id is recorded and never resolved.
+A version 10 record re-runs as it was made.
 
 DETERMINISTIC. There is no timestamp and no machine name, and the file is
 written with sorted keys, so the same graph (and name, and supports) gives a
@@ -159,7 +171,7 @@ from flo2_calc.evaluator import (
 from flo2_calc.numbers import ARITHMETIC_NOTE, ARRAYS_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 SCHEMA_FILES = {
     1: "calc-record-1.schema.json",
     2: "calc-record-2.schema.json",
@@ -171,6 +183,7 @@ SCHEMA_FILES = {
     8: "calc-record-8.schema.json",
     9: "calc-record-9.schema.json",
     10: "calc-record-10.schema.json",
+    11: "calc-record-11.schema.json",
 }
 DELTA_K_FROM = 7  # the first schema version whose rules write a K known to be a change as delta_K
 COMPUTED = "computed"
@@ -281,6 +294,33 @@ def check_sources(graph: Graph) -> None:
             'has none. Give each a "source": free text (a datasheet, a measurement, "assumed") or '
             '{"design_node": "<id>"} naming where it lives in a reflow2 design.',
         )
+
+
+BOUND_NOTE = (
+    "An input bound to a design quantity holds that quantity's value: a design that keeps this record can name it "
+    "as one of the record's inputs, with the value used, and say the record is owed a re-run when the quantity "
+    "changes. An unbound input copies a value no design quantity holds, so a change in the design cannot reach this "
+    'record through it; bind it with "source": {"design_quantity": "<id>"} when the design holds the number.'
+)
+
+
+def inputs_bound(record: dict[str, Any]) -> dict[str, Any]:
+    """Which of a record's inputs are bound to a design quantity, with the value each holds, and which are not
+    (0.13.0). Read off the record's own inputs, so it says what the record says."""
+    bound: list[dict[str, Any]] = []
+    unbound: list[str] = []
+    for i in record.get("inputs", []):
+        src = i.get("source")
+        if isinstance(src, dict) and "design_quantity" in src:
+            row: dict[str, Any] = {"input": i["id"], "design_quantity": src["design_quantity"]}
+            if "design" in src:
+                row["design"] = src["design"]
+            row["value"] = i.get("value")
+            row["unit"] = i.get("unit", "")
+            bound.append(row)
+        else:
+            unbound.append(i["id"])
+    return {"bound": bound, "unbound": unbound, "note": BOUND_NOTE}
 
 
 def uses_arrays(graph: Graph) -> bool:

@@ -14,8 +14,12 @@ A GRAPH is a list of named nodes and, optionally, which one is the result
 An INPUT node has a `value`: a number with its unit as text ("1.4 mm"), a
 plain number ("0.1", or a JSON integer), or true/false. Its `source` says
 where the value came from: free text, or {"design_node": "<id>"} naming a node
-in a reflow2 design (with "design": "<design id>" when it is another design).
-flo2-calc records a source and never resolves it. An exchange rate (a value
+in a reflow2 design (with "design": "<design id>" when it is another design),
+or {"design_quantity": "<id>"} naming the design quantity whose value it holds
+(0.13.0: the input is BOUND to it, so a design that keeps the record can say
+the record is owed a re-run when the quantity changes; a value copied with no
+design quantity is unbound, and a reply says so). flo2-calc records a source and
+never resolves it. An exchange rate (a value
 whose unit holds two currencies, "0.92 EUR/USD") must have one: flo2-calc
 holds no rates, so the rate is the caller's, and must say where it came from.
 A value is one number: text that holds arithmetic ("3 + 4") is refused as an
@@ -480,7 +484,7 @@ TRIAL_FIELDS = {  # randomization_test's fields: each required, each never defau
     },
 }
 GRAPH_KEYS = ("nodes", "result")
-SOURCE_KEYS = ("design_node", "design")
+SOURCE_KEYS = ("design_node", "design_quantity", "design")
 
 
 @dataclass(frozen=True)
@@ -742,7 +746,9 @@ def _note(obj: dict[str, Any], path: str) -> str | None:
     return note
 
 
-def _source(obj: dict[str, Any], path: str) -> str | dict[str, str] | None:
+def _source(obj: dict[str, Any], path: str, quantity_ok: bool = False) -> str | dict[str, str] | None:
+    """A node's source. `quantity_ok` on an input: only an input's value can be
+    a design quantity's (0.13.0); a unit's source is a document or a node."""
     if "source" not in obj:
         return None
     src = obj["source"]
@@ -754,11 +760,28 @@ def _source(obj: dict[str, Any], path: str) -> str | dict[str, str] | None:
     if isinstance(src, dict):
         unknown = [k for k in src if k not in SOURCE_KEYS]
         if unknown:
-            raise CallError(at(p, unknown[0]), 'a design source has only "design_node" and, for another design, "design".')
-        dn = src.get("design_node")
+            raise CallError(
+                at(p, unknown[0]),
+                'a design source has only "design_node" or "design_quantity" and, for another design, "design".',
+            )
+        named = [k for k in ("design_node", "design_quantity") if k in src]
+        if len(named) != 1:
+            raise CallError(
+                p,
+                'a design source names one of "design_node" (a node the value comes from) or "design_quantity" '
+                "(the design quantity whose value this input holds), not both.",
+            )
+        key = named[0]
+        if key == "design_quantity" and not quantity_ok:
+            raise CallError(
+                at(p, key),
+                "only an input's value can be a design quantity's: a unit's source is a document or "
+                '{"design_node": "<id>"}.',
+            )
+        dn = src.get(key)
         if not isinstance(dn, str) or not re.fullmatch(r"\S{1,200}", dn):
-            raise CallError(at(p, "design_node"), 'name the design node by its id, e.g. "con:cavity-depth" (no spaces).')
-        out = {"design_node": dn}
+            raise CallError(at(p, key), 'name the design node by its id, e.g. "con:cavity-depth" (no spaces).')
+        out = {key: dn}
         if "design" in src:
             d = src["design"]
             if not isinstance(d, str) or not re.fullmatch(r"\S{1,200}", d):
@@ -800,7 +823,7 @@ def _node(obj: Any, path: str, data_root: Any = None, exact_limit: int | None = 
         if unknown:
             raise CallError(at(path, unknown[0]), f"an input node has only {', '.join(INPUT_KEYS)}.")
         raw, value = parse_value(obj["value"], at(path, "value"), data_root, exact_limit)
-        source = _source(obj, path)
+        source = _source(obj, path, quantity_ok=True)
         if source is None and not isinstance(value, bool) and len(U.currencies_in(value.unit)) > 1:
             raise CallError(
                 at(path, "source"),

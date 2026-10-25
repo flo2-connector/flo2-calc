@@ -329,6 +329,12 @@ answered within flo2.io's 24,000 characters with their results whole. At 0.10.0 
 - **Its `source`** says where the value came from: free text, or `{"design_node": "<id>"}` naming a node in a reflow2
   design (add `"design": "<id>"` for another design). flo2-calc records it and never resolves it. A record needs a
   source on every input.
+- **An input bound to a design quantity** (0.13.0) says `"source": {"design_quantity": "<id>"}`: its value is that
+  quantity's (a reflow2 Constraint with a limit, "household = 5 people"). The record keeps the id, and
+  `record_computation`'s reply lists the bound inputs, with their values, and the unbound ones under
+  `inputs_bound`. A design that keeps the record names each bound input as one of the record's inputs, so a change
+  to the quantity marks the record owed a re-run. A copied value with no design quantity stays legal and is unbound.
+  Only an input's source may name one.
 - **An operation** has `op` and `args`, the ids of the nodes it takes. Nodes may be listed in any order. A cycle, a
   missing id or an unknown operator is a malformed call naming the field.
 - `result` names the result node, and defaults to the last node listed. A **list** of ids (`"result": ["lo", "hi"]`)
@@ -1021,7 +1027,7 @@ version.
 | `supports` | optional: what it supports, as free text or `{"design_node": "dec:...", "design"?: "..."}` |
 | `arithmetic` | what exactness means in this record: exact for these inputs, and no more accurate than they are |
 | `graph` | the graph exactly as read, every value as text |
-| `inputs` | each input's `id`, `value`, `unit` and `source` (free text or `{"design_node"}`) |
+| `inputs` | each input's `id`, `value`, `unit` and `source` (free text, `{"design_node"}`, or `{"design_quantity"}` since version 11) |
 | `values` | every node's value, in evaluation order, with `"exact"` (the exact value for these inputs) beside an exact value whose text is rounded, or the `"rounded"` label on a rounded value: which values were rounded, and at what precision; `"simplified_from"` where a computed unit is shown simpler; `"array"` (shape, kind, unit, sha256, the elements up to 1,024) on an array, `"float64"` (error_at_most, how, from) on a float64 value; `"detail"` (0.8.0) on a value whose working step shows named intermediate values |
 | `result` | `{"node", "value"}`, labelled the same way; or `results`, one each, when the graph names a list |
 | `formula` | the computation as equations, plain text with LaTeX beside it, every line ending with its value |
@@ -1038,8 +1044,10 @@ How a record behaves:
   graph, and that catches a result that no longer follows from its inputs, even after someone recomputed the hash.
 - **Linking is the agent's job.** The agent links a record to the decision it supports with the design tool's own
   tools, for example as an Artifact that documents the decision. flo2-calc never writes to reflow2.
-- **Ready for stale-math checks.** An input that names a design quantity (`{"design_node": "con:..."}`) is what will
-  let reflow2 flag a decision whose math rests on a changed input. That is a later step, done on reflow2's side.
+- **Stale-math checks.** An input bound to a design quantity (`{"design_quantity": "cst:..."}`, 0.13.0) is what lets
+  reflow2 flag a record, and the decisions resting on it, when the quantity changes: the design records the record's
+  inputs with the values used when the record is registered, and compares them with what it holds. flo2-calc only
+  keeps the id.
 - **A computed record carries no host limits**, so where it was made never changes it.
 
 ### Not yet computed
@@ -1288,6 +1296,14 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    and the record format is unchanged (schema version 10). flo2's door should still keep a write's outcome if a reply
    ever reaches its own budget, but flo2-calc's answer now fits inside it. flo2 copies `references/units.md` unchanged
    (two lines added).
+
+   0.13.0 (reflow2's `req:a-changed-quantity-names-every-kept-computation-that-used-it`) lets an input's source name
+   the design quantity it is bound to, `{"design_quantity": "<id>"}`, and makes the record schema version 11.
+   `record_computation`'s answer gains `inputs_bound`. The four tools, their classes, their top-level arguments and
+   the image's profile are unchanged. For the binding to reach the design, flo2's door, when it records the record as
+   an Artifact, passes reflow2's `add_artifact` the record's inputs: one entry per bound input,
+   `{"node_id": <design_quantity>, "input": <id>, "value": <the value as a number>, "unit": <unit, when not "">}`,
+   and again with each new version of the record (a re-run). flo2 copies SKILL.md unchanged.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.

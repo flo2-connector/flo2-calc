@@ -706,7 +706,7 @@ def make(g=REGRESSION, root=None, name="arrays"):
 
 def test_a_record_with_arrays_fits_its_schema_and_re_runs():
     rec = make()
-    assert rec["schema_version"] == 10 and rec["produced_by"]["numpy"] == np.__version__
+    assert rec["schema_version"] == 11 and rec["produced_by"]["numpy"] == np.__version__
     jsonschema.validate(rec, R.schema(R.SCHEMA_VERSION))
     assert "ARRAY" in rec["arithmetic"]
     t_input = next(i for i in rec["inputs"] if i["id"] == "t")
