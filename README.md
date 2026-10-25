@@ -278,6 +278,24 @@ sent.
   saying the same few sentences on every value. The record still writes every sentence in full: the record's format is
   unchanged (schema version 10).
 
+- **An exact array result is shown as decimals too** (0.12.0,
+  `dec:a-reply-shows-a-readable-decimal-beside-an-exact-array-result`). An exact array writes an element whose decimal
+  does not end as its fraction. Beside each exact array result with such an element, a reply shows `readable`: the
+  elements it shows of that array as decimals, each fraction rounded half-even to 6 significant digits and each
+  decimal as written, with a `rendering` label saying so. It mirrors what is shown (`values`, a grid's rows kept;
+  or `first`, `least` and `greatest`; or, cut to fit, `first` and `last`). It is the reply's alone: the record holds
+  the exact values only, and its format is unchanged (schema version 10). When the outcome alone is over the budget,
+  a rendering goes before any exact value is cut, `withheld.results` names it, and it comes back beside whatever is
+  shown of a result cut to its ends. The Shop sample trial's monthly net energy now reads:
+
+  ```json
+  {"node": "net_m", "value": "array 12 (exact, kWh)",
+   "array": {"shape": [12], "kind": "exact", "unit": "kWh", "sha256": "sha256:97e5...",
+             "values": ["-4869729231506843861/1575262621733750", "-20706017464856326881/12602100973870000", ...]},
+   "readable": {"rendering": "a rendering, for reading: each element written as a fraction rounded half-even to 6 significant digits, ...",
+                "values": ["-3091.38", "-1643.06", ...]}}
+  ```
+
 The Shop sample trial's five largest graphs (`tests/data/answer-budget/`, anonymized) are its test: they are
 answered within flo2.io's 24,000 characters with their results whole. At 0.10.0 they answered 263,001, 98,173,
 66,886, 44,309 and 36,577 characters.
@@ -1152,6 +1170,10 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
   `tests/data/answer-budget/`) answered within flo2.io's answer budget with their results whole, by every tool; what
   is left out named and counted; a provenance sentence said once; a result too large on its own shown by its shape,
   sha256 and ends; the record unchanged.
+- `tests/test_readable_decimal.py` (0.12.0): a readable decimal beside each exact array result, by every tool, a
+  grid's rows kept; the trial's monthly net energy within flo2.io's budget; nothing added where a value is already a
+  decimal; a large array's first, least and greatest, and a cut one's ends; a rendering left out before any exact
+  value; the record exact only, in schema 10.
 - `tests/test_trial_units.py` (0.11.0): the acre, the hectare, the Btu and the refrigeration ton, each exact; the US
   survey acre and every other Btu refused with their reason; a bare `ton` still refused.
 - `tests/test_formula.py`: the formula and the working, in plain text and LaTeX; large graphs; a refused one; the record

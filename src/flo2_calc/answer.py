@@ -31,6 +31,18 @@ block exactly as it is sent.
      In a reply each `how` is a list of numbers that index `how_bounds_were_found`, which says each sentence once.
      The record still says every sentence in full: its format does not change (schema 10).
 
+  5. AN EXACT ARRAY RESULT IS SHOWN AS DECIMALS TOO (flo2-calc 0.12.0,
+     dec:a-reply-shows-a-readable-decimal-beside-an-exact-array-result, Anthony's ruling of 2026-10-24). An exact
+     array writes an element whose decimal does not end as its fraction, and the Shop sample trial's monthly net
+     energy came back as twelve of them (-4869729231506843861/1575262621733750 kWh ...), which nobody could read.
+     A single exact value is already written as a rounded decimal with its fraction beside it. So beside each
+     exact array result with an element written as a fraction, a reply shows `readable`: the elements the reply
+     shows of it, each fraction rounded half-even to READABLE_DIGITS significant digits and each decimal as
+     written, labelled as a rendering. It is a view of the result, not the result: it is the reply's alone (the
+     record holds the exact values only, in its format of schema 10), and when the outcome alone is over the
+     budget it goes before any exact value is cut, and comes back beside whatever is shown of a result cut to its
+     ends.
+
 record_computation's own answer never repeats the record's `values`. server.py leaves them out and names them in
 `withheld`, and this module keeps that entry.
 """
@@ -39,7 +51,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from fractions import Fraction
 from typing import Any
+
+from flo2_calc import numbers as N
 
 FILL = ("formula", "working", "values")  # what fills what the outcome leaves, in this order
 RESULT_KEYS = ("result", "results", "added")  # the outcome's values: cut only when the outcome alone is over
@@ -47,11 +62,77 @@ HOW = "how_bounds_were_found"
 WITHHELD = "withheld"
 SHOWN_ELEMENTS = 3  # a result too large on its own: its first and last this many elements
 LONG_TEXT = 400  # a text inside a result longer than this is cut last, with its length and sha256
+READABLE = "readable"  # an exact array result's decimal rendering, beside its exact values (0.12.0)
+READABLE_DIGITS = 6
+ELEMENTS = ("values", "first", "last", "least", "greatest")  # what a reply can show of an array's elements
+RENDERING = (
+    f"a rendering, for reading: each element written as a fraction rounded half-even to {READABLE_DIGITS} "
+    'significant digits, each written as a decimal as written. The exact values are "array"\'s.'
+)
 
 
 def text(answer: dict[str, Any]) -> str:
     """The text block, as server._text sends it."""
     return json.dumps(answer, ensure_ascii=False, indent=1)
+
+
+def readable(value: dict[str, Any]) -> dict[str, Any] | None:
+    """The `readable` block for one value as a reply shows it: None unless it is an exact array that shows an
+    element written as a fraction. It mirrors what is shown of the array (every value, a grid's rows kept; or its
+    first, least and greatest; or, cut to fit, its first and last)."""
+    arr = value.get("array")
+    if not isinstance(arr, dict) or arr.get("kind") != "exact":
+        return None
+    out: dict[str, Any] = {}
+    found = False
+
+    def render(v: Any) -> Any:
+        nonlocal found
+        if isinstance(v, list):
+            return [render(x) for x in v]
+        if isinstance(v, str) and "/" in v:
+            found = True
+            return N.significant_text(N.round_significant(Fraction(v), READABLE_DIGITS), READABLE_DIGITS)
+        return v
+
+    for k in ELEMENTS:
+        if k in arr:
+            out[k] = render(arr[k])
+    return {"rendering": RENDERING, **out} if found else None
+
+
+def _beside(value: dict[str, Any], block: dict[str, Any]) -> None:
+    """Put `block` in `value` as its READABLE, just after its "array", in place."""
+    items = [(k, v) for k, v in value.items() if k != READABLE]
+    value.clear()
+    for k, v in items:
+        value[k] = v
+        if k == "array":
+            value[READABLE] = block
+
+
+def _results(answer: dict[str, Any]) -> list[dict[str, Any]]:
+    """The outcome's values: the result, each of several results, or add_node's added node."""
+    values: list[dict[str, Any]] = []
+    for key in RESULT_KEYS:
+        v = answer.get(key)
+        if isinstance(v, dict):
+            values.append(v)
+        elif isinstance(v, list):
+            values += [x for x in v if isinstance(x, dict)]
+    return values
+
+
+def show_readable(answer: dict[str, Any]) -> dict[str, Any]:
+    """`answer` with a `readable` block beside each exact array result that needs one. It changes `answer` in place,
+    so it is given a copy (`fit` gives it say_how_once's, which is new throughout): a record's values never get
+    one."""
+    for v in _results(answer):
+        if READABLE not in v:
+            block = readable(v)
+            if block is not None:
+                _beside(v, block)
+    return answer
 
 
 def say_how_once(answer: dict[str, Any]) -> dict[str, Any]:
@@ -98,7 +179,7 @@ def _how_read_back(answer: dict[str, Any], said: list[str]) -> dict[str, Any]:
 def fit(answer: dict[str, Any], budget: int, where: str) -> dict[str, Any]:
     """`answer` held to `budget` characters of text, by the rule above. `where` says where whatever is left out
     can be read in full (the record this reply returns, the record passed in, or record_computation's)."""
-    a = say_how_once(answer)
+    a = show_readable(say_how_once(answer))  # say_how_once builds every dict and list anew
     if WITHHELD not in a and len(text(a)) <= budget:
         return a
     withheld: dict[str, Any] = {"budget_chars": budget, **(a.get(WITHHELD) or {})}
@@ -174,22 +255,34 @@ def _left_out(items: list[Any], shown: int, where: str) -> dict[str, Any]:
 
 
 def _cut_results(outcome: dict[str, Any], withheld: dict[str, Any], where: str, fits: Any) -> None:
-    """Cut the outcome's results, largest first, until `fits()`: an array to its shape, sha256, first and last
-    elements; then, last of all, a very long text to its ends, its length and its sha256."""
-    values: list[dict[str, Any]] = []
-    for key in RESULT_KEYS:
-        v = outcome.get(key)
-        if isinstance(v, dict):
-            values.append(v)
-        elif isinstance(v, list):
-            values += [x for x in v if isinstance(x, dict)]
-    cut: list[dict[str, Any]] = []
+    """Cut the outcome's results until `fits()`: first each exact array's `readable` rendering, largest first (a
+    view of the result, never the result); then the results, largest first, an array to its shape, sha256, first
+    and last elements, with the rendering of what is still shown put back where it now fits; then, last of all, a
+    very long text to its ends, its length and its sha256."""
+    values = _results(outcome)
+    cut: list[dict[str, Any]] = withheld.get("results") or []
 
     def note(entry: dict[str, Any]) -> None:
         cut.append(entry)
         withheld["results"] = cut  # counted in what fits from the first cut on
 
-    by_size = sorted(values, key=lambda v: -len(json.dumps(v, ensure_ascii=False)))
+    def size(v: Any) -> int:
+        return len(json.dumps(v, ensure_ascii=False))
+
+    dropped: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for v in sorted((v for v in values if READABLE in v), key=lambda v: -size(v[READABLE])):
+        if fits():
+            break
+        del v[READABLE]
+        entry = {
+            "node": v.get("node"),
+            "shown": f"its exact values without their {READABLE!r} decimal rendering",
+            "where": "nowhere else: it is a rendering of the exact values, which the record holds",
+        }
+        note(entry)
+        dropped.append((v, entry))
+
+    by_size = sorted(values, key=lambda v: -size(v))
     for v in by_size:
         if fits():
             break
@@ -206,6 +299,17 @@ def _cut_results(outcome: dict[str, Any], withheld: dict[str, Any], where: str, 
                 "shown": f"its shape, its sha256 and its first and last {SHOWN_ELEMENTS} of {len(elements):,} elements",
                 "where": where,
             })
+    for v, entry in sorted(dropped, key=lambda d: size(d[0])):  # what is shown now may leave room for its rendering
+        block = readable(v)
+        if block is None:
+            continue
+        _beside(v, block)
+        cut.remove(entry)
+        if not cut:
+            withheld.pop("results", None)
+        if not fits():
+            del v[READABLE]
+            note(entry)
     for v in by_size:
         if fits():
             break

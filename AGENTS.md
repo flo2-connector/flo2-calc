@@ -85,6 +85,14 @@
   - A float64 `how` is said once a reply (`how_bounds_were_found`).
   - The record format does not change for any of this. Never answer a reply over the budget, and never cut the
     outcome before everything else is gone.
+- **An exact array result is shown as decimals too** (0.12.0,
+  `dec:a-reply-shows-a-readable-decimal-beside-an-exact-array-result`, Anthony's ruling of 2026-10-24; `answer.py`).
+  - Beside each exact array result with an element written as a fraction, a reply shows `readable`: what it shows of
+    the array, each fraction rounded half-even to 6 significant digits and each decimal as written, labelled as a
+    rendering.
+  - It is the reply's alone. The record holds the exact values only, and its format does not change.
+  - It is a view of the result, not the result: when the outcome alone is over the budget it goes before any exact
+    value is cut, and comes back beside the ends of a result cut to them.
 - **Two ways in** (`dec:graph-submission-modes`): a whole graph, or node by node through `add_node`. Both end in
   `evaluator.evaluate`, which is why they agree. `add_node` is stateless.
 - **Units** (`dec:optional-units`, `dec:unit-mismatch-rejects`, `dec:units-use-reflow2-spellings`):
@@ -227,7 +235,7 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | `src/flo2_calc/units.py` | the unit vocabulary, dimensions, exact conversion, the near-miss hint | `cmp:units` |
 | `src/flo2_calc/temperature.py` | degC and degF: what a temperature with an offset may do | `cmp:units` |
 | `src/flo2_calc/decibels.py` | dB, and the power levels dBm and dBW: what a level may do | `cmp:units`, `cap:decibels-are-their-own-kind-and-their-ratio-is-stated` |
-| `src/flo2_calc/answer.py` | a reply held to the host's answer budget: the outcome whole, the rest named (0.11.0) | `cmp:mcp-server`, `dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget` |
+| `src/flo2_calc/answer.py` | a reply held to the host's answer budget: the outcome whole, the rest named (0.11.0); an exact array result's readable decimals (0.12.0) | `cmp:mcp-server`, `dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget`, `dec:a-reply-shows-a-readable-decimal-beside-an-exact-array-result` |
 | `src/flo2_calc/formula.py` | the computation shown back: its formula and its numbered working, plain text and LaTeX | `cmp:computation-record`, `cap:every-reply-shows-its-formula-and-working` |
 | `src/flo2_calc/skill.py` | the served skill: an MCP prompt and a resource, and its reference files as resources, read from `skills/` | `cap:serve-over-mcp` |
 | `src/flo2_calc/record.py`, `src/flo2_calc/schemas/` | the computation record (computed or not yet computed), its schemas, the root folder | `cmp:computation-record`, `cap:a-not-yet-computed-record-is-completed-on-a-larger-machine` |

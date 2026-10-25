@@ -46,5 +46,8 @@ node per number. The rules (`length` for n, statistics named) are in `SKILL.md`.
   labelled `"float64"`, with `error_at_most` (a rigorous bound on every element) and `how` (what that bound rests
   on). Arrays of more than 1,024 elements come back as their first values, least, greatest and sha256: reduce them,
   or pick an element with `element`, rather than ask for every value.
+- An exact array result whose elements include fractions also comes back with `readable`: those elements as
+  decimals of 6 significant digits, labelled as a rendering. Quote the rendering to the person; the exact values
+  (the record holds only them) are the result.
 - `"kind": "shape_mismatch"`: two arrays whose shapes do not combine. Say which way they meet (`column`,
   `transpose`), or fix the data.
