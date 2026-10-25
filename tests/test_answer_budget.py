@@ -91,6 +91,12 @@ def resolved(answer: dict) -> dict:
     return back(answer)
 
 
+def exact(results: list) -> list:
+    """The results without the `readable` decimal rendering a reply shows beside an exact array (0.12.0,
+    tests/test_readable_decimal.py): what is left is the result, exactly as the record holds it."""
+    return [{k: v for k, v in r.items() if k != "readable"} for r in results]
+
+
 # ---------------------------------------------------------------- the setting
 
 
@@ -122,10 +128,10 @@ def test_the_trials_graphs_are_answered_within_the_budget_with_their_results_who
     record = json.loads(made.content[1].resource.text)
     a = resolved(answer_of(made))
     # The outcome, whole: every result with its label, as the record holds it, and the record's facts.
-    assert a["results"] == record["results"], "every result, whole, with its label"
+    assert exact(a["results"]) == record["results"], "every result, whole, with its label"
     assert a["record"]["content_hash"] == record["content_hash"] and a["record"]["file"] == f"fixture-{name}.calc.json"
     assert a["exactness"] and a["next"]
-    assert resolved(answer_of(evaluated))["results"] == record["results"]
+    assert exact(resolved(answer_of(evaluated))["results"]) == record["results"]
 
 
 @pytest.mark.parametrize("name", FIXTURES)
@@ -155,7 +161,7 @@ def test_a_kept_record_re_runs_within_the_budget(name):
     assert len(text_of(again)) <= FLO2_IO_ANSWER_CHARS, f"{name}: {len(text_of(again)):,} characters"
     a = answer_of(again)
     assert a["reproduces"] is True
-    assert resolved(a)["results"] == json.loads(made.content[1].resource.text)["results"]
+    assert exact(resolved(a)["results"]) == json.loads(made.content[1].resource.text)["results"]
 
 
 def test_how_a_bound_was_found_is_said_once_and_reads_back_whole():

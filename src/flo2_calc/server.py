@@ -46,6 +46,9 @@ the record's facts, `next`. The formula and working views and the values fill wh
 (--max-answer-chars) leaves. A `withheld` block names what was left out and where it is.
 record_computation never repeats the values its record holds. A float64 bound's `how` sentences are said once a
 reply, in `how_bounds_were_found`.
+Beside each exact array result with an element written as a fraction, a reply shows `readable`: those elements
+as decimals, labelled as a rendering (0.12.0; dec:a-reply-shows-a-readable-decimal-beside-an-exact-array-result).
+The record holds the exact values only.
 
 ERRORS (contract point 4; dec:unit-mismatch-rejects). A computation that
 cannot be done is a NORMAL reply: {"status": "refused", "refused": {node, op,
@@ -138,7 +141,9 @@ INSTRUCTIONS = (
     "this host's answer budget: the formula, the working and the other values fill the rest, and \"withheld\" names "
     "what was left out and where it is (record_computation's record holds every value; its reply never repeats "
     "them). A float64 label's \"how\" is a list of places in \"how_bounds_were_found\", where each sentence is "
-    "said once. evaluate_graph takes "
+    "said once. An exact array result whose elements include fractions also shows \"readable\": the same elements as "
+    "decimals of 6 significant digits, a rendering for reading only; quote it to the person, and keep the exact "
+    "values (the record holds only them). evaluate_graph takes "
     "a whole graph; add_node builds one node at a time; record_computation returns a computation record, a .calc.json "
     "file to link to the decision it supports; rerun_record checks that a record still reproduces. flo2-calc "
     "calculates and you reason: it never decides which equation applies, and a domain's own formulas (ring sizes, "
