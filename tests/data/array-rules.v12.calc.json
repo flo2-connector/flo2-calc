@@ -1,0 +1,871 @@
+{
+  "arithmetic": "Exact rational arithmetic on the inputs as written: no binary floating point. + - * / and integer powers are exact, and so is every unit conversion but deg-rad and dBm-mW, so every value not marked \"rounded\" is exact FOR THESE INPUTS and no more accurate than they are: a decimal typed for an irrational number (a truncated pi or e) is taken as exactly that decimal, not as the number it stands for (the pi and e operators are the constants themselves). A whole number is written in full. Any other value whose decimal ends (at most 40 significant digits) is written exactly; any other is written rounded half-even to 30 significant digits, and its exact value for these inputs is given beside it as a fraction. A computed value whose compound unit is exactly a simpler unit is shown in it (\"simplified_from\" names the unit it was computed in); the value does not change. Comparisons use exact values. A value marked \"rounded\" is NOT exact: it comes from pi, e, a root, exp, ln, log10, a non-whole power (or a whole one asked for \"digits\" past the digits budget), trigonometry, a deg-rad conversion, a decibel conversion or a distribution, or from arithmetic on such a value. It is a decimal of the stated number of significant digits, every one written, given no \"exact\" fraction, and \"error_at_most\" bounds its distance from the true value. Where it says \"correctly_rounded\", it is the true value rounded half-even, decided from a rigorous enclosure (Arb ball arithmetic, python-flint). A comparison, ceil, floor or round of a rounded value is answered only when its error bound decides it, and refused otherwise. An ARRAY of exact numbers stays exact through rational operations, reductions and the statistics that are rational; a value marked \"float64\" is NOT exact: an FFT, a rounded-class function over an array, an array of more elements than this record's max_exact_elements (the host's setting where it was made), or anything mixed with such a value, computed in IEEE 754 double precision. Every element of a float64 value lies within its \"error_at_most\" of the true value, a rigorous bound whose basis \"how\" names (the FFT's: Higham 2002, Theorem 24.2, for a power-of-two length; Arb's rigorous DFT for any other). An array of more than 1,024 elements is written as its sha256 over every element's text, which re-running compares.",
+  "content_hash": "sha256:5c77ef796c79fb4781861438311fbbaafe4ae713b8d03cb577eeda8cae274170",
+  "formula": [
+    {
+      "latex": "\\text{rc} = \\text{r} \\cdot \\cos\\left(\\text{th}\\right) \\approx \\text{array 3 (float64, mm)}",
+      "node": "rc",
+      "text": "rc = r * cos(th) ≈ array 3 (float64, mm)"
+    },
+    {
+      "latex": "\\text{rc2} = \\text{rc} \\cdot \\text{rc} \\approx \\text{array 3 (float64, mm^2)}",
+      "node": "rc2",
+      "text": "rc2 = rc * rc ≈ array 3 (float64, mm^2)"
+    },
+    {
+      "latex": "\\text{r2} = \\text{r} \\cdot \\text{r} = 1\\,\\mathrm{mm}^{2}",
+      "node": "r2",
+      "text": "r2 = r * r = 1 mm^2"
+    },
+    {
+      "latex": "\\text{raw} = \\text{r2} - \\text{rc2} \\approx \\text{array 3 (float64, mm^2)}",
+      "node": "raw",
+      "text": "raw = r2 - rc2 ≈ array 3 (float64, mm^2)"
+    },
+    {
+      "latex": "\\text{cl} = \\max\\left(\\text{raw},\\ \\text{z}\\right) \\approx \\text{array 3 (float64, mm^2)}",
+      "node": "cl",
+      "text": "cl = max(raw, z) ≈ array 3 (float64, mm^2)"
+    },
+    {
+      "latex": "\\text{lo} = \\min\\left(\\text{rc2},\\ \\text{r2}\\right) \\approx \\text{array 3 (float64, mm^2)}",
+      "node": "lo",
+      "text": "lo = min(rc2, r2) ≈ array 3 (float64, mm^2)"
+    },
+    {
+      "latex": "\\text{ab} = \\left|\\text{raw}\\right| \\approx \\text{array 3 (float64, mm^2)}",
+      "node": "ab",
+      "text": "ab = |raw| ≈ array 3 (float64, mm^2)"
+    },
+    {
+      "latex": "\\text{top} = \\max\\left(\\text{raw}\\right) \\approx 1.0\\,\\mathrm{mm}^{2}",
+      "node": "top",
+      "text": "top = max(raw) ≈ 1.0 mm^2"
+    },
+    {
+      "latex": "\\text{sq} = \\sqrt{\\text{q}} \\approx \\text{array 2 (float64)}",
+      "node": "sq",
+      "text": "sq = sqrt(q) ≈ array 2 (float64)"
+    },
+    {
+      "latex": "\\text{ct} = \\cos\\left(\\text{t}\\right) \\approx \\text{array 2 (float64)}",
+      "node": "ct",
+      "text": "ct = cos(t) ≈ array 2 (float64)"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      {
+        "id": "r",
+        "source": "a unit circle's radius",
+        "value": "1 mm"
+      },
+      {
+        "id": "th",
+        "source": "the angles",
+        "value": {
+          "array": [
+            "0",
+            "45",
+            "90"
+          ],
+          "unit": "deg"
+        }
+      },
+      {
+        "args": [
+          "th"
+        ],
+        "id": "c",
+        "op": "cos"
+      },
+      {
+        "args": [
+          "r",
+          "c"
+        ],
+        "id": "rc",
+        "op": "mul"
+      },
+      {
+        "args": [
+          "rc",
+          "rc"
+        ],
+        "id": "rc2",
+        "op": "mul"
+      },
+      {
+        "args": [
+          "r",
+          "r"
+        ],
+        "id": "r2",
+        "op": "mul"
+      },
+      {
+        "args": [
+          "r2",
+          "rc2"
+        ],
+        "id": "raw",
+        "op": "sub"
+      },
+      {
+        "id": "z",
+        "source": "the clamp",
+        "value": "0 mm^2"
+      },
+      {
+        "args": [
+          "raw",
+          "z"
+        ],
+        "id": "cl",
+        "op": "max"
+      },
+      {
+        "args": [
+          "rc2",
+          "r2"
+        ],
+        "id": "lo",
+        "op": "min"
+      },
+      {
+        "args": [
+          "raw"
+        ],
+        "id": "ab",
+        "op": "abs"
+      },
+      {
+        "args": [
+          "raw"
+        ],
+        "id": "top",
+        "op": "max"
+      },
+      {
+        "id": "q",
+        "source": "squares",
+        "value": {
+          "array": [
+            "1/4",
+            "9/4"
+          ]
+        }
+      },
+      {
+        "args": [
+          "q"
+        ],
+        "id": "sq",
+        "op": "sqrt"
+      },
+      {
+        "id": "t",
+        "source": "right angles",
+        "value": {
+          "array": [
+            "0",
+            "90"
+          ],
+          "unit": "deg"
+        }
+      },
+      {
+        "args": [
+          "t"
+        ],
+        "id": "ct",
+        "op": "cos"
+      }
+    ],
+    "result": [
+      "cl",
+      "lo",
+      "ab",
+      "top",
+      "sq",
+      "ct"
+    ]
+  },
+  "inputs": [
+    {
+      "id": "r",
+      "source": "a unit circle's radius",
+      "unit": "mm",
+      "value": "1 mm"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:f373bc2e48343cb33f38423ce990e025a3943bfa369b3d3c1234f9582e133d16",
+        "shape": [
+          3
+        ],
+        "unit": "deg"
+      },
+      "id": "th",
+      "source": "the angles",
+      "unit": "deg",
+      "value": "array 3 (exact, deg)"
+    },
+    {
+      "id": "z",
+      "source": "the clamp",
+      "unit": "mm^2",
+      "value": "0 mm^2"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:0c5727eecb18f43aa46249aac2e6bedda211e24320976a8ffec695049ce1fafd",
+        "shape": [
+          2
+        ],
+        "unit": ""
+      },
+      "id": "q",
+      "source": "squares",
+      "unit": "",
+      "value": "array 2 (exact)"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:1bc7bad5b74a5a03d85cc58fbbfa601cbf4b584dde08fc1fb0c37df9140ce62b",
+        "shape": [
+          2
+        ],
+        "unit": "deg"
+      },
+      "id": "t",
+      "source": "right angles",
+      "unit": "deg",
+      "value": "array 2 (exact, deg)"
+    }
+  ],
+  "max_exact_elements": 65536,
+  "name": "array-rules",
+  "produced_by": {
+    "flo2_calc": "0.14.0",
+    "numpy": "2.5.3",
+    "pint": "0.26.1",
+    "python_flint": "0.9.0"
+  },
+  "record_format": "flo2-calc computation record",
+  "results": [
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:da1d7c9667511e877f84a7160f7b15ebb5162c8b56185a0a3e78671548426656",
+        "shape": [
+          3
+        ],
+        "unit": "mm^2",
+        "values": [
+          "0.0",
+          "0.4999999999999999",
+          "1.0"
+        ]
+      },
+      "float64": {
+        "error_at_most": "3.4e-16 mm^2",
+        "from": [
+          "c",
+          "rc",
+          "raw",
+          "cl"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "cl",
+      "value": "array 3 (float64, mm^2)"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:6eefa47fe9ed7ca9196e5fd981fce95b763e31667204999d4a1d0cc3872277e4",
+        "shape": [
+          3
+        ],
+        "unit": "mm^2",
+        "values": [
+          "1.0",
+          "0.5000000000000001",
+          "5.249565094983078e-48"
+        ]
+      },
+      "float64": {
+        "error_at_most": "3.4e-16 mm^2",
+        "from": [
+          "c",
+          "rc",
+          "lo"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "lo",
+      "value": "array 3 (float64, mm^2)"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:da1d7c9667511e877f84a7160f7b15ebb5162c8b56185a0a3e78671548426656",
+        "shape": [
+          3
+        ],
+        "unit": "mm^2",
+        "values": [
+          "0.0",
+          "0.4999999999999999",
+          "1.0"
+        ]
+      },
+      "float64": {
+        "error_at_most": "3.4e-16 mm^2",
+        "from": [
+          "c",
+          "rc",
+          "raw"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "ab",
+      "value": "array 3 (float64, mm^2)"
+    },
+    {
+      "float64": {
+        "error_at_most": "3.4e-16 mm^2",
+        "from": [
+          "c",
+          "rc",
+          "raw"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "top",
+      "value": "1.0 mm^2"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:445c7c3ad55bf22666a28c655cfc0dde0ad2b0ee21779c9d1870641e532120ff",
+        "shape": [
+          2
+        ],
+        "unit": "",
+        "values": [
+          "0.5",
+          "1.5"
+        ]
+      },
+      "float64": {
+        "error_at_most": "0",
+        "from": [
+          "sq"
+        ],
+        "how": [
+          "sqrt: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64"
+        ]
+      },
+      "node": "sq",
+      "value": "array 2 (float64)"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:d960d059a42014e1c1a3a7037ef11c178893f67aa01c979bcce4c1e2dd0cb0e5",
+        "shape": [
+          2
+        ],
+        "unit": "",
+        "values": [
+          "1.0",
+          "2.2911929414571524e-24"
+        ]
+      },
+      "float64": {
+        "error_at_most": "4.9e-24",
+        "from": [
+          "ct"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64"
+        ]
+      },
+      "node": "ct",
+      "value": "array 2 (float64)"
+    }
+  ],
+  "schema_version": 12,
+  "status": "computed",
+  "supports": "test: the array rules flo2-calc 0.15.0 changes",
+  "values": [
+    {
+      "node": "r",
+      "value": "1 mm"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:f373bc2e48343cb33f38423ce990e025a3943bfa369b3d3c1234f9582e133d16",
+        "shape": [
+          3
+        ],
+        "unit": "deg",
+        "values": [
+          "0",
+          "45",
+          "90"
+        ]
+      },
+      "node": "th",
+      "value": "array 3 (exact, deg)"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:08aae334390231aa98749321e82c2388f1213e6b38b22355581f173720394174",
+        "shape": [
+          3
+        ],
+        "unit": "",
+        "values": [
+          "1.0",
+          "0.7071067811865476",
+          "2.2911929414571524e-24"
+        ]
+      },
+      "float64": {
+        "error_at_most": "4.9e-17",
+        "from": [
+          "c"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64"
+        ]
+      },
+      "node": "c",
+      "value": "array 3 (float64)"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:6e2a4dcf7e7dff2758d5570f2ce9e5add3c9f051a57304fc0b7b36eaa1bab5c2",
+        "shape": [
+          3
+        ],
+        "unit": "mm",
+        "values": [
+          "1.0",
+          "0.7071067811865476",
+          "2.2911929414571524e-24"
+        ]
+      },
+      "float64": {
+        "error_at_most": "1.3e-16 mm",
+        "from": [
+          "c",
+          "rc"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "rc",
+      "value": "array 3 (float64, mm)"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:6eefa47fe9ed7ca9196e5fd981fce95b763e31667204999d4a1d0cc3872277e4",
+        "shape": [
+          3
+        ],
+        "unit": "mm^2",
+        "values": [
+          "1.0",
+          "0.5000000000000001",
+          "5.249565094983078e-48"
+        ]
+      },
+      "float64": {
+        "error_at_most": "3.4e-16 mm^2",
+        "from": [
+          "c",
+          "rc"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "rc2",
+      "value": "array 3 (float64, mm^2)"
+    },
+    {
+      "node": "r2",
+      "value": "1 mm^2"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:da1d7c9667511e877f84a7160f7b15ebb5162c8b56185a0a3e78671548426656",
+        "shape": [
+          3
+        ],
+        "unit": "mm^2",
+        "values": [
+          "0.0",
+          "0.4999999999999999",
+          "1.0"
+        ]
+      },
+      "float64": {
+        "error_at_most": "3.4e-16 mm^2",
+        "from": [
+          "c",
+          "rc",
+          "raw"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "raw",
+      "value": "array 3 (float64, mm^2)"
+    },
+    {
+      "node": "z",
+      "value": "0 mm^2"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:da1d7c9667511e877f84a7160f7b15ebb5162c8b56185a0a3e78671548426656",
+        "shape": [
+          3
+        ],
+        "unit": "mm^2",
+        "values": [
+          "0.0",
+          "0.4999999999999999",
+          "1.0"
+        ]
+      },
+      "float64": {
+        "error_at_most": "3.4e-16 mm^2",
+        "from": [
+          "c",
+          "rc",
+          "raw",
+          "cl"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "cl",
+      "value": "array 3 (float64, mm^2)"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:6eefa47fe9ed7ca9196e5fd981fce95b763e31667204999d4a1d0cc3872277e4",
+        "shape": [
+          3
+        ],
+        "unit": "mm^2",
+        "values": [
+          "1.0",
+          "0.5000000000000001",
+          "5.249565094983078e-48"
+        ]
+      },
+      "float64": {
+        "error_at_most": "3.4e-16 mm^2",
+        "from": [
+          "c",
+          "rc",
+          "lo"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "lo",
+      "value": "array 3 (float64, mm^2)"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:da1d7c9667511e877f84a7160f7b15ebb5162c8b56185a0a3e78671548426656",
+        "shape": [
+          3
+        ],
+        "unit": "mm^2",
+        "values": [
+          "0.0",
+          "0.4999999999999999",
+          "1.0"
+        ]
+      },
+      "float64": {
+        "error_at_most": "3.4e-16 mm^2",
+        "from": [
+          "c",
+          "rc",
+          "raw"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "ab",
+      "value": "array 3 (float64, mm^2)"
+    },
+    {
+      "float64": {
+        "error_at_most": "3.4e-16 mm^2",
+        "from": [
+          "c",
+          "rc",
+          "raw"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64",
+          "an exact value taken into float64: its exact rounding error to the nearest double",
+          "float64 arithmetic: each operation's IEEE 754 rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through and inflated by (1 + 2^-40)"
+        ]
+      },
+      "node": "top",
+      "value": "1.0 mm^2"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:0c5727eecb18f43aa46249aac2e6bedda211e24320976a8ffec695049ce1fafd",
+        "shape": [
+          2
+        ],
+        "unit": "",
+        "values": [
+          "0.25",
+          "2.25"
+        ]
+      },
+      "node": "q",
+      "value": "array 2 (exact)"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:445c7c3ad55bf22666a28c655cfc0dde0ad2b0ee21779c9d1870641e532120ff",
+        "shape": [
+          2
+        ],
+        "unit": "",
+        "values": [
+          "0.5",
+          "1.5"
+        ]
+      },
+      "float64": {
+        "error_at_most": "0",
+        "from": [
+          "sq"
+        ],
+        "how": [
+          "sqrt: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64"
+        ]
+      },
+      "node": "sq",
+      "value": "array 2 (float64)"
+    },
+    {
+      "array": {
+        "kind": "exact",
+        "sha256": "sha256:1bc7bad5b74a5a03d85cc58fbbfa601cbf4b584dde08fc1fb0c37df9140ce62b",
+        "shape": [
+          2
+        ],
+        "unit": "deg",
+        "values": [
+          "0",
+          "90"
+        ]
+      },
+      "node": "t",
+      "value": "array 2 (exact, deg)"
+    },
+    {
+      "array": {
+        "kind": "float64",
+        "sha256": "sha256:d960d059a42014e1c1a3a7037ef11c178893f67aa01c979bcce4c1e2dd0cb0e5",
+        "shape": [
+          2
+        ],
+        "unit": "",
+        "values": [
+          "1.0",
+          "2.2911929414571524e-24"
+        ]
+      },
+      "float64": {
+        "error_at_most": "4.9e-24",
+        "from": [
+          "ct"
+        ],
+        "how": [
+          "cos: each element from Arb's rigorous enclosure (python-flint) over its argument's error ball, rounded to the nearest float64"
+        ]
+      },
+      "node": "ct",
+      "value": "array 2 (float64)"
+    }
+  ],
+  "working": [
+    {
+      "label": "given",
+      "latex": "\\text{r} = 1\\,\\mathrm{mm}",
+      "node": "r",
+      "step": 1,
+      "text": "r = 1 mm"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{th} = \\text{array 3 (exact, deg)}",
+      "node": "th",
+      "step": 2,
+      "text": "th = array 3 (exact, deg)"
+    },
+    {
+      "label": "float64: error at most 4.9e-17",
+      "latex": "\\text{c} = \\cos\\left(\\text{th}\\right) \\approx \\text{array 3 (float64)}",
+      "node": "c",
+      "step": 3,
+      "text": "c = cos(th) ≈ array 3 (float64)"
+    },
+    {
+      "label": "float64: error at most 1.3e-16 mm",
+      "latex": "\\text{rc} = \\text{r} \\cdot \\text{c} \\approx \\text{array 3 (float64, mm)}",
+      "node": "rc",
+      "step": 4,
+      "text": "rc = r * c ≈ array 3 (float64, mm)"
+    },
+    {
+      "label": "float64: error at most 3.4e-16 mm^2",
+      "latex": "\\text{rc2} = \\text{rc} \\cdot \\text{rc} \\approx \\text{array 3 (float64, mm^2)}",
+      "node": "rc2",
+      "step": 5,
+      "text": "rc2 = rc * rc ≈ array 3 (float64, mm^2)"
+    },
+    {
+      "label": "exact",
+      "latex": "\\text{r2} = \\text{r} \\cdot \\text{r} = 1\\,\\mathrm{mm} \\cdot 1\\,\\mathrm{mm} = 1\\,\\mathrm{mm}^{2}",
+      "node": "r2",
+      "step": 6,
+      "text": "r2 = r * r = 1 mm * 1 mm = 1 mm^2"
+    },
+    {
+      "label": "float64: error at most 3.4e-16 mm^2",
+      "latex": "\\text{raw} = \\text{r2} - \\text{rc2} \\approx \\text{array 3 (float64, mm^2)}",
+      "node": "raw",
+      "step": 7,
+      "text": "raw = r2 - rc2 ≈ array 3 (float64, mm^2)"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{z} = 0\\,\\mathrm{mm}^{2}",
+      "node": "z",
+      "step": 8,
+      "text": "z = 0 mm^2"
+    },
+    {
+      "label": "float64: error at most 3.4e-16 mm^2",
+      "latex": "\\text{cl} = \\max\\left(\\text{raw},\\ \\text{z}\\right) \\approx \\text{array 3 (float64, mm^2)}",
+      "node": "cl",
+      "step": 9,
+      "text": "cl = max(raw, z) ≈ array 3 (float64, mm^2)"
+    },
+    {
+      "label": "float64: error at most 3.4e-16 mm^2",
+      "latex": "\\text{lo} = \\min\\left(\\text{rc2},\\ \\text{r2}\\right) \\approx \\text{array 3 (float64, mm^2)}",
+      "node": "lo",
+      "step": 10,
+      "text": "lo = min(rc2, r2) ≈ array 3 (float64, mm^2)"
+    },
+    {
+      "label": "float64: error at most 3.4e-16 mm^2",
+      "latex": "\\text{ab} = \\left|\\text{raw}\\right| \\approx \\text{array 3 (float64, mm^2)}",
+      "node": "ab",
+      "step": 11,
+      "text": "ab = |raw| ≈ array 3 (float64, mm^2)"
+    },
+    {
+      "label": "float64: error at most 3.4e-16 mm^2",
+      "latex": "\\text{top} = \\max\\left(\\text{raw}\\right) \\approx 1.0\\,\\mathrm{mm}^{2}",
+      "node": "top",
+      "step": 12,
+      "text": "top = max(raw) ≈ 1.0 mm^2"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{q} = \\text{array 2 (exact)}",
+      "node": "q",
+      "step": 13,
+      "text": "q = array 2 (exact)"
+    },
+    {
+      "label": "float64: error at most 0",
+      "latex": "\\text{sq} = \\sqrt{\\text{q}} \\approx \\text{array 2 (float64)}",
+      "node": "sq",
+      "step": 14,
+      "text": "sq = sqrt(q) ≈ array 2 (float64)"
+    },
+    {
+      "label": "given",
+      "latex": "\\text{t} = \\text{array 2 (exact, deg)}",
+      "node": "t",
+      "step": 15,
+      "text": "t = array 2 (exact, deg)"
+    },
+    {
+      "label": "float64: error at most 4.9e-24",
+      "latex": "\\text{ct} = \\cos\\left(\\text{t}\\right) \\approx \\text{array 2 (float64)}",
+      "node": "ct",
+      "step": 16,
+      "text": "ct = cos(t) ≈ array 2 (float64)"
+    }
+  ]
+}

@@ -3,6 +3,52 @@
 flo2-calc's changes, newest first. Versions before 0.12.0 are described in the README, where each feature names the
 version that added it, and in the commit history.
 
+## 0.15.0 (2026-10-27)
+
+A clamp keeps its one-sided bound, a function over an exact array stays exact where every element is, and an
+intermediate array no longer crowds a reply. Three findings of 2026-10-27 in design `0bee0c00b35845f6`, each measured on
+0.14.0: `fact:a-clamp-at-zero-on-a-float64-array-keeps-a-two-sided-error-so-sqrt-refuses-the-edge-2026-10-27` (a
+defect), `fact:an-array-function-is-float64-where-the-same-scalar-is-exact-2026-10-27` and
+`fact:a-reply-fills-its-budget-with-intermediate-values-in-graph-order-so-one-array-crowds-out-the-rest-2026-10-27`.
+
+What a caller sees:
+
+- **`sqrt(max(x, 0))` answers at the edge.** `max`, `min` and `abs` (element-wise, the greatest and least of an
+  array, and on a single rounded value) are now the interval their arguments' bounds give, written from the end the
+  operation guarantees: `max(x, 0)` is never below 0 and `min(x, 0)` never above it, bound included. Until now
+  `max(raw, 0 mm^2)` at an element where `raw` was 0 within 3.4e-16 came back `0.0` within 3.4e-16, and `sqrt` refused
+  it as undecidable. That element now reads about `1.7e-16` within `1.7e-16` (it is in [0, 3.3e-16]), and its root
+  about `9.1e-9` within `9.1e-9` (its true value 0 inside). Where the argument picked holds both ends (it is surely
+  the larger), its value and its own bound come back unchanged, which can be tighter than before (0.14.0 gave every
+  element the widest argument's bound). `sqrt(max(sin(pi rad), 0))` and `sqrt(abs(sin(pi rad)))` answer too.
+- **A function over an exact array is exact where every element has an exact value.** `sqrt([1/4, 9/4])` now comes
+  back exact `[1/2, 3/2]` (it was float64 `["0.5", "1.5"]` with bound 0), and `cos([0, 90] deg)` exact `[1, 0]` (it
+  was float64, `2.29e-24` within `4.9e-24` for the second): the same cases a single value is exact in, for `sqrt`,
+  `exp`, `ln`, `log10`, the trigonometry and its inverses, `atan2`, a non-whole `pow`, deg-rad, the decibel
+  conversions, `normal_cdf`, `normal_sf`, `normal_quantile` and `chi2_sf`. Such a result has no `float64` label, and
+  what follows from it stays exact too. If any element has no exact value, or the array is past the host's
+  `max_exact_elements`, the whole array is float64 as before. A domain is still refused element by element. The
+  attempt costs at most about 0.1 s at flo2.io's 4,096 elements (every element exact but the last; measured below).
+- **An intermediate array is summarized in a reply.** In `values`, an array of more than 16 elements that is not a
+  result is shown by its `shape`, `sha256` (the record's digest of every element) and its `first` and `last` three
+  elements; its element list is the only field dropped. `withheld.values_summarized` names each one (`nodes`) and
+  says where every element is (`where`: the record `record_computation` keeps, or an `element` node for one). A
+  0.14.0 reply to a graph with a 1,023-element `integer_range` spent 7,272 characters on it and withheld the six
+  values after it; it now shows all ten values in 11,102 characters. A result is never summarized, and the record
+  still holds every value.
+- **Record schema version 13**: version 12's shape, made under the two rules above, which can change the values a
+  graph gives. A record of version 12 or older re-runs under the rules it was made with
+  (`tests/data/array-rules.v12.calc.json`, made by 0.14.0 with every path they change, reproduces byte for byte).
+  `rederive_record` of such a record compares old and new values both computed under today's rules and says so in
+  `compared`, so `moved` names only what the change moved. Every new record is version 13.
+- The served `references/arrays.md` and the server's instructions say all three; SKILL.md is unchanged.
+- For flo2: no tool, class, argument or limit changes, so the door's allow-list and the image's profile are unchanged;
+  copy `references/arrays.md` again.
+- Measured (`tools/measure.py`, which gains the 4,096-element exact-function step): 61 calls, peak 108.6 MiB under
+  the 128 MiB cap (0.14.0: 100.6; runs differ by a few MiB), every runaway call stopped with its limit, the container
+  alive after. The step takes 1.71 s on the image's one CPU, recorded and re-run 4.30 s; the exact attempt itself
+  adds at most about 0.09 s at 4,096 elements against flo2.io's 20 s deadline.
+
 ## 0.14.0 (2026-10-27)
 
 A kept record is re-derived when an input changes, and says what moved. (`req:a-calc-record-keeps-its-formula-and-is-re-derived-when-an-input-changes`,

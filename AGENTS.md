@@ -83,6 +83,8 @@
   - `record_computation` never repeats the values its record holds.
   - A result too large on its own is shown by its shape, sha256 and first and last elements.
   - A float64 `how` is said once a reply (`how_bounds_were_found`).
+  - An intermediate array of more than 16 elements in `values` is shown by its shape, sha256 and first and last three
+    elements, named in `withheld.values_summarized` (0.15.0, `answer.summarize_values`); a result never is.
   - The record format does not change for any of this. Never answer a reply over the budget, and never cut the
     outcome before everything else is gone.
 - **An exact array result is shown as decimals too** (0.12.0,
@@ -165,7 +167,9 @@
   (round 3, q077). flo2-calc cannot check where a number came from, so the served skill and `server.INSTRUCTIONS` say
   it, and an example in either never carries a real standard's constants for an agent to copy.
 - **Arrays** (`req:flo2-calc-computes-over-arrays`, `dec:idea-how-arrays-are-computed`, option (a)): one unit per
-  array; an exact array stays exact through rational operations; an FFT, a rounded-class function over an array, an
+  array; an exact array stays exact through rational operations, and (0.15.0) through a rounded-class function where
+  every element has an exact value, the same cases a single value is exact in (`realmath.Fn.exact`,
+  `arrays._exact_case`); an FFT, a rounded-class function over an array with an element that has none, an
   array of more elements than the host's `max_exact_elements` (65,536 on a laptop, 4,096 in the image; a record keeps
   the value it was made with and re-runs with it), or anything mixed with such a value is float64, labelled `float64` with a
   rigorous `error_at_most` and its basis (`how`). A float64 value must be the same on every machine: functions go
@@ -173,6 +177,10 @@
   last bits are numpy's (pocketfft), which is why `produced_by` names numpy, and why `rerun_record` accepts a value
   resting on an FFT within the bound its record states (`"reproduces": "within_bound"`), never as identical
   (`dec:v0-6-0-array-choices`). Everything else reproduces byte for byte.
+  - **A clamp keeps its side** (0.15.0): `min`, `max` and `abs`, element-wise, over an array and on a single rounded
+    value, are the interval their arguments' bounds give, written from the end the operation guarantees
+    (`arrays._ball_of`, `evaluator._interval`), so `max(x, 0)` is never below 0, bound included. Never go back to a
+    symmetric radius taken from the widest argument: it refused `sqrt(max(x, 0))` at the edge.
 - **The agent reasons, flo2-calc calculates** (`rule:the-agent-reasons-flo2-calc-calculates`): flo2-calc never
   chooses an equation or judges an approximation; it computes what it is given, or refuses with a reason.
 
@@ -212,14 +220,17 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
   (0.8.0) the cure design's operators, their node fields, a value's `detail` and two new limits; version 9 (0.9.0) the
   integer operators and two more limits; version 10 (0.10.0) the named tests, their plans, `variance`, and the
   `hypothesis_test` and `test_plan` blocks; version 11 (0.13.0) an input's source naming the design quantity it is
-  bound to (`{"design_quantity": "<id>"}`); version 12 (0.14.0) a re-derived record's `history`. Every older
+  bound to (`{"design_quantity": "<id>"}`); version 12 (0.14.0) a re-derived record's `history`; version 13 (0.15.0)
+  no new field, but the rules a record is made under (a clamp keeps its side, a function over an exact array is exact
+  where every element is), so 1 to 12 re-run under `evaluator.before_0_15_0`. Every older
   version must still re-run, each under its own version's writing (`evaluator.LEGACY` for 1 to 3,
-  `evaluator.FORMULA_RESULTS_ONLY` for 4 to 6) and rules (`record.rules_of`: before `delta_K` for 1 to 6):
+  `evaluator.FORMULA_RESULTS_ONLY` for 4 to 6) and rules (`record.rules_of`: before `delta_K` for 1 to 6, before
+  0.15.0's bound and array rules for 1 to 12):
   `tests/data/*.v1.calc.json` were made by 0.1.0, `tests/data/*.v2.calc.json` by 0.2.0,
   `tests/data/display.v3.calc.json` by 0.4.0, `tests/data/temperature-and-formula.v6.calc.json` by 0.6.1, and
   `tests/data/statistics.v7.calc.json` by 0.7.0, `tests/data/divisibility.v8.calc.json` by 0.8.1,
   `tests/data/hand-composed-tests.v9.calc.json` by 0.9.0, `tests/data/food.v10.calc.json` by 0.12.0, and
-  `tests/data/wall-heat-loss.v11.calc.json` by 0.13.0.
+  `tests/data/wall-heat-loss.v11.calc.json` by 0.13.0, and `tests/data/array-rules.v12.calc.json` by 0.14.0.
 - Nothing goes to stdout except MCP messages.
 - The licence is Apache-2.0. No secrets.
 - Record what you build on the design:
@@ -248,7 +259,7 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | `src/flo2_calc/units.py` | the unit vocabulary, dimensions, exact conversion, the near-miss hint | `cmp:units` |
 | `src/flo2_calc/temperature.py` | degC and degF: what a temperature with an offset may do | `cmp:units` |
 | `src/flo2_calc/decibels.py` | dB, and the power levels dBm and dBW: what a level may do | `cmp:units`, `cap:decibels-are-their-own-kind-and-their-ratio-is-stated` |
-| `src/flo2_calc/answer.py` | a reply held to the host's answer budget: the outcome whole, the rest named (0.11.0); an exact array result's readable decimals (0.12.0) | `cmp:mcp-server`, `dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget`, `dec:a-reply-shows-a-readable-decimal-beside-an-exact-array-result` |
+| `src/flo2_calc/answer.py` | a reply held to the host's answer budget: the outcome whole, the rest named (0.11.0); an exact array result's readable decimals (0.12.0); an intermediate array summarized (0.15.0) | `cmp:mcp-server`, `dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget`, `dec:a-reply-shows-a-readable-decimal-beside-an-exact-array-result` |
 | `src/flo2_calc/formula.py` | the computation shown back: its formula and its numbered working, plain text and LaTeX | `cmp:computation-record`, `cap:every-reply-shows-its-formula-and-working` |
 | `src/flo2_calc/skill.py` | the served skill: an MCP prompt and a resource, and its reference files as resources, read from `skills/` | `cap:serve-over-mcp` |
 | `src/flo2_calc/rederive.py` | a kept record re-derived with changed inputs: the checks, the new record and its history, what moved (0.14.0) | `cmp:computation-record`, `req:a-calc-record-keeps-its-formula-and-is-re-derived-when-an-input-changes` |

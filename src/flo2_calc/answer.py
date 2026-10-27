@@ -43,6 +43,15 @@ block exactly as it is sent.
      budget it goes before any exact value is cut, and comes back beside whatever is shown of a result cut to its
      ends.
 
+  6. AN INTERMEDIATE ARRAY IN THE VALUES IS SUMMARIZED (flo2-calc 0.15.0, fact:a-reply-fills-its-budget-with-
+     intermediate-values-in-graph-order-so-one-array-crowds-out-the-rest-2026-10-27). The values fill in graph order,
+     each whole if it fits, so one 1,023-element integer_range took 7,272 characters and the six values after it were
+     withheld. Now an array in `values` of more than SUMMARY_OVER elements that is not a result is shown by its shape,
+     its sha256 (over the canonical text of every exact element: the same digest the record holds) and its first and
+     last SHOWN_ELEMENTS elements, as a result too large on its own already is. `withheld.values_summarized` names
+     each one and says where its every element is (the record; `element` picks one out). Every field the entry had
+     is kept but the element list; the record and every result stay whole.
+
 record_computation's own answer never repeats the record's `values`. server.py leaves them out and names them in
 `withheld`, and this module keeps that entry.
 """
@@ -62,6 +71,8 @@ RESULT_KEYS = ("result", "results", "added")  # the outcome's values: cut only w
 HOW = "how_bounds_were_found"
 WITHHELD = "withheld"
 SHOWN_ELEMENTS = 3  # a result too large on its own: its first and last this many elements
+SUMMARY_OVER = 16  # an intermediate array in a reply's values with more elements than this is summarized (0.15.0)
+SUMMARIZED = "values_summarized"
 LONG_TEXT = 400  # a text inside a result longer than this is cut last, with its length and sha256
 READABLE = "readable"  # an exact array result's decimal rendering, beside its exact values (0.12.0)
 READABLE_DIGITS = 6
@@ -136,6 +147,48 @@ def show_readable(answer: dict[str, Any]) -> dict[str, Any]:
     return answer
 
 
+def _flat(v: Any) -> list[Any]:
+    return [x for row in v for x in _flat(row)] if isinstance(v, list) else [v]
+
+
+def summarize_values(answer: dict[str, Any], where: str) -> dict[str, Any]:
+    """`answer` with each intermediate array in its `values` of more than SUMMARY_OVER elements shown by its shape,
+    its sha256 and its first and last SHOWN_ELEMENTS elements (rule 6), and `withheld.values_summarized` naming them.
+    It changes `answer` in place, so it is given a copy (`fit` gives it say_how_once's)."""
+    values = answer.get("values")
+    if not isinstance(values, list):
+        return answer
+    results = {v.get("node") for v in _results(answer)}
+    nodes: list[str] = []
+    for entry in values:
+        if not isinstance(entry, dict) or entry.get("node") in results:
+            continue
+        arr = entry.get("array")
+        if not isinstance(arr, dict) or not isinstance(arr.get("values"), list):
+            continue
+        elements = _flat(arr["values"])
+        if len(elements) <= SUMMARY_OVER:
+            continue
+        entry["array"] = {
+            **{k: x for k, x in arr.items() if k != "values"},
+            "first": elements[:SHOWN_ELEMENTS],
+            "last": elements[-SHOWN_ELEMENTS:],
+        }
+        nodes.append(entry["node"])
+    if nodes:
+        answer[WITHHELD] = {
+            **(answer.get(WITHHELD) or {}),
+            SUMMARIZED: {
+                "nodes": nodes,
+                "shown": f"each by its shape, its sha256 and its first and last {SHOWN_ELEMENTS} elements (an "
+                f"intermediate array of more than {SUMMARY_OVER} elements; a result is never summarized)",
+                "where": f"{where}; one element: add a node {{\"op\": \"element\", \"args\": [\"<array>\", "
+                "\"<index>\"]} (indices from 0)",
+            },
+        }
+    return answer
+
+
 def say_how_once(answer: dict[str, Any]) -> dict[str, Any]:
     """`answer` with every float64 label's `how` sentences said once, in `how_bounds_were_found`, and each label's
     `how` the list of their places there. Sentences already said once (a list of numbers) are read back first, so
@@ -182,7 +235,7 @@ def fit(answer: dict[str, Any], budget: int, where: str, fill: tuple[str, ...] =
     can be read in full (the record this reply returns, the record passed in, or record_computation's). `fill` is
     the order the rest fills in: FILL, or, for a re-derived record's answer, MOVED_FIRST (its `values` are the nodes
     that moved, which say more about the change than the views of the formula do)."""
-    a = show_readable(say_how_once(answer))  # say_how_once builds every dict and list anew
+    a = summarize_values(show_readable(say_how_once(answer)), where)  # say_how_once builds every dict and list anew
     if WITHHELD not in a and len(text(a)) <= budget:
         return a
     withheld: dict[str, Any] = {"budget_chars": budget, **(a.get(WITHHELD) or {})}

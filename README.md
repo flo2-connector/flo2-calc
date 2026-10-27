@@ -21,9 +21,10 @@ when a question set or a real design needs them, never for parity (`dec:idea-wha
   `3/2`, and `sin(30 deg)` is `1/2`.
 - **Arrays, like numpy.** Vectors and grids with one unit each: element-wise arithmetic, logic and functions, sums
   and other reductions (along an axis of a grid too), statistics over data (variance and standard deviation, sample or
-  population, and a least-squares fit with standard errors) and the FFT. An exact array stays exact; an FFT, a
-  function over an array or a large grid is computed in float64 and labelled `float64`, with a rigorous bound on every
-  element.
+  population, and a least-squares fit with standard errors) and the FFT. An exact array stays exact, through a
+  function too where every element has an exact value (0.15.0: `sqrt` of `[1/4, 9/4]` is `[1/2, 3/2]`); an FFT, any
+  other function over an array or a large grid is computed in float64 and labelled `float64`, with a rigorous bound on
+  every element.
 - **The math of a decision from data** (0.8.0, from the cure design's requirements). A starting estimate from a
   published population updated with a person's own observations (normal-normal and beta-binomial, with the prior's
   source kept and a beta credible interval); the exact p-value of an on/off trial's randomization test, over every
@@ -273,6 +274,12 @@ sent.
   comes whole if it fits, else as many entries from its start as fit. `withheld` gives `budget_chars` and, for each
   part cut, how many entries are `shown`, how many `left_out`, the `first_left_out` and `last_left_out` nodes, and
   `where` the whole is: the record `record_computation` returns, or the record `rerun_record` was given.
+- **An intermediate array is summarized** (0.15.0). In `values`, an array of more than 16 elements that is not a
+  result is shown by its `shape`, `sha256` (the same digest the record holds, over every element) and its `first` and
+  `last` three elements, and `withheld.values_summarized` names each one and where its every element is: the record
+  (`record_computation`), or one at a time with an `element` node. A 1,023-element `integer_range` took 7,272
+  characters of a 0.14.0 reply and the six values after it were withheld; now every value is shown. Every field the
+  entry had is kept but its element list. A result is never summarized.
 - **`record_computation` never repeats the values its record holds.** `withheld.values` says they are in the record.
 - **A result too large on its own** (only when the outcome alone is over the budget) is shown by its `shape`,
   `sha256`, `unit` and its `first` and `last` three elements, with its whole in the record, and `withheld.results`
@@ -884,7 +891,15 @@ arrays, by the rules for one value; a float64 argument is refused.
   reductions, and through the statistics that are rational: a mean, a variance, and a regression's slope and intercept.
   A standard deviation or a standard error is the square root of an exact number, so it is correctly rounded, the
   rounded class, as a single value's root is.
-- **float64.** An FFT, a function of the rounded class over an array, an array of more elements than the host's
+- **Exact through a function, where every element is** (0.15.0). A function of the rounded class over an exact array
+  (`sqrt`, `exp`, `ln`, `log10`, the trigonometry and its inverses, `atan2`, a non-whole `pow`, deg-rad, the decibel
+  conversions, `normal_cdf`, `normal_sf`, `normal_quantile`, `chi2_sf`) first tries each element's exact value, the
+  same cases a single value's is found exact by: roots of perfect powers, `exp(0)`, `ln(1)`, a power of ten's
+  `log10`, the trigonometry at Niven's angles in degrees, a whole dB step. When every element has one, the array stays
+  exact: `sqrt([1/4, 9/4])` is `[1/2, 3/2]` and `cos([0, 90] deg)` is `[1, 0]`, as each single value is. One element
+  without one, or an array past `max_exact_elements`, and the whole array is float64 as before. The attempt costs
+  about 0.1 s at flo2.io's 4,096 elements in the worst case (every element exact but the last).
+- **float64.** An FFT, a function of the rounded class over an array (but as above), an array of more elements than the host's
   `max_exact_elements` (65,536 on a laptop, 4,096 on flo2.io: Limits, above), and anything that mixes such a value in (a rounded value such as `pi` mixed into an array too) are computed in
   IEEE 754 double precision. Mixing exact and float64 gives float64. Every such value is labelled:
 
@@ -902,6 +917,15 @@ arrays, by the rules for one value; a float64 argument is refused.
   float64 value is answered only where the bounds decide it, and refused (`kind: "undecidable"`) otherwise, as for a
   rounded value.
 
+  **A clamp keeps its side** (0.15.0). `max`, `min` and `abs` (and the greatest and least of an array) give a
+  one-sided guarantee a symmetric bound cannot hold. Each element is the interval its arguments' bounds give
+  (`[max(lo), max(hi)]` for `max`), and where the one picked does not hold both ends it is written as a ball from the
+  end the operation guarantees: `max(x, 0)` is never below 0 and `min(x, 0)` never above it, bound included. An element
+  whose bound starts at or above 0 is read so by a function after it. Until 0.15.0, `max(x, 0)` at an element where x
+  was 0 within 3.4e-16 was written `0.0` within 3.4e-16, and `sqrt` refused it as undecidable; it now answers (that
+  element about 9e-9 within 9e-9, its true value 0 inside). The same holds for a single rounded value: `sqrt(max(sin(pi
+  rad), 0))` answers.
+
 How each float64 bound is found:
 
 | Where | How |
@@ -909,6 +933,7 @@ How each float64 bound is found:
 | an exact number taken into float64 | its exact rounding error to the nearest double (0 for a number a double holds exactly) |
 | `+ - * /`, conversions | each operation's IEEE rounding (at most half a unit in the last place, u = 2^-53) and the arguments' bounds, carried through; every bound computed in float64 is inflated by (1 + 2^-40) so its own rounding never makes it too small |
 | a function over an array | each element from Arb's rigorous enclosure over its argument's error ball (python-flint), rounded to the nearest double |
+| `max`, `min`, `abs` (0.15.0) | the interval the arguments' balls give, ends rounded outward; written from the guaranteed end (the lower for `max` and `abs`, the upper for `min`) with a radius of half its width rounded up, or centred where that end plus the radius is not a double |
 | `sum`, `mean` | `math.fsum`, which rounds the exact sum once, plus the elements' bounds |
 | statistics and fits over float64 data | Arb ball arithmetic over every element's error ball, rounded once |
 | complex products | the textbook product one IEEE operation at a time, within sqrt(5) u (Brent, Percival and Zimmermann, Math. Comp. 76, 2007) |
@@ -987,8 +1012,13 @@ flo2's helper contract fixes the split.
 ## The computation record
 
 One JSON object, defined by
-[`src/flo2_calc/schemas/calc-record-12.schema.json`](src/flo2_calc/schemas/calc-record-12.schema.json) (JSON Schema
-draft 2020-12). Version 12 (0.14.0) lets a re-derived record keep its `history` (below). Version 11 (0.13.0) lets an
+[`src/flo2_calc/schemas/calc-record-13.schema.json`](src/flo2_calc/schemas/calc-record-13.schema.json) (JSON Schema
+draft 2020-12). Version 13 (0.15.0) has version 12's shape and is made under 0.15.0's two rules: `max`, `min` and `abs`
+keep a one-sided bound, and a function over an exact array is exact where every element has an exact value (Arrays,
+above). Either can change the values a graph gives, so a record of version 12 or older re-runs under the rules it was
+made with (`tests/data/array-rules.v12.calc.json`, made by 0.14.0 with every path they change, reproduces byte for
+byte), and `rederive_record` compares such a record's old and new values both computed under today's rules, saying so
+in `compared`. Version 12 (0.14.0) lets a re-derived record keep its `history` (below). Version 11 (0.13.0) lets an
 input's source name the design quantity it is bound to; a version 11 record re-runs as it was made
 (`tests/data/wall-heat-loss.v11.calc.json`, made by 0.13.0). Version 10 (0.10.0) allows the named hypothesis tests and their power and sample size, with
 `alternative` and `variance` on their nodes; a test's value entry carries `hypothesis_test` and a plan's `test_plan`
@@ -1026,7 +1056,7 @@ version.
 
 | Field | Holds |
 |---|---|
-| `record_format`, `schema_version` | `"flo2-calc computation record"`, `12` |
+| `record_format`, `schema_version` | `"flo2-calc computation record"`, `13` |
 | `max_exact_elements` | a record that holds an array: the most elements an exact array had where it was made; re-running uses it |
 | `status` | `"computed"`, or `"not_computed"` (below) |
 | `name` | the record's name; its file is `<name>.calc.json` |
@@ -1179,7 +1209,7 @@ recorded and re-run 6.58 s), and one more runaway call, Fisher's sample size for
 working on the arrays above, costs about 14 MiB more than 0.5.0. A cap of **128m** is still above the peak, with 22 MiB to spare,
 and the array budget (16 MiB in the image) keeps a call's arrays inside it. CI runs the image under 128m, and asks it
 every limit's questions there (`tests/test_limits.py`, `tests/test_pending_record.py`) and the arrays' questions
-(`tests/test_arrays_server.py`). 0.11.0 (the answer budget, which holds every reply's text to 24,000 characters in the image) ran the same 55-call session on 2026-10-24 under 128m: it peaked at 108.1 MiB, every runaway call stopped with its limit and the container alive after. 0.14.0 (`rederive_record`, no new dependency) ran it on 2026-10-27 with three more calls (58 in 120 s before the runaway calls): the 500-node record re-derived with its first input changed, so every node moves. It peaked at 100.6 MiB under 128m, every runaway call stopped with its limit and the container alive after.
+(`tests/test_arrays_server.py`). 0.11.0 (the answer budget, which holds every reply's text to 24,000 characters in the image) ran the same 55-call session on 2026-10-24 under 128m: it peaked at 108.1 MiB, every runaway call stopped with its limit and the container alive after. 0.14.0 (`rederive_record`, no new dependency) ran it on 2026-10-27 with three more calls (58 in 120 s before the runaway calls): the 500-node record re-derived with its first input changed, so every node moves. It peaked at 100.6 MiB under 128m, every runaway call stopped with its limit and the container alive after. 0.15.0 (a clamp keeps its side, a function over an exact array is exact where every element is, an intermediate array summarized; no new dependency) ran it on 2026-10-27 with three more calls (61 in 188 s): a function over 4,096-element exact arrays tried for its exact cases, `sqrt` where every element is a perfect square (exact), where every element but the last is (the worst case: the whole attempt, then the float64 pass) and `cos` at multiples of 90 deg (exact), then clamped at 0 and rooted: 1.71 s, recorded and re-run 4.30 s. In the package the attempt costs at most about 0.09 s at 4,096 elements (the worst case, 0.32 s against 0.23 s for `cos` and 0.39 s against 0.32 s for `sqrt`), and an array whose first element has no exact value costs nothing measurable. It peaked at 108.6 MiB under 128m, every runaway call stopped with its limit and the container alive after.
 
 ## Working on it
 
@@ -1337,6 +1367,13 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    as an Artifact it passes the record's bound inputs again, as for 0.13.0, so the design's re-run owed is cleared by
    the new values. The image's profile is unchanged, and so is its memory: no new dependency. flo2 copies SKILL.md
    (step 12), `references/records.md` and `references/units.md` unchanged, and its catalog of calc's tools gains the one.
+
+   0.15.0 (three findings of 2026-10-27) changes no tool, class, argument or limit, so **the door's allow-list and the
+   image's profile are unchanged**. What a chat sees changes: `max`, `min` and `abs` keep a one-sided bound (a root of
+   `max(x, 0)` answers); a function over an exact array is exact where every element has an exact value (it was
+   float64); and an intermediate array of more than 16 elements in a reply's `values` is summarized, named in
+   `withheld.values_summarized`. The record schema becomes version 13 (version 12's shape, made under these rules);
+   older records re-run as they were made. flo2 copies `references/arrays.md` unchanged; SKILL.md is unchanged.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.

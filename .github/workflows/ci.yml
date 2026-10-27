@@ -41,7 +41,7 @@ jobs:
       # the tools over a real client session, every host-set limit and the
       # not-yet-computed record, and arrays (a 256 x 256 grid's integral and 2-D
       # FFT among them), a named hypothesis test (0.10.0) and the trial graphs held to the image's answer budget
-      # (0.11.0) and a kept record re-derived (0.14.0), asked of the image under flo2-tool-sandbox's
+      # (0.11.0), a kept record re-derived (0.14.0) and an intermediate array summarized (0.15.0), asked of the image under flo2-tool-sandbox's
       # flags and the image's own limits (flo2.io's profile). 128m is the cap
       # README.md's measurement supports; flo2's broker sets its own from that
       # measurement. Runaway calculations must be stopped with their reason and
@@ -54,4 +54,4 @@ jobs:
             --cap-drop ALL --security-opt no-new-privileges --user 65534:65534
             --mount type=bind,source=${{ github.workspace }}/tests,target=/design,readonly
             flo2-calc:ci
-        run: python -m pytest -v tests/test_conformance.py tests/test_server.py tests/test_limits.py tests/test_pending_record.py tests/test_arrays_server.py tests/test_hypothesis.py::test_a_named_test_over_mcp tests/test_answer_budget.py tests/test_readable_decimal.py tests/test_rederive.py::test_rederive_record_is_a_writing_tool_that_returns_the_new_record_as_a_file tests/test_rederive.py::test_a_re_derived_reply_fits_flo2_ios_answer_budget
+        run: python -m pytest -v tests/test_conformance.py tests/test_server.py tests/test_limits.py tests/test_pending_record.py tests/test_arrays_server.py tests/test_hypothesis.py::test_a_named_test_over_mcp tests/test_answer_budget.py tests/test_readable_decimal.py tests/test_rederive.py::test_rederive_record_is_a_writing_tool_that_returns_the_new_record_as_a_file tests/test_rederive.py::test_a_re_derived_reply_fits_flo2_ios_answer_budget tests/test_bounds_and_exact_arrays.py::test_evaluate_graph_summarizes_an_intermediate_array_over_mcp

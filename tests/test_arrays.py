@@ -332,8 +332,9 @@ def test_a_function_over_an_array_is_float64_labelled_and_its_bound_holds(name, 
 
 
 def test_more_functions_over_arrays_atan2_pow_chi2_t_and_deg_to_rad():
-    out = value(inp("y", arr(["1", "-1", "0", "2"], "mm")), inp("x", arr(["1", "1", "-3", "0"], "mm")), op("a", "atan2", "y", "x", unit="deg"))
-    holds(out, [mp.mpf(45), mp.mpf(-45), mp.mpf(180), mp.mpf(90)])
+    # One angle with no exact value (atan2(1, 2)) keeps the array float64 (0.15.0: one where every angle has one is exact).
+    out = value(inp("y", arr(["1", "-1", "0", "2", "1"], "mm")), inp("x", arr(["1", "1", "-3", "0", "2"], "mm")), op("a", "atan2", "y", "x", unit="deg"))
+    holds(out, [mp.mpf(45), mp.mpf(-45), mp.mpf(180), mp.mpf(90), mp.degrees(mp.atan2(1, 2))])
     out = value(inp("x", arr(["2", "9", "0.5"])), inp("k", "0.5"), op("p", "pow", "x", "k"))
     holds(out, [mp.sqrt(2), mp.mpf(3), mp.sqrt(mp.mpf(1) / 2)])
     out = value(inp("x", arr(["4", "9"], "m^2")), inp("k", "1/2"), op("p", "pow", "x", "k"))
@@ -706,7 +707,7 @@ def make(g=REGRESSION, root=None, name="arrays"):
 
 def test_a_record_with_arrays_fits_its_schema_and_re_runs():
     rec = make()
-    assert rec["schema_version"] == 12 and rec["produced_by"]["numpy"] == np.__version__
+    assert rec["schema_version"] == 13 and rec["produced_by"]["numpy"] == np.__version__
     jsonschema.validate(rec, R.schema(R.SCHEMA_VERSION))
     assert "ARRAY" in rec["arithmetic"]
     t_input = next(i for i in rec["inputs"] if i["id"] == "t")

@@ -299,9 +299,12 @@ def rederive(record: dict[str, Any], changes: Any, guard: L.Guard | None = None,
 
     if exact is not None and exact != guard.limits.max_exact_elements:
         guard.limits = replace(guard.limits, max_exact_elements=exact)  # the record's arithmetic, as rerun uses
-    if check["reproduces"] is True:
+    older_rules = version < R.RULES_0_15_0_FROM  # made before 0.15.0's bound and array rules, which the new record is made under
+    if check["reproduces"] is True and not older_rules:
         before = record["values"]
-    else:  # an FFT's last bits differ on this processor: compare like with like, both computed here
+    else:
+        # An FFT's last bits differ on this processor, or the record was made under older rules: compare like with
+        # like, the old graph and the new one both computed here, under today's rules.
         old_ev = evaluate(old_graph, guard)
         before = R.build(old_ev, record["name"], record.get("supports"))["values"]
         guard.reply_bytes = 0
@@ -354,7 +357,14 @@ def rederive(record: dict[str, Any], changes: Any, guard: L.Guard | None = None,
         **shown_json(shown_back(ev, new["values"]), WORKING_REST_RECORD),
         "values": others,
     }
-    if check["reproduces"] == "within_bound":
+    if older_rules and before != record["values"]:
+        answer["compared"] = (
+            f"the record was made under the rules of schema version {version}, and flo2-calc 0.15.0 computes some of "
+            "its values differently (min, max and abs keep a one-sided bound; a function over an exact array is exact "
+            "where every element has an exact value), so old -> new compares the old graph and the new one both "
+            "computed here, under today's rules"
+        )
+    elif check["reproduces"] == "within_bound":
         answer["compared"] = (
             "the record's FFT values re-run here within their stated bounds, not byte for byte, so old -> new compares "
             "the old graph and the new one both computed here"

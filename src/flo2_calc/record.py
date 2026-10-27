@@ -1,11 +1,11 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-12.schema.json; version 1 to
-11 records, schemas/calc-record-1.schema.json to calc-record-11.schema.json,
+A record is one JSON object (schemas/calc-record-13.schema.json; version 1 to
+12 records, schemas/calc-record-1.schema.json to calc-record-12.schema.json,
 still re-run):
 
     record_format   "flo2-calc computation record"
-    schema_version  12
+    schema_version  13
     status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
@@ -104,6 +104,16 @@ each result that moved (old -> new) and each that did not. A record re-derived
 again keeps the entries before. The history is sealed by the content hash;
 re-running checks the values, as ever. A version 11 record re-runs as made.
 
+VERSION 13 (flo2-calc 0.15.0) has version 12's shape, and is made under two
+rules version 12's records were not (evaluator.rules_0_15_0): min, max and
+abs keep a one-sided bound, so max(x, 0) is never below 0 and a root of it is
+decided; and a function of the rounded class over an EXACT array is exact where
+every element has an exact value, as a single value is (sqrt(1/4) = 1/2, cos 90
+deg = 0). Either can change the values a graph gives, so a record of version 12
+or older re-runs under the rules it was made with (evaluator.before_0_15_0;
+tests/data/array-rules.v12.calc.json, made by 0.14.0, re-runs byte for byte),
+and rederive_record compares old and new values both computed under today's.
+
 DETERMINISTIC. There is no timestamp and no machine name, and the file is
 written with sorted keys, so the same graph (and name, and supports) gives a
 byte-identical file wherever it is made. When it was made is the business of
@@ -149,7 +159,7 @@ import json
 import os
 import re
 import tempfile
-from contextlib import nullcontext
+from contextlib import ExitStack
 from dataclasses import replace
 from functools import cache
 from importlib import resources
@@ -158,6 +168,7 @@ from typing import Any
 
 from flo2_calc import __version__
 from flo2_calc import arrays as A
+from flo2_calc import evaluator as E
 from flo2_calc import limits as L
 from flo2_calc import realmath as RM
 from flo2_calc import units as U
@@ -183,7 +194,7 @@ from flo2_calc.evaluator import (
 from flo2_calc.numbers import ARITHMETIC_NOTE, ARRAYS_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 SCHEMA_FILES = {
     1: "calc-record-1.schema.json",
     2: "calc-record-2.schema.json",
@@ -197,9 +208,11 @@ SCHEMA_FILES = {
     10: "calc-record-10.schema.json",
     11: "calc-record-11.schema.json",
     12: "calc-record-12.schema.json",
+    13: "calc-record-13.schema.json",
 }
 DELTA_K_FROM = 7  # the first schema version whose rules write a K known to be a change as delta_K
 HISTORY_FROM = 12  # the first schema version whose record may keep the changes it was re-derived through
+RULES_0_15_0_FROM = 13  # the first schema version made under 0.15.0's bound and array rules (evaluator.rules_0_15_0)
 COMPUTED = "computed"
 NOT_COMPUTED = "not_computed"
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -290,10 +303,14 @@ def style_of(version: int) -> Style:
 
 def rules_of(version: Any) -> Any:
     """The rules a record of this schema version is evaluated under: a record of
-    version 6 or older was made before delta_K (units.before_delta_k)."""
+    version 6 or older was made before delta_K (units.before_delta_k), and one of
+    version 12 or older before 0.15.0's bound and array rules (evaluator.before_0_15_0)."""
+    stack = ExitStack()
     if isinstance(version, int) and version < DELTA_K_FROM:
-        return U.before_delta_k()
-    return nullcontext()
+        stack.enter_context(U.before_delta_k())
+    if isinstance(version, int) and version < RULES_0_15_0_FROM:
+        stack.enter_context(E.before_0_15_0())
+    return stack
 
 
 def check_sources(graph: Graph) -> None:

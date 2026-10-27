@@ -41,11 +41,19 @@ node per number. The rules (`length` for n, statistics named) are in `SKILL.md`.
 - Large data, run locally, can come from a file inside the folder flo2-calc was started in:
   `{"file": "data/readings.csv", "unit": "mm"}`. The record keeps the file's sha256, so keep the file with it. On
   flo2.io, give the array inline.
-- An exact array stays exact. An FFT, a function over an array (`exp`, `sqrt`, `sin` ...), an array of more than
-  the host's exact limit (65,536 elements on a laptop, 4,096 on flo2.io), or anything mixed with one, comes back
-  labelled `"float64"`, with `error_at_most` (a rigorous bound on every element) and `how` (what that bound rests
-  on). Arrays of more than 1,024 elements come back as their first values, least, greatest and sha256: reduce them,
-  or pick an element with `element`, rather than ask for every value.
+- An exact array stays exact, through a function too (`sqrt`, `cos` ...) when every element has an exact value, as a
+  single value does: `sqrt` of `[1/4, 9/4]` is `[1/2, 3/2]`, `cos` of `[0, 90] deg` is `[1, 0]`. An FFT, a function
+  over an array with an element that has none, an array of more than the host's exact limit (65,536 elements on a
+  laptop, 4,096 on flo2.io), or anything mixed with one, comes back labelled `"float64"`, with `error_at_most` (a
+  rigorous bound on every element) and `how` (what that bound rests on). Arrays of more than 1,024 elements come back
+  as their first values, least, greatest and sha256: reduce them, or pick an element with `element`, rather than ask
+  for every value.
+- A clamp keeps its side, bound included: `max(x, 0)` is never below 0 and `min(x, 0)` never above it, and `abs` is
+  never below 0, so a `sqrt` after a clamp answers. Clamp with `max`; never rewrite a clamp as `sqrt(abs(x))` times a
+  comparison, which drops the edge.
+- In a reply's `values`, an array of more than 16 elements that is not a result is summarized: its shape, sha256 and
+  first and last three elements. `withheld.values_summarized` names each; the record holds every element, and an
+  `element` node picks one out. A result is shown whole.
 - An exact array result whose elements include fractions also comes back with `readable`: those elements as
   decimals of 6 significant digits, labelled as a rendering. Quote the rendering to the person; the exact values
   (the record holds only them) are the result.

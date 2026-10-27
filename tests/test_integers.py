@@ -445,7 +445,8 @@ def test_over_an_array_a_non_integer_element_is_named():
 
 
 def test_over_a_float64_array_they_are_refused():
-    r = run(inp("x", {"array": ["4", "9"]}), op("s", "sqrt", "x"), op("p", "is_prime", "s"))["refused"]
+    # sqrt(8) has no exact value, so s is float64 (0.15.0: sqrt of [4, 9] is the exact [2, 3]).
+    r = run(inp("x", {"array": ["4", "8"]}), op("s", "sqrt", "x"), op("p", "is_prime", "s"))["refused"]
     assert r["kind"] == "type_mismatch" and "exact values" in r["reason"]
 
 
@@ -480,7 +481,7 @@ def test_the_formula_writes_mod_divides_gcd_and_the_range_as_mathematics():
 def test_a_record_of_the_trial_validates_under_the_current_schema_and_re_runs_byte_for_byte():
     g = read_graph(euler_graph(0, 39))
     rec = R.build(evaluate(g), "euler-41", "the primes trial")
-    assert rec["schema_version"] == 12
+    assert rec["schema_version"] == 13
     jsonschema.Draft202012Validator(R.schema()).validate(rec)
     again = R.rerun(R.load(json.loads(R.file_bytes(rec))))
     assert again["reproduces"] is True, again["differences"]
