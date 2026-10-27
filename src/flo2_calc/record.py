@@ -1,11 +1,11 @@
 """The computation record: what a decision cites, and what anyone can re-run.
 
-A record is one JSON object (schemas/calc-record-11.schema.json; version 1 to
-10 records, schemas/calc-record-1.schema.json to calc-record-10.schema.json,
+A record is one JSON object (schemas/calc-record-12.schema.json; version 1 to
+11 records, schemas/calc-record-1.schema.json to calc-record-11.schema.json,
 still re-run):
 
     record_format   "flo2-calc computation record"
-    schema_version  11
+    schema_version  12
     status          "computed", or "not_computed" (below)
     name            the record's name; its file is <name>.calc.json
     supports        optional: what it supports, free text or {"design_node", "design"?}
@@ -30,6 +30,8 @@ still re-run):
     max_exact_elements  a record holding an array: the most elements an exact
                     array had where it was made (the host's setting); re-running
                     uses it, so the record re-runs to the same values anywhere
+    history         optional, a re-derived record (version 12): each change it
+                    was re-derived through, oldest first (below)
     produced_by     {"flo2_calc", "pint", "python_flint", "numpy": versions}
     content_hash    "sha256:<hex>" over the canonical JSON of all of the above
 
@@ -91,6 +93,16 @@ owed a re-run when the quantity changes. A value copied with no design quantity
 stays legal and is UNBOUND; the reply says which inputs are which
 (`inputs_bound`). Like a design node, the id is recorded and never resolved.
 A version 10 record re-runs as it was made.
+
+VERSION 12 (flo2-calc 0.14.0, req:a-calc-record-keeps-its-formula-and-is-re-
+derived-when-an-input-changes) lets a computed record keep its HISTORY: when
+rederive_record re-derives a kept record with new values for some of its
+inputs (rederive.py), the new record holds, oldest first, one entry per
+re-derivation: the record it came from (its content hash, schema version and
+flo2-calc version), each input changed (old and new value, unit and source),
+each result that moved (old -> new) and each that did not. A record re-derived
+again keeps the entries before. The history is sealed by the content hash;
+re-running checks the values, as ever. A version 11 record re-runs as made.
 
 DETERMINISTIC. There is no timestamp and no machine name, and the file is
 written with sorted keys, so the same graph (and name, and supports) gives a
@@ -171,7 +183,7 @@ from flo2_calc.evaluator import (
 from flo2_calc.numbers import ARITHMETIC_NOTE, ARRAYS_NOTE
 
 RECORD_FORMAT = "flo2-calc computation record"
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 SCHEMA_FILES = {
     1: "calc-record-1.schema.json",
     2: "calc-record-2.schema.json",
@@ -184,8 +196,10 @@ SCHEMA_FILES = {
     9: "calc-record-9.schema.json",
     10: "calc-record-10.schema.json",
     11: "calc-record-11.schema.json",
+    12: "calc-record-12.schema.json",
 }
 DELTA_K_FROM = 7  # the first schema version whose rules write a K known to be a change as delta_K
+HISTORY_FROM = 12  # the first schema version whose record may keep the changes it was re-derived through
 COMPUTED = "computed"
 NOT_COMPUTED = "not_computed"
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
@@ -386,6 +400,16 @@ def build(evaluation: Evaluation, name: str, supports: str | dict[str, str] | No
     record["produced_by"] = produced_by()
     record["content_hash"] = content_hash(record)
     return record
+
+
+def with_history(record: dict[str, Any], history: list[dict[str, Any]]) -> dict[str, Any]:
+    """A computed record of this version with its `history` (version 12, rederive.py): the changes it was
+    re-derived through, oldest first, sealed by its content hash like every other field."""
+    assert record["schema_version"] >= HISTORY_FROM and status_of(record) == COMPUTED
+    out = {k: v for k, v in record.items() if k != "content_hash"}
+    out["history"] = history
+    out["content_hash"] = content_hash(out)
+    return out
 
 
 def produced_by() -> dict[str, str]:

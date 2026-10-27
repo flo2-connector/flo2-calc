@@ -94,7 +94,7 @@ def test_the_skill_is_a_well_formed_agent_skill():
     assert fields["name"] == SKILL.parent.name, "an Agent Skill's name is its folder's name"
     assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", fields["name"]) and len(fields["name"]) <= 64
     assert 1 <= len(fields["description"]) <= 1024
-    for tool in ("evaluate_graph", "add_node", "record_computation", "rerun_record"):
+    for tool in ("evaluate_graph", "add_node", "record_computation", "rerun_record", "rederive_record"):
         assert tool in text, f"the skill teaches {tool}"
     body = text[m.end():]
     assert body.index("Standalone") < body.index("On flo2.io"), "standalone use first, hosted use second"

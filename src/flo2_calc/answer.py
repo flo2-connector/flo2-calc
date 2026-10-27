@@ -57,6 +57,7 @@ from typing import Any
 from flo2_calc import numbers as N
 
 FILL = ("formula", "working", "values")  # what fills what the outcome leaves, in this order
+MOVED_FIRST = ("values", "formula", "working")  # rederive_record's (0.14.0): the nodes that moved, then the views
 RESULT_KEYS = ("result", "results", "added")  # the outcome's values: cut only when the outcome alone is over
 HOW = "how_bounds_were_found"
 WITHHELD = "withheld"
@@ -176,14 +177,16 @@ def _how_read_back(answer: dict[str, Any], said: list[str]) -> dict[str, Any]:
     return walk(answer)
 
 
-def fit(answer: dict[str, Any], budget: int, where: str) -> dict[str, Any]:
+def fit(answer: dict[str, Any], budget: int, where: str, fill: tuple[str, ...] = FILL) -> dict[str, Any]:
     """`answer` held to `budget` characters of text, by the rule above. `where` says where whatever is left out
-    can be read in full (the record this reply returns, the record passed in, or record_computation's)."""
+    can be read in full (the record this reply returns, the record passed in, or record_computation's). `fill` is
+    the order the rest fills in: FILL, or, for a re-derived record's answer, MOVED_FIRST (its `values` are the nodes
+    that moved, which say more about the change than the views of the formula do)."""
     a = show_readable(say_how_once(answer))  # say_how_once builds every dict and list anew
     if WITHHELD not in a and len(text(a)) <= budget:
         return a
     withheld: dict[str, Any] = {"budget_chars": budget, **(a.get(WITHHELD) or {})}
-    parts = {k: a[k] for k in FILL if isinstance(a.get(k), list)}
+    parts = {k: a[k] for k in fill if isinstance(a.get(k), list)}
     order = [k for k in a if k not in (WITHHELD, HOW)]
     outcome = {k: a[k] for k in order if k not in parts}
 
@@ -204,7 +207,7 @@ def fit(answer: dict[str, Any], budget: int, where: str) -> dict[str, Any]:
         _cut_results(outcome, withheld, where, lambda: len(text(assemble({}))) <= budget)
 
     shown: dict[str, list[Any]] = {}
-    for k in FILL:
+    for k in fill:
         if k not in parts:
             continue
         items = parts[k]
@@ -229,7 +232,7 @@ def fit(answer: dict[str, Any], budget: int, where: str) -> dict[str, Any]:
     # A later part's entry can name a longer first node than the one counted while an earlier part filled: give
     # back an entry at a time from the last part shown in part, until the whole fits.
     while len(text(out)) > budget:
-        trimmed = [k for k in FILL if k in shown and isinstance(withheld.get(k), dict)]
+        trimmed = [k for k in fill if k in shown and isinstance(withheld.get(k), dict)]
         if not trimmed:
             break
         k = trimmed[-1]

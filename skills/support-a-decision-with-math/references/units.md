@@ -25,5 +25,8 @@ unit, spelled as the design spells units. These kinds are spelled as follows. Th
   megajoule.
 - **A near-miss unit** may come back with what to write instead (`khz` gives `Write "kHz"`). When flo2-calc gives no
   hint, write the unit you mean yourself.
+- **An unknown unit that pint reads** (`"mile"`) is named for what it is, with the units of that kind flo2-calc
+  knows. Nothing is substituted: give the value in one of those units, from a source that states it, never a
+  conversion factor you recall.
 - **Shown simpler:** a computed value may come back in a simpler unit than it was computed in (`mAh/mA` shown as
   `h`); `simplified_from` says so. The value is the same. A whole number is written in full.

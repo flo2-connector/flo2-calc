@@ -313,7 +313,7 @@ def test_the_skewed_distributions_are_in_a_record_that_re_runs_and_shown_back():
     ev = evaluate(read_graph(graph(*nodes, result=["above", "upper", "g", "bc", "bq"])))
     assert ev.ok, ev.refusal
     rec = R.build(ev, "skewed", None)
-    assert rec["schema_version"] == 11
+    assert rec["schema_version"] == 12
     import jsonschema
 
     jsonschema.Draft202012Validator(R.schema()).validate(rec)

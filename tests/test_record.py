@@ -58,7 +58,7 @@ def validator():
 def test_a_record_holds_what_a_decision_needs():
     rec = make(supports={"design_node": "dec:fiber-route"})
     assert rec["record_format"] == "flo2-calc computation record"
-    assert rec["schema_version"] == 11
+    assert rec["schema_version"] == 12
     assert rec["status"] == "computed"
     assert "stopped" not in rec and "limits_in_force" not in rec, "a computed record carries no host limits"
     assert rec["graph"] == FIBER
@@ -309,7 +309,7 @@ def test_a_version_6_record_re_runs_under_the_rules_and_writing_it_was_made_with
 def test_the_same_graph_recorded_now_writes_delta_k_and_every_line_s_value():
     old = json.loads((DATA / "temperature-and-formula.v6.calc.json").read_text())
     now = make(old["graph"], old["name"], old["supports"])
-    assert now["schema_version"] == 11
+    assert now["schema_version"] == 12
     validator().validate(now)
     values = {v["node"]: v for v in now["values"]}
     assert values["rise_k"]["value"] == "10 delta_K" and values["diff"]["value"] == "1.85 delta_K"
@@ -339,9 +339,10 @@ def test_round_3_operators_are_in_a_version_7_record_and_re_run():
     assert R.rerun(rec)["reproduces"] is True
 
 
-def test_every_published_schema_is_kept_and_version_11_is_current():
-    assert R.SCHEMA_VERSION == 11 and sorted(R.SCHEMA_FILES) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-    assert R.schema(11)["properties"]["schema_version"] == {"const": 11}
+def test_every_published_schema_is_kept_and_version_12_is_current():
+    assert R.SCHEMA_VERSION == 12 and sorted(R.SCHEMA_FILES) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert R.schema(12)["properties"]["schema_version"] == {"const": 12}
+    assert R.schema(11)["properties"]["schema_version"] == {"const": 11}, "a released schema is never edited"
     assert R.schema(10)["properties"]["schema_version"] == {"const": 10}, "a released schema is never edited"
     assert R.schema(9)["properties"]["schema_version"] == {"const": 9}, "a released schema is never edited"
     assert R.schema(8)["properties"]["schema_version"] == {"const": 8}, "a released schema is never edited"

@@ -176,7 +176,7 @@ def test_how_a_bound_was_found_is_said_once_and_reads_back_whole():
 def test_the_record_format_is_unchanged():
     (made,) = calls([("record_computation", {"graph": fixture("row-edge"), "name": "fixture-row-edge", "supports": "a test"})])
     record = json.loads(made.content[1].resource.text)
-    assert record["schema_version"] == 11
+    assert record["schema_version"] == 12
     jsonschema.Draft202012Validator(R.schema()).validate(record)
     assert all("float64" not in v or all(isinstance(h, str) for h in v["float64"]["how"]) for v in record["values"]), (
         "the record says every sentence in full, as schema 10 does"

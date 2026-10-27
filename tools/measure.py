@@ -6,7 +6,8 @@
 Starts ONE container of the image under flo2-tool-sandbox's flags (no network,
 a read-only root, a 64 MB /tmp, user 65534, no capabilities, one CPU, 64
 processes, the memory cap with no swap), drives a session over stdio that is
-heavier than a decision needs (a 500-node graph, records, re-runs, refusals,
+heavier than a decision needs (a 500-node graph, records, re-runs, a re-derivation
+(0.14.0), refusals,
 a 484-node graph of rounded operators at 1,000 digits each, recorded and
 re-run, and arrays: a 256 x 256 grid's discretised integral and 2-D FFT, a
 250 x 250 FFT checked against Arb's rigorous DFT, exact and float64
@@ -252,6 +253,11 @@ async def drive(command: list[str], name: str) -> dict:
             if record:
                 await s.call_tool("rerun_record", {"record": record})
                 calls += 1
+                # 0.14.0: the same 500-node record re-derived with its first input changed, so every node moves
+                re = await s.call_tool("rederive_record", {"record": record, "changes": [
+                    {"input": "x0", "value": "1.6 mm", "source": "measure.py"}]})
+                calls += 1
+                assert json.loads(re.content[0].text)["status"] == "ok", re.content[0].text[:400]
             await s.call_tool("evaluate_graph", {"graph": {"nodes": [{"id": "a", "value": "2 mm"}, {"id": "b", "value": "3 g"}, {"id": "s", "op": "add", "args": ["a", "b"]}]}})
             calls += 1
         for _ in range(3):
