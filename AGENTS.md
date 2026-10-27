@@ -138,7 +138,18 @@
   - A recorded calculation stopped there comes back as a NOT-YET-COMPUTED record (`status: "not_computed"`, no
     result). `record_computation` takes it in place of a graph and completes it to the direct computation's record,
     byte for byte. `rerun_record` says it has no result yet.
-  - None of this changes the four tool names or their read/write classes. flo2's door holds exactly those.
+  - None of this changes the tool names or their read/write classes. flo2's door holds exactly those.
+- **A kept record is re-derived when an input changes** (0.14.0,
+  `req:a-calc-record-keeps-its-formula-and-is-re-derived-when-an-input-changes`; `rederive.py`; the fifth tool,
+  `rederive_record`, classed write).
+  - A record's graph is its formula: re-deriving evaluates the same graph with new input values (each with its
+    source), under the same arithmetic, and says what moved, old -> new, for every result and every other node.
+  - A new value measures what the input it replaces measured (dimension; a temperature or a level is never a change),
+    or it is refused naming what arrived. Only a computed, sealed record of version 7 or later that re-runs here is
+    re-derived, so whatever moves, the change moved.
+  - The new record keeps its `history` (schema 12), sealed by its content hash; `rerun_record` re-runs it.
+  - No new dependency. Solving for a variable is NOT built here: it ships as a separate helper image
+    (`dec:solving-ships-as-a-separate-helper-image-so-calc-stays-lean-and-exact`).
 - **The skill is served, from one file** (`dec:round-2-fixes`, fix 7): `skills/support-a-decision-with-math/SKILL.md`
   is the only copy. `pyproject.toml` maps that folder into the wheel, and `skill.py` serves it as an MCP prompt and a
   resource. Never copy its text into code.
@@ -176,7 +187,7 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
    `ToolError` with the field path. The python-sdk 2.x hides the text of any other exception, so `server._guarded`
    turns every failure into a `ToolError`.
 4. **Tool names** are lower_snake_case. `server.TOOLS` and `server.READ_ONLY` hold the list and each tool's class.
-   Adding, renaming or reclassing a tool is a change for flo2's door too.
+   Adding, renaming or reclassing a tool is a change for flo2's door too (0.14.0 added `rederive_record`, write).
 
 ## Our standard
 
@@ -201,13 +212,14 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
   (0.8.0) the cure design's operators, their node fields, a value's `detail` and two new limits; version 9 (0.9.0) the
   integer operators and two more limits; version 10 (0.10.0) the named tests, their plans, `variance`, and the
   `hypothesis_test` and `test_plan` blocks; version 11 (0.13.0) an input's source naming the design quantity it is
-  bound to (`{"design_quantity": "<id>"}`). Every older
+  bound to (`{"design_quantity": "<id>"}`); version 12 (0.14.0) a re-derived record's `history`. Every older
   version must still re-run, each under its own version's writing (`evaluator.LEGACY` for 1 to 3,
   `evaluator.FORMULA_RESULTS_ONLY` for 4 to 6) and rules (`record.rules_of`: before `delta_K` for 1 to 6):
   `tests/data/*.v1.calc.json` were made by 0.1.0, `tests/data/*.v2.calc.json` by 0.2.0,
   `tests/data/display.v3.calc.json` by 0.4.0, `tests/data/temperature-and-formula.v6.calc.json` by 0.6.1, and
   `tests/data/statistics.v7.calc.json` by 0.7.0, `tests/data/divisibility.v8.calc.json` by 0.8.1,
-  `tests/data/hand-composed-tests.v9.calc.json` by 0.9.0, and `tests/data/food.v10.calc.json` by 0.12.0.
+  `tests/data/hand-composed-tests.v9.calc.json` by 0.9.0, `tests/data/food.v10.calc.json` by 0.12.0, and
+  `tests/data/wall-heat-loss.v11.calc.json` by 0.13.0.
 - Nothing goes to stdout except MCP messages.
 - The licence is Apache-2.0. No secrets.
 - Record what you build on the design:
@@ -239,8 +251,9 @@ flo2-calc does not depend on flo2. When flo2 hosts it, flo2's contract holds:
 | `src/flo2_calc/answer.py` | a reply held to the host's answer budget: the outcome whole, the rest named (0.11.0); an exact array result's readable decimals (0.12.0) | `cmp:mcp-server`, `dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget`, `dec:a-reply-shows-a-readable-decimal-beside-an-exact-array-result` |
 | `src/flo2_calc/formula.py` | the computation shown back: its formula and its numbered working, plain text and LaTeX | `cmp:computation-record`, `cap:every-reply-shows-its-formula-and-working` |
 | `src/flo2_calc/skill.py` | the served skill: an MCP prompt and a resource, and its reference files as resources, read from `skills/` | `cap:serve-over-mcp` |
+| `src/flo2_calc/rederive.py` | a kept record re-derived with changed inputs: the checks, the new record and its history, what moved (0.14.0) | `cmp:computation-record`, `req:a-calc-record-keeps-its-formula-and-is-re-derived-when-an-input-changes` |
 | `src/flo2_calc/record.py`, `src/flo2_calc/schemas/` | the computation record (computed or not yet computed), its schemas, the root folder | `cmp:computation-record`, `cap:a-not-yet-computed-record-is-completed-on-a-larger-machine` |
-| `src/flo2_calc/server.py`, `cli.py`, `errors.py` | the four MCP tools, the command line, the two kinds of no | `cmp:mcp-server` |
+| `src/flo2_calc/server.py`, `cli.py`, `errors.py` | the five MCP tools, the command line, the two kinds of no | `cmp:mcp-server` |
 | `plugin.json`, `mcp.json`, `.claude-plugin/`, `.mcp.json`, `skills/` | the plugin package | `cap:serve-over-mcp` |
 | `Dockerfile`, `.dockerignore`, `tools/measure.py` | the image, and its measurement | `cap:serve-over-mcp` |
 | `tools/dependency_currency.py`, `dependency-holds.toml` | the monthly dependency check | |

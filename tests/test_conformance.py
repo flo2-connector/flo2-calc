@@ -125,15 +125,18 @@ def test_initialize_offers_the_served_skill_as_a_prompt_and_a_resource_beside_th
         base + "references/" + p.name for p in sorted(REFERENCES.glob("*.md"))], "0.8.1: the skill and its reference files"
 
 
-def test_the_four_tools_and_their_classes_are_the_ones_flo2s_door_holds():
+def test_the_five_tools_and_their_classes_are_the_ones_flo2s_door_is_told():
     """flo2's calc door is written against exactly these names and read/write
     classes (a fail-closed allow-list): the host-set limits and the
-    not-yet-computed record changed neither."""
-    assert TOOLS == ("evaluate_graph", "add_node", "record_computation", "rerun_record")
-    assert READ_ONLY == {"evaluate_graph": True, "add_node": True, "record_computation": False, "rerun_record": True}
+    not-yet-computed record changed neither. 0.14.0 adds rederive_record, a
+    writing tool like record_computation (it returns a new record to keep), so
+    flo2's door needs it added when it next pins flo2-calc."""
+    assert TOOLS == ("evaluate_graph", "add_node", "record_computation", "rerun_record", "rederive_record")
+    assert READ_ONLY == {"evaluate_graph": True, "add_node": True, "record_computation": False, "rerun_record": True,
+                         "rederive_record": False}
 
 
-def test_tools_list_is_exactly_the_four_tools_each_classed(plug):
+def test_tools_list_is_exactly_the_five_tools_each_classed(plug):
     tools = plug.send("tools/list", {})["result"]["tools"]
     names = [t["name"] for t in tools]
     assert sorted(names) == sorted(TOOLS)

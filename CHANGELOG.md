@@ -3,6 +3,35 @@
 flo2-calc's changes, newest first. Versions before 0.12.0 are described in the README, where each feature names the
 version that added it, and in the commit history.
 
+## 0.14.0 (2026-10-27)
+
+A kept record is re-derived when an input changes, and says what moved. (`req:a-calc-record-keeps-its-formula-and-is-re-derived-when-an-input-changes`,
+accepted by Anthony on 2026-10-27, under `dec:calc-keeps-live-formulas-and-solves-for-a-variable-proved-on-a-test-case-first`
+and `dec:solving-ships-as-a-separate-helper-image-so-calc-stays-lean-and-exact`.)
+
+- A new tool, `rederive_record` (classed write): give a kept record and new values for one or more of its inputs,
+  each `{"input", "value", "source"}`. It evaluates the record's own graph with them, under the same exact or
+  bounded arithmetic, and returns the new record (same name, `calcfile:///<name>.calc.json`) and what moved: each
+  result old -> new or unchanged, and every other node whose value changed. The wall heat loss case:
+  `A` 1,200 -> 1,350 ft^2 moves `Q` 84000/19 -> 94500/19 Btu/h, exactly.
+- A new value must measure what the input it replaces measured (any unit of that kind: `"3 m"` for `"9 ft"`);
+  otherwise it is refused naming what arrived. A name that is not one of the record's inputs is a malformed call
+  that lists them. A record changed after it was made, one that does not re-run here, one of schema version 1 to 6
+  (made under the rules before `delta_K`), or a changed graph that does not answer gives no new record, with the
+  reason.
+- Record schema version 12 adds `history`: one entry per re-derivation, naming the record it came from by its
+  content hash, each input changed and each result moved or unchanged. Versions 1 to 11 still re-run, and their
+  schemas are unchanged; `tests/data/wall-heat-loss.v11.calc.json` was made by 0.13.0. Every new record is written
+  as version 12. `rerun_record` re-runs a re-derived record to the same content.
+- A reply fills the host's answer budget with the other nodes that moved before the formula and working views
+  (`answer.fit`'s `fill` order).
+- No new dependency (the proof of concept of 2026-10-27 found live formulas need no symbolic algebra). Formula text is
+  not accepted: a record's graph is already its formula. Solving for a variable is a separate helper, later.
+- The skill gains step 12 (when an input changes, re-derive; never edit a record), with its detail in
+  `references/records.md`; one units sentence moved from SKILL.md to `references/units.md` to keep SKILL.md under
+  15,000 bytes. The server's instructions name the new tool.
+- For flo2: the door's allow-list gains `rederive_record` (write); README, "What flo2 needs to host it".
+
 ## 0.13.0 (2026-10-25)
 
 An input names the design quantity it holds the value of; a copied value reads as unbound. (reflow2's

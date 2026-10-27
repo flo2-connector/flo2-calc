@@ -102,7 +102,9 @@ also be written to disk:
 - `record_computation`'s `output_path` (for example `decisions/fiber-bend.calc.json`) writes the record there. A path
   outside the root, a path through a link that leads out of it, and a name not ending in `.calc.json` are refused. A
   file that already exists is never written over: the same record again is left alone, and a different one is refused.
-- `rerun_record`'s `path` re-runs a record file inside the root.
+- `rerun_record`'s `path` re-runs a record file inside the root, and `rederive_record`'s `path` re-derives one. A
+  re-derived record comes back in the reply only: it has the same name as the record it replaces, which is never
+  written over.
 - With no root, flo2-calc touches no file at all, and `output_path` or `path` is refused with the reason.
 
 ## Hosted on flo2.io
@@ -252,8 +254,10 @@ How they are kept (`src/flo2_calc/limits.py`):
 | `add_node` | read | `node`, `graph?` (the graph so far) | the new node's value, every value so far, the `formula` and `working`, and the grown `graph` to pass next time |
 | `record_computation` | write | `graph`, `name`, `supports?`, `output_path?`; or, to complete one, a not-yet-computed `record` | the result, the `formula` and `working`, the record's file name, sha256 and content hash, and the record as `calcfile:///<name>.calc.json`. Stopped at a limit: the refusal and a not-yet-computed record |
 | `rerun_record` | read | `record` (the object or its text) or `path` | `reproduces`, whether the content hash matches, every difference, and the re-run's `formula` and `working`. For a not-yet-computed record: that it has no result yet, and what it needs |
+| `rederive_record` | write | `changes` (each `{"input", "value", "source", "note"?}`), and `record` or `path` (0.14.0) | each input `changed` (old and new), each result `moved` (old -> new) or `unchanged`, the new result(s), every other node that moved (`values`), the `formula` and `working`, the new record's file name, sha256, content hash and `rederived_from`, and the new record as `calcfile:///<name>.calc.json`. Refused (no record) with the reason when a new value measures something else, the record was changed or does not re-run here, it is of version 1 to 6, or the changed graph does not answer |
 
-"Class" is the tool's `readOnlyHint`, which flo2's door reads: `record_computation` makes a file to keep. Nothing is
+"Class" is the tool's `readOnlyHint`, which flo2's door reads: `record_computation` and `rederive_record` make a file
+to keep. Nothing is
 kept between calls. `add_node` is stateless: the graph you pass is the whole state, so a graph built node by node is
 the same graph, and gives the same result, as the same nodes sent whole.
 
@@ -983,8 +987,10 @@ flo2's helper contract fixes the split.
 ## The computation record
 
 One JSON object, defined by
-[`src/flo2_calc/schemas/calc-record-10.schema.json`](src/flo2_calc/schemas/calc-record-10.schema.json) (JSON Schema
-draft 2020-12). Version 10 (0.10.0) allows the named hypothesis tests and their power and sample size, with
+[`src/flo2_calc/schemas/calc-record-12.schema.json`](src/flo2_calc/schemas/calc-record-12.schema.json) (JSON Schema
+draft 2020-12). Version 12 (0.14.0) lets a re-derived record keep its `history` (below). Version 11 (0.13.0) lets an
+input's source name the design quantity it is bound to; a version 11 record re-runs as it was made
+(`tests/data/wall-heat-loss.v11.calc.json`, made by 0.13.0). Version 10 (0.10.0) allows the named hypothesis tests and their power and sample size, with
 `alternative` and `variance` on their nodes; a test's value entry carries `hypothesis_test` and a plan's `test_plan`
 (above). A record holds no time: when a test's alpha and choice were fixed, and whether they moved after its data, is
 read from the design's history of alpha's source node and of the record. A version 9 record re-runs as it was made
@@ -1020,7 +1026,7 @@ version.
 
 | Field | Holds |
 |---|---|
-| `record_format`, `schema_version` | `"flo2-calc computation record"`, `8` |
+| `record_format`, `schema_version` | `"flo2-calc computation record"`, `12` |
 | `max_exact_elements` | a record that holds an array: the most elements an exact array had where it was made; re-running uses it |
 | `status` | `"computed"`, or `"not_computed"` (below) |
 | `name` | the record's name; its file is `<name>.calc.json` |
@@ -1032,6 +1038,7 @@ version.
 | `result` | `{"node", "value"}`, labelled the same way; or `results`, one each, when the graph names a list |
 | `formula` | the computation as equations, plain text with LaTeX beside it, every line ending with its value |
 | `working` | every step, numbered, with its formula, value and label |
+| `history` | a re-derived record (version 12): one entry per re-derivation, oldest first, each naming the record it came from (`rederived_from`: its content hash, schema version and flo2-calc version), each input `changed` (old and new value, unit and source), each result `moved` (old -> new) and each `unchanged` |
 | `produced_by` | `{"flo2_calc", "pint", "python_flint", "numpy"}` versions |
 | `content_hash` | `sha256:` over the canonical JSON (keys sorted, no spaces, UTF-8) of every other field |
 
@@ -1048,6 +1055,18 @@ How a record behaves:
   reflow2 flag a record, and the decisions resting on it, when the quantity changes: the design records the record's
   inputs with the values used when the record is registered, and compares them with what it holds. flo2-calc only
   keeps the id.
+- **Re-derived when an input changes** (0.14.0, `req:a-calc-record-keeps-its-formula-and-is-re-derived-when-an-input-changes`;
+  `rederive.py`). A record's graph is its formula, so `rederive_record` evaluates it again with new values for one or
+  more of its inputs, each with its source, under the same exact arithmetic, and says what moved: for the wall heat
+  loss `Q = A * dT / R`, `A` from 1,200 to 1,350 ft^2 moves `Q` from 84000/19 to 94500/19 Btu/h, exactly. It first
+  checks the record is computed, of version 7 or later (a record of version 1 to 6 was made under the rules before
+  `delta_K`), sealed and re-running here to its own values, so whatever moves, the change moved. A new value must
+  measure what the input it replaces measured (a temperature for a temperature, a change for a change, an array for an
+  array; any unit of that kind, converted exactly where it combines), or it is refused naming what arrived. The new
+  record has the same name and `supports`, and its `history` holds the change; `rerun_record` re-runs it to the same
+  content. No new dependency: the proof of concept of 2026-10-27 found live formulas need no symbolic algebra
+  (solving for a variable will be a separate helper, `dec:solving-ships-as-a-separate-helper-image-so-calc-stays-lean-and-exact`).
+  A reply fills its answer budget with the other nodes that moved before the formula and working views.
 - **A computed record carries no host limits**, so where it was made never changes it.
 
 ### Not yet computed
@@ -1224,11 +1243,15 @@ uv pip install --python /tmp/flo2-calc-venv/bin/python -e '.[test]'
   `integer_range`; large integers built past the 80 characters a typed number may have; every refusal (a non-integer,
   a rounded or a float64 argument, `max_prime_digits`, `max_factor_digits`, `max_exact_elements`); the record, a
   not-yet-computed one, and the primes trial (`n^2 + n + 41`, `n = 0..39`, and 1681 = 41^2) over MCP.
-- `tests/test_server.py`: the four tools over a real MCP client session. Every refusal's reason is read on the
+- `tests/test_rederive.py` (0.14.0): a kept record re-derived when an input changes: the wall heat loss (`A` 1,200 to
+  1,350 ft^2 moves `Q` 84000/19 to 94500/19 Btu/h exactly), an excavation in US and SI units, several inputs at once,
+  an array input, the history and its re-run, every refusal (a value of another kind, a name that is not an input, a
+  changed record, a version 1 record), version 7 and 11 records re-derived, and the reply within flo2.io's budget.
+- `tests/test_server.py`: the original four tools over a real MCP client session. Every refusal's reason is read on the
   client's side. The served skill (prompt and resource) and each of its reference files are read there too, and each
   matches its file.
 - `tests/test_conformance.py`: flo2's helper contract, asked in raw JSON-RPC as flo2's plug asks it. It also holds
-  the four tool names and their read/write classes to the ones flo2's door holds.
+  the five tool names and their read/write classes to the ones flo2's door holds.
 - `tests/test_limits.py`: each limit trips with its reason; a huge power is refused before it stalls; the server
   stays alive after every stop.
 - `tests/test_pending_record.py`: a not-yet-computed record made under low limits and completed under higher ones
@@ -1263,7 +1286,7 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    repository's `Dockerfile`.
 2. **A door for the `calc` helper** (`calc-door.ts`, beside `cad-door.ts`), with a fail-closed allow-list:
    - `evaluate_graph`, `add_node` and `rerun_record` classed read;
-   - `record_computation` classed write.
+   - `record_computation` and `rederive_record` (0.14.0) classed write.
 
    The door's file rule keeps `calcfile:///<name>.calc.json` (`application/json`, at most 2 MB a reply) as a new
    version of that file in the person's design. The resource comes as `text`, not `blob`.
@@ -1304,6 +1327,16 @@ flo2-calc meets flo2's helper contract (MUST tier) and OUR STANDARD. To offer it
    an Artifact, passes reflow2's `add_artifact` the record's inputs: one entry per bound input,
    `{"node_id": <design_quantity>, "input": <id>, "value": <the value as a number>, "unit": <unit, when not "">}`,
    and again with each new version of the record (a re-run). flo2 copies SKILL.md unchanged.
+
+   0.14.0 (`req:a-calc-record-keeps-its-formula-and-is-re-derived-when-an-input-changes`) adds a FIFTH TOOL,
+   `rederive_record`, classed write, so **flo2's door must add it to its allow-list** when it pins this release; until
+   then the door refuses it and the other four work as before. Its reply is like `record_computation`'s: one text block
+   and the new record as `calcfile:///<name>.calc.json`, with the SAME name as the record it re-derives, so the door
+   keeps it as the next version of that file. Its arguments are `changes` (required) and `record`; `path` is for local
+   runs, as `rerun_record`'s. The record schema becomes version 12 (`history`). When the door records the new version
+   as an Artifact it passes the record's bound inputs again, as for 0.13.0, so the design's re-run owed is cleared by
+   the new values. The image's profile is unchanged, and so is its memory: no new dependency. flo2 copies SKILL.md
+   (step 12), `references/records.md` and `references/units.md` unchanged, and its catalog of calc's tools gains the one.
 4. **A row in the conformance check.**
    - One call that answers: `evaluate_graph` on `0.1 + 0.2`.
    - One call that fails: an input `"2 notaunit"`, whose reason starts `Malformed call. graph.nodes[0].value`.

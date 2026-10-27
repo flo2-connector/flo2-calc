@@ -1,7 +1,7 @@
-# Records: saving, re-checking, and completing one past the limits
+# Records: saving, re-checking, completing one past the limits, and re-deriving one
 
-A reference file of the skill `support-a-decision-with-math`, for its steps 8, 10 and 11. The rules (make the
-record, link it, never slip under a limit) are in `SKILL.md`.
+A reference file of the skill `support-a-decision-with-math`, for its steps 8, 10, 11 and 12. The rules (make the
+record, link it, never slip under a limit, re-derive rather than edit) are in `SKILL.md`.
 
 ## Saving a record beside the work (step 8)
 
@@ -33,3 +33,23 @@ identically, and quote `largest_difference` if asked.
   not-yet-computed one.
 - `rerun_record` on a not-yet-computed record says it has no result yet, and whether this flo2-calc has the room to
   complete it.
+
+## A kept record re-derived when an input changes (step 12)
+
+- Use it when a number a kept record took has changed: a re-measured wall area, a revised footprint, a design
+  quantity the record's input is bound to (`inputs_bound`). It evaluates the record's own graph with the new
+  values, so the formula stays the one that was checked.
+- Each change is `{"input": "A", "value": "1350 ft^2", "source": "re-measured wall"}`. A bound input keeps its
+  binding when its source is `{"design_quantity": "<id>"}` again.
+- A new value in another unit of the same kind is taken and converted exactly (`"3 m"` for `"9 ft"`). One of
+  another kind is refused, naming what arrived: an area for a length, a temperature for a change of temperature, a
+  plain number for a quantity. A name that is not one of the record's inputs is an error that lists them.
+- The reply's `moved` gives each result old -> new, `unchanged` the results that did not move, and `values` every
+  other node that moved. Quote the moved results to the person in their terms ("the wall now loses 4,974 Btu/h, up
+  from 4,421").
+- The new record keeps the same name and `supports`, and its `history` names the record it came from by its content
+  hash, with every change it went through. `rerun_record` re-runs it like any record.
+- No new record is made when the record you passed was changed after it was made, does not re-run here, is of
+  schema version 1 to 6 (made under older rules: make it again with `record_computation`), or when the changed
+  graph is refused (a division by zero, say). The record you passed stands; say why.
+- To change the formula itself, not an input, compose the graph again with `record_computation`.

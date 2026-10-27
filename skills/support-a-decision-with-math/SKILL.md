@@ -1,7 +1,7 @@
 ---
 name: support-a-decision-with-math
 description: Do the math behind a design decision with flo2-calc instead of in your head, and keep it with the decision. Use when a decision, a trade or a limit rests on a number or a yes/no that has to be computed - a margin, a fit, a budget, a run time, a unit conversion, a comparison with a limit, a root, a logarithm, a gain in dB, an angle, a p-value or a percentile (normal, lognormal, gamma, beta), a hypothesis test (z, t, chi-square, binomial, Fisher) or its power, a count or a binomial probability, divisibility or primes, a Bayesian update from a published prior, a randomization test, Shapley credit, an empirical formula whose formula and constants the person or a cited document gave, or a computation over data or a grid (a mean, a standard deviation, a fitted slope, an FFT) - especially one with units. It covers composing the computation, units, arrays, result labels, where an empirical formula's constants come from (never your memory), refusals, the working, the record, linking it and checking it later.
-compatibility: Needs the flo2-calc MCP server (evaluate_graph, add_node, record_computation, rerun_record), which also serves this skill as the MCP prompt support-a-decision-with-math and the resource skill://flo2-calc/support-a-decision-with-math/SKILL.md. Nothing else has to be running. Linking a record to a design uses the design tool's own tools (reflow2), when there is one.
+compatibility: Needs the flo2-calc MCP server (evaluate_graph, add_node, record_computation, rerun_record, rederive_record), which also serves this skill as the MCP prompt support-a-decision-with-math and the resource skill://flo2-calc/support-a-decision-with-math/SKILL.md. Nothing else has to be running. Linking a record to a design uses the design tool's own tools (reflow2), when there is one.
 ---
 
 # Support a decision with math
@@ -49,7 +49,7 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
    - An input has a `value` and a `source`: `{"id": "bend", "value": "1.4 mm", "source": "fiber datasheet"}`.
    - An operation has an `op` and its `args`: `{"id": "margin", "op": "sub", "args": ["cavity", "bend"]}`.
    - When an input is one of the design's own quantities, bind it: `"source": {"design_quantity": "cst:household"}`.
-     A change to that quantity then marks this record owed (the reply's `inputs_bound`). Otherwise say where the
+     A change to that quantity then marks this record owed (the reply's `inputs_bound`): step 12. Otherwise say where the
      number came from: a datasheet, a measurement, or "assumed"; such a copied value is unbound.
 2. **Write every number as text with its unit**, spelled as the design spells units: `"1.4 mm"`, `"3.3 V"`,
    `"20 mA"`, `"12 g"`. Write a plain number as text too (`"0.1"`, `"1/3"`), because a JSON `0.1` is refused: it
@@ -110,10 +110,7 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
      what it meant: ask the person what was intended, then build that as nodes.
    - If it is called **ambiguous** (`"6/2(1+2)"`, an implied multiplication), the refusal gives both readings. Never
      pick one: ask which was meant, or build each reading as nodes and give both values, saying which is which.
-   - An unknown unit that pint reads (`"mile"`) is named for what it is, with the units of that kind flo2-calc knows.
-     Nothing is substituted: give the value in one of those units, from a source that states it, never a conversion
-     factor you recall.
-   - Never change a unit's prefix to get past a refusal (a near-miss's hint: `references/units.md`).
+   - Never change a unit's prefix to get past a refusal, nor recall a conversion factor: `references/units.md`.
    - `"kind": "undecidable"` means a rounded value's error bound straddles the answer: `sqrt(2) * sqrt(2) = 2` cannot be
      told. Ask for more `digits`, or compute it another way (compare the exact squares instead). Never decide it
      yourself.
@@ -136,6 +133,9 @@ rule) is only as good as its constants, and flo2-calc cannot tell where a number
    - From `record_computation` the record still comes back, marked `"status": "not_computed"`. Keep it and link it
      to the decision as you would any record. Tell the person the number is not computed yet, and what it needs (the
      reply's `next` says). Completing it on a flo2-calc with more room: `references/records.md`.
+12. **When an input of a kept record changes, re-derive it with `rederive_record`;** never edit a record or work
+   the new number out yourself. Give each changed `input` its new `value` and `source`, link the new record in place
+   of the old and quote each result's old -> new: `references/records.md`.
 
 ## On flo2.io (a helper beside the person's design)
 

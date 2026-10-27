@@ -109,7 +109,7 @@ def test_the_new_record_keeps_its_history_matches_schema_12_and_re_runs_to_the_s
     assert new["schema_version"] == R.SCHEMA_VERSION == 12
     jsonschema.validate(new, R.schema(12))
     (entry,) = new["history"]
-    assert entry["rederived_from"] == old["content_hash"]
+    assert entry["rederived_from"]["content_hash"] == old["content_hash"]
     assert entry["changed"][0]["input"] == "A" and entry["changed"][0]["new"]["value"] == "1350 ft^2"
     assert entry["moved"] == [{"node": "Q", "old": {"value": "4421.05263157894736842105263158 Btu/h", "exact": "84000/19 Btu/h"},
                                "new": {"value": "4973.68421052631578947368421053 Btu/h", "exact": "94500/19 Btu/h"}}]
@@ -125,8 +125,8 @@ def test_a_second_change_adds_to_the_history_and_moves_only_what_rests_on_it():
     first = made(HEAT, "wall-heat-loss")
     _, second = rederive(first, [change("A", "1350 ft^2", "re-measured wall")])
     answer, third = rederive(second, [change("R", "21 h*ft^2*delta_degF/Btu", "R-21 batts, illustrative")])
-    assert [h["rederived_from"] for h in third["history"]] == [first["content_hash"], second["content_hash"]]
-    assert answer["moved"][0]["new"]["exact"] == "4500 Btu/h"  # 1350 * 70 / 21
+    assert [h["rederived_from"]["content_hash"] for h in third["history"]] == [first["content_hash"], second["content_hash"]]
+    assert answer["moved"][0]["new"] == {"value": "4500 Btu/h"}  # 1350 * 70 / 21, whole
     assert answer["values"] == []  # A*dT did not move
     assert R.rerun(third)["outcome"] == "reproduced"
 
@@ -166,6 +166,18 @@ def test_several_inputs_change_at_once():
     answer, new = rederive(made(dig(), "excavation"), [change("footprint", "1000 ft^2"), change("depth", "10 ft")])
     assert [c["input"] for c in answer["changed"]] == ["footprint", "depth"]
     assert [r["value"] for r in new["results"]] == ["90 ft", "10000 ft^3"]
+
+
+def test_an_array_input_may_change_length_and_an_array_result_moves_by_its_sha256():
+    g = graph(inp("t", {"array": ["1", "2", "3"], "unit": "s"}, "readings"), inp("k", "1/3", "a factor"),
+              op("y", "mul", "t", "k"), result="y")
+    answer, new = rederive(made(g), [change("t", {"array": ["1", "2", "3", "4"], "unit": "s"}, "one more reading")])
+    (moved,) = answer["moved"]
+    assert moved["old"]["value"] == "array 3 (exact, s)" and moved["new"]["value"] == "array 4 (exact, s)"
+    assert moved["new"]["sha256"].startswith("sha256:") and moved["old"]["sha256"] != moved["new"]["sha256"]
+    assert answer["result"]["array"]["values"] == ["1/3", "2/3", "1", "4/3"]  # the reply shows the new result whole
+    jsonschema.validate(new, R.schema(12))
+    assert R.rerun(new)["outcome"] == "reproduced"
 
 
 # ---------------------------------------------------------------- refused, saying why
@@ -244,6 +256,15 @@ def test_a_not_yet_computed_record_is_completed_not_re_derived():
 # ---------------------------------------------------------------- records of older versions
 
 
+def test_a_version_11_record_made_by_0_13_0_re_runs_as_made_and_is_re_derived():
+    old = json.loads((DATA / "wall-heat-loss.v11.calc.json").read_text())
+    assert old["schema_version"] == 11 and old["produced_by"]["flo2_calc"] == "0.13.0" and "history" not in old
+    assert R.rerun(R.load(old))["outcome"] == "reproduced"
+    answer, new = rederive(R.load(old), [change("A", "1350 ft^2", "re-measured wall")])
+    assert answer["moved"][0]["new"]["exact"] == "94500/19 Btu/h" and new["schema_version"] == 12
+    assert R.rerun(new)["outcome"] == "reproduced"
+
+
 def test_a_version_7_record_is_re_derived_into_a_version_12_record():
     old = json.loads((DATA / "statistics.v7.calc.json").read_text())
     assert old["schema_version"] == 7 and R.rerun(old)["outcome"] == "reproduced"
@@ -279,7 +300,7 @@ def test_rederive_record_is_a_writing_tool_that_returns_the_new_record_as_a_file
             return tools, reply, bad, again
 
     tools, reply, bad, again = anyio.run(main)
-    assert tools["rederive_record"].annotations.readOnlyHint is False
+    assert tools["rederive_record"].annotations.read_only_hint is False
     answer = answer_of(reply)
     assert answer["moved"][0]["new"]["exact"] == "94500/19 Btu/h"
     assert answer["record"]["file"] == "wall-heat-loss.calc.json"
@@ -312,3 +333,5 @@ def test_a_re_derived_reply_fits_flo2_ios_answer_budget():
     answer = json.loads(text)
     assert answer["status"] == "ok" and answer["changed"][0]["input"] == first["id"]
     assert "moved" in answer and "record" in answer
+    # what moved fills first: the four other nodes that moved are all shown, before the views of the formula
+    assert "values" not in answer.get("withheld", {}) and len(answer["values"]) == 4

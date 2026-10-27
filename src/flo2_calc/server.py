@@ -1,16 +1,22 @@
 """flo2-calc's MCP tools, on the official MCP python-sdk 2.x (MCPServer).
 
-FOUR TOOLS, lower_snake_case (flo2's helper contract, point 5):
+FIVE TOOLS, lower_snake_case (flo2's helper contract, point 5):
 
   evaluate_graph       read-only   a whole graph in one call: its result, and the values as far as the answer budget goes
   add_node             read-only   the graph so far plus one node: that node's value, and the grown graph
   record_computation   writes      evaluate, and return the computation record as a file
   rerun_record         read-only   re-run a record and say whether it reproduces
+  rederive_record      writes      a kept record with changed inputs: the new record as a file, and what moved (0.14.0)
 
-"Writes" is the class flo2's door reads: record_computation makes a file to
-keep (the door keeps it as a new version in the person's design), and, run
-locally with --root, it may write that file to disk. The other three change
-nothing anywhere.
+"Writes" is the class flo2's door reads: record_computation and
+rederive_record make a file to keep (the door keeps it as a new version in the
+person's design), and, run locally with --root, record_computation may write
+that file to disk. The other three change nothing anywhere.
+
+RE-DERIVING (0.14.0, rederive.py; req:a-calc-record-keeps-its-formula-and-is-re-derived-when-an-input-changes).
+A kept record's graph is its formula. rederive_record evaluates it again with new values for some of its inputs,
+each with its source, and returns the new record (schema 12, its `history` naming the record it came from) and,
+for every result, old -> new or unchanged; every other node that moved fills the answer budget first.
 
 REPLIES. One text block of JSON, then, for record_computation, the record as
 an embedded resource `calcfile:///<name>.calc.json` (application/json). flo2
@@ -27,7 +33,7 @@ skills/support-a-decision-with-math/SKILL.md as an MCP prompt of that name and
 as a resource, and each reference file it names (references/*.md, 0.8.1) as a
 resource beside it, so a client that starts flo2-calc as a plain command gets
 the same guidance a plugin install does. Prompts and resources are not tools:
-flo2's door, which holds exactly the four tools, is unchanged by them.
+flo2's door, which holds exactly the tools above, is unchanged by them.
 
 LIMITS (limits.py). Every call runs under the host's limits, set at start-up:
 a deadline, a digits budget for exact numbers, and a reply budget. Passing one
@@ -36,9 +42,9 @@ limit, its value, the node reached and how large the numbers had grown. When
 record_computation is stopped that way, the record still comes back, as a
 NOT-YET-COMPUTED record (status "not_computed": the graph, the inputs, the
 limit it passed, no result), and record_computation on a flo2-calc with more
-room completes it: it takes that record in place of a graph. The four tools,
+room completes it: it takes that record in place of a graph. The tools,
 their names and their read/write classes are unchanged by this: flo2's door
-holds exactly these four.
+holds exactly these.
 
 A REPLY FITS ITS READER (0.11.0, answer.py; dec:a-reply-carries-its-outcome-whole-and-fits-a-host-set-answer-budget).
 Every reply carries its outcome whole: the status or the refusal, the result(s) with their labels, `exactness`,
@@ -73,9 +79,10 @@ from mcp.types import CallToolResult, EmbeddedResource, TextContent, TextResourc
 from pydantic import Field
 
 from flo2_calc import __version__
-from flo2_calc.answer import fit
+from flo2_calc.answer import MOVED_FIRST, fit
 from flo2_calc import limits as L
 from flo2_calc import record as R
+from flo2_calc import rederive as RD
 from flo2_calc import skill as SK
 from flo2_calc.units import VOCABULARY as U_VOCABULARY
 from flo2_calc.errors import CallError, LimitExceeded
@@ -145,7 +152,9 @@ INSTRUCTIONS = (
     "decimals of 6 significant digits, a rendering for reading only; quote it to the person, and keep the exact "
     "values (the record holds only them). evaluate_graph takes "
     "a whole graph; add_node builds one node at a time; record_computation returns a computation record, a .calc.json "
-    "file to link to the decision it supports; rerun_record checks that a record still reproduces. flo2-calc "
+    "file to link to the decision it supports; rerun_record checks that a record still reproduces; rederive_record "
+    "re-derives a kept record when one or more of its inputs change (new value, unit and source each), returning the new "
+    "record and every result old -> new, so a changed input never leaves a stale number in a decision. flo2-calc "
     "calculates and you reason: it never decides which equation applies, and a domain's own formulas (ring sizes, "
     "metal weight, a building's areas, an electronics standard's sizing rule such as IPC-2221's trace width) belong to "
     "the helper that owns the domain. AN EMPIRICAL OR A STANDARD'S FORMULA, AND EVERY CONSTANT IN IT, COMES FROM THE "
@@ -213,6 +222,10 @@ def _text(payload: dict[str, Any]) -> str:
 REST_NOT_KEPT = "not in this reply: record_computation keeps every value, line and step in its record"
 REST_RECORD = 'in the record this reply returns ("values", "formula" and "working" hold every one)'
 REST_PASSED = 'in the record you passed ("values", "formula" and "working" hold every one)'
+REST_REDERIVED = (
+    'in the records: each new value, line and step in the record this reply returns ("values", "formula", '
+    '"working"), each old value in the record you passed'
+)
 REST_PENDING = 'in the not-yet-computed record this reply returns ("formula" and "working" hold every line)'
 
 
@@ -574,8 +587,60 @@ def build_server(root: Path | None = None, limits: L.Limits = L.LAPTOP) -> MCPSe
             loaded = R.load(record, "record", guard)
         return answering(R.rerun(loaded, guard, root), REST_PASSED, guard)
 
+    @server.tool(
+        name="rederive_record",
+        title="Re-derive a kept record with changed inputs",
+        annotations=ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False),
+        description=(
+            "Re-derive a kept computation record when one or more of its inputs change: give the record and, for "
+            "each changed input, its new value (with its unit) and the source of that value. flo2-calc evaluates the "
+            "record's own graph with them, exactly as before, and returns the NEW record (an embedded resource, "
+            "calcfile:///<name>.calc.json, with the same name) and what moved: every result, old -> new or unchanged, "
+            "and every other node whose value changed. The new record keeps the change in its history, naming the "
+            "record it came from by its content hash, and rerun_record re-runs it to the same content. A new value "
+            "must measure what the input it replaces measured (any unit of that kind; a temperature for a "
+            "temperature, a change for a change), or it is refused naming what arrived. A name that is not one of the "
+            "record's inputs is an error naming them. A record changed after it was made, one that does not re-run "
+            "here, one of schema version 1 to 6 (older rules), or a changed graph that does not answer gives no new "
+            "record, with the reason. To change the formula itself, compose the graph again with record_computation."
+        ),
+    )
+    @_guarded
+    def rederive_record(
+        changes: Annotated[
+            list[dict[str, Any]],
+            Field(description='The changed inputs: [{"input": "<id>", "value": "<new value, e.g. 1350 ft^2>", "source": '
+                  '"<where it came from: free text, {\"design_node\": \"<id>\"} or {\"design_quantity\": \"<id>\"}>"}, ...], '
+                  'each input once; "note" optional (else the input keeps its note).'),
+        ],
+        record: Annotated[
+            dict[str, Any] | str | None,
+            Field(description="The kept record: the JSON object, or its text."),
+        ] = None,
+        path: Annotated[
+            str | None,
+            Field(description="Or, local runs only: a .calc.json file inside the folder flo2-calc was started with (--root)."),
+        ] = None,
+    ) -> CallToolResult:
+        if (record is None) == (path is None):
+            raise CallError("record", "pass exactly one: `record` (the record itself) or `path` (its file).")
+        guard = L.Guard(limits)
+        if path is not None:
+            loaded = R.load(R.read_file(root, path, guard, "path"), "path", guard)
+        else:
+            loaded = R.load(record, "record", guard)
+        answer, new = RD.rederive(loaded, changes, guard, root)
+        if new is None:  # refused: what it shows of the changed graph is kept nowhere
+            return answering(answer, REST_NOT_KEPT, guard)
+        file_name = f"{new['name']}{R.SUFFIX}"
+        data = R.file_bytes(new)
+        answer["record"] = {**_record_facts(new, data, file_name), **answer["record"]}
+        answer = fit(answer, limits.max_answer_chars, REST_REDERIVED, MOVED_FIRST)
+        guard.check_reply(len(_text(answer).encode("utf-8")) + len(data))
+        return _reply(answer, ((file_name, data.decode("utf-8")),))
+
     return server
 
 
-TOOLS = ("evaluate_graph", "add_node", "record_computation", "rerun_record")
-READ_ONLY = {"evaluate_graph": True, "add_node": True, "record_computation": False, "rerun_record": True}
+TOOLS = ("evaluate_graph", "add_node", "record_computation", "rerun_record", "rederive_record")
+READ_ONLY = {"evaluate_graph": True, "add_node": True, "record_computation": False, "rerun_record": True, "rederive_record": False}
