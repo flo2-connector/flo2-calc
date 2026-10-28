@@ -103,11 +103,11 @@ def test_a_changed_area_re_derives_the_heat_loss_exactly_and_says_what_moved():
     assert new["result"] == answer["result"] and new["name"] == "wall-heat-loss"
 
 
-def test_the_new_record_keeps_its_history_matches_schema_12_and_re_runs_to_the_same_content():
+def test_the_new_record_keeps_its_history_matches_the_current_schema_and_re_runs_to_the_same_content():
     old = made(HEAT, "wall-heat-loss")
     _, new = rederive(old, [change("A", "1350 ft^2", "re-measured wall")])
-    assert new["schema_version"] == R.SCHEMA_VERSION == 12
-    jsonschema.validate(new, R.schema(12))
+    assert new["schema_version"] == R.SCHEMA_VERSION == 13
+    jsonschema.validate(new, R.schema(13))
     (entry,) = new["history"]
     assert entry["rederived_from"]["content_hash"] == old["content_hash"]
     assert entry["changed"][0]["input"] == "A" and entry["changed"][0]["new"]["value"] == "1350 ft^2"
@@ -176,7 +176,7 @@ def test_an_array_input_may_change_length_and_an_array_result_moves_by_its_sha25
     assert moved["old"]["value"] == "array 3 (exact, s)" and moved["new"]["value"] == "array 4 (exact, s)"
     assert moved["new"]["sha256"].startswith("sha256:") and moved["old"]["sha256"] != moved["new"]["sha256"]
     assert answer["result"]["array"]["values"] == ["1/3", "2/3", "1", "4/3"]  # the reply shows the new result whole
-    jsonschema.validate(new, R.schema(12))
+    jsonschema.validate(new, R.schema(13))
     assert R.rerun(new)["outcome"] == "reproduced"
 
 
@@ -261,19 +261,19 @@ def test_a_version_11_record_made_by_0_13_0_re_runs_as_made_and_is_re_derived():
     assert old["schema_version"] == 11 and old["produced_by"]["flo2_calc"] == "0.13.0" and "history" not in old
     assert R.rerun(R.load(old))["outcome"] == "reproduced"
     answer, new = rederive(R.load(old), [change("A", "1350 ft^2", "re-measured wall")])
-    assert answer["moved"][0]["new"]["exact"] == "94500/19 Btu/h" and new["schema_version"] == 12
+    assert answer["moved"][0]["new"]["exact"] == "94500/19 Btu/h" and new["schema_version"] == 13
     assert R.rerun(new)["outcome"] == "reproduced"
 
 
-def test_a_version_7_record_is_re_derived_into_a_version_12_record():
+def test_a_version_7_record_is_re_derived_into_a_version_13_record():
     old = json.loads((DATA / "statistics.v7.calc.json").read_text())
     assert old["schema_version"] == 7 and R.rerun(old)["outcome"] == "reproduced"
     answer, new = rederive(old, [change("m0", "950 mg/L", "a later published mean, illustrative")])
-    assert answer["status"] == "ok" and new["schema_version"] == 12
+    assert answer["status"] == "ok" and new["schema_version"] == 13
     assert answer["record"]["rederived_from"] == {"content_hash": old["content_hash"], "schema_version": 7,
                                                   "flo2_calc": old["produced_by"]["flo2_calc"]}
     assert any(m["node"] == "z" for m in answer["moved"])
-    jsonschema.validate(new, R.schema(12))
+    jsonschema.validate(new, R.schema(13))
     assert R.rerun(new)["outcome"] == "reproduced"
 
 

@@ -453,7 +453,7 @@ def test_a_named_test_is_kept_as_a_record_that_re_runs():
     ev = evaluate(read_graph(g))
     rec = R.build(ev, "sleep-and-tea", {"design_node": "req:h1-drug-2-adds-sleep"})
     jsonschema.Draft202012Validator(R.schema()).validate(rec)
-    assert rec["schema_version"] == 12
+    assert rec["schema_version"] == 13
     kept = {v["node"]: v for v in rec["values"]}
     assert kept["p"]["hypothesis_test"]["decision"] == "fail to reject H0 at α = 0.05"
     assert kept["f"]["hypothesis_test"]["p_value"]["exact"] == "17/70"

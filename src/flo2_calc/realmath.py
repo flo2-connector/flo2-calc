@@ -341,6 +341,10 @@ def _sqrt2() -> Any:
 
 
 SQRT = Fn("sqrt", lambda x: x.sqrt(), exact_sqrt)
+# sqrt of a value known to be >= 0 whose ball starts at 0 (max(x, 0) of a rounded x, flo2-calc 0.15.0): Arb rounds a
+# radius up as it reads it, so [0, 2r] reaches a hair below 0; the ball is cut to [0, inf) first, which is rigorous
+# only because the caller has decided the value is >= 0.
+SQRT_FROM_ZERO = Fn("sqrt", lambda x: x.nonnegative_part().sqrt(), exact_sqrt)
 EXP = Fn("exp", lambda x: x.exp(), lambda x: _F(1) if x == 0 else None)
 LN = Fn("ln", lambda x: x.log(), lambda x: _F(0) if x == 1 else None)
 LOG10 = Fn("log10", lambda x: x.log() / flint().arb.const_log10(), exact_log10)

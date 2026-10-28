@@ -8,6 +8,7 @@ a read-only root, a 64 MB /tmp, user 65534, no capabilities, one CPU, 64
 processes, the memory cap with no swap), drives a session over stdio that is
 heavier than a decision needs (a 500-node graph, records, re-runs, a re-derivation
 (0.14.0), refusals,
+a function over 4,096-element exact arrays tried for its exact cases (0.15.0),
 a 484-node graph of rounded operators at 1,000 digits each, recorded and
 re-run, and arrays: a 256 x 256 grid's discretised integral and 2-D FFT, a
 250 x 250 FFT checked against Arb's rigorous DFT, exact and float64
@@ -138,6 +139,24 @@ def _big(id_: int, m: int, e: int, c: int) -> list[dict]:
             {"id": f"{id_}_p", "op": "pow", "args": [f"{id_}_ten", f"{id_}_e"]},
             {"id": f"{id_}_mp", "op": "mul", "args": [f"{id_}_m", f"{id_}_p"]},
             {"id": id_, "op": "add", "args": [f"{id_}_mp", f"{id_}_c"]}]
+
+
+def exact_function_graph(n: int = 4096) -> dict:
+    """0.15.0: a function of the rounded class over exact arrays of the image's exact limit, its exact cases tried
+    element by element first: sqrt where every element is a perfect square (it stays exact), sqrt where every element
+    but the last is (the worst case: the whole attempt, then the float64 pass), and cos at multiples of 90 deg
+    (exact), each then clamped at 0 and rooted, which 0.15.0's one-sided bounds decide."""
+    squares = [f"{k * k}/{(k + 1) ** 2}" for k in range(n)]
+    return {"nodes": [
+        {"id": "sq", "value": {"array": squares}, "source": "measure.py"},
+        {"id": "worst", "value": {"array": squares[:-1] + ["2"]}, "source": "measure.py"},
+        {"id": "deg", "value": {"array": [str(90 * k) for k in range(n)], "unit": "deg"}, "source": "measure.py"},
+        {"id": "r1", "op": "sqrt", "args": ["sq"]}, {"id": "r2", "op": "sqrt", "args": ["worst"]},
+        {"id": "c", "op": "cos", "args": ["deg"]}, {"id": "z", "value": "0", "source": "measure.py"},
+        {"id": "d", "op": "sub", "args": ["r2", "sq"]}, {"id": "cl", "op": "max", "args": ["d", "z"]},
+        {"id": "root", "op": "sqrt", "args": ["cl"]}, {"id": "s", "op": "sum", "args": ["root"]},
+        {"id": "t", "op": "sum", "args": ["c"]}, {"id": "u", "op": "sum", "args": ["r1"]},
+    ], "result": ["s", "t", "u"]}
 
 
 def integers_graph() -> dict:
@@ -280,6 +299,8 @@ async def drive(command: list[str], name: str) -> dict:
                                ("trial_22_periods_record", trial_graph(22), "record_computation"),
                                ("shapley_12_factors_record", shapley_graph(12), "record_computation"),
                                ("skewed_1000_digits", skewed_graph(1000), "evaluate_graph"),
+                               ("exact_functions_4096", exact_function_graph(), "evaluate_graph"),
+                               ("exact_functions_4096_record", exact_function_graph(), "record_computation"),
                                ("integers", integers_graph(), "evaluate_graph"),
                                ("integers_record", integers_graph(), "record_computation"),
                                ("tests", tests_graph(), "evaluate_graph"),

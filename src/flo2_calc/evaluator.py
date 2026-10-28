@@ -136,9 +136,11 @@ from __future__ import annotations
 import json
 import math
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
-from typing import Any
+from typing import Any, Iterator
 
 from flo2_calc import arrays as A
 from flo2_calc import bayes as BY
@@ -165,6 +167,35 @@ from flo2_calc.numbers import (
     looks_like_expression,
     parse_number,
 )
+
+# THE RULES OF FLO2-CALC 0.15.0 (record schema version 13), both on values that rest on a bound:
+#   - min, max and abs keep a ONE-SIDED guarantee: each is computed as the interval its arguments' enclosures give
+#     ([max(lo), max(hi)] for max) and written back as a ball around that interval, so max(x, 0) never reaches
+#     below 0 and a root or logarithm downstream is decided (fact:a-clamp-at-zero-on-a-float64-array-keeps-a-two-
+#     sided-error-so-sqrt-refuses-the-edge-2026-10-27);
+#   - a function of the rounded class over an EXACT array tries each element's exact case first, as a single value
+#     does, and the array stays exact when every element has one (fact:an-array-function-is-float64-where-the-same-
+#     scalar-is-exact-2026-10-27).
+# A record of version 12 or older was made before them: re-running one (record.rules_of) evaluates it under the
+# rules it was made with, so it reproduces. `before_0_15_0()` sets that for the re-run only.
+_RULES_0_15_0: ContextVar[bool] = ContextVar("flo2_calc_rules_0_15_0", default=True)
+
+
+def rules_0_15_0() -> bool:
+    """Whether min, max and abs keep their one-sided bound and a function over an exact array tries its exact cases
+    (0.15.0 and later, and every reply), or not (a record of schema version 12 or older, re-run)."""
+    return _RULES_0_15_0.get()
+
+
+@contextmanager
+def before_0_15_0() -> Iterator[None]:
+    """Evaluate under the bound and array rules of flo2-calc 0.14.0 and earlier."""
+    token = _RULES_0_15_0.set(False)
+    try:
+        yield
+    finally:
+        _RULES_0_15_0.reset(token)
+
 
 MAX_NODES = 500
 MAX_ARGS = 100
@@ -1148,6 +1179,23 @@ def _settle(center: Fraction, unit: U.Unit, error: Fraction, args: list[Value]) 
     return Quantity(c, unit, Rounding(places, bound, False, _origins(args)))
 
 
+def _interval(lo: Fraction, hi: Fraction, unit: U.Unit, args: list[Value], upper: bool = False) -> Quantity:
+    """A rounded value known only to lie in [lo, hi] (min, max or abs of a value that may be either side of the
+    other, 0.15.0): written from the end the operation guarantees, the LOWER END for max and abs (lo + b, with bound
+    b >= (hi - lo) / 2 at two significant digits) and the UPPER END for min (hi - b), so its enclosure keeps that end
+    exactly and a domain check there (sqrt of max(x, 0)) is decided. Where that has more digits than the value is
+    written to, it is centred (and its bound grows by that rounding)."""
+    if lo == hi:
+        return _settle(lo, unit, Fraction(0), args)
+    rounded = _rounded(args)
+    places = max(a.rounding.digits for a in rounded)  # type: ignore[union-attr]
+    b = N.round_up_significant((hi - lo) / 2, 2)
+    c = hi - b if upper else lo + b
+    if N.round_significant(c, places) == c:
+        return Quantity(c, unit, Rounding(places, b, False, _origins(args)))
+    return _settle((lo + hi) / 2, unit, (hi - lo) / 2, args)
+
+
 def _places(node: OpNode, args: list[Value]) -> int:
     if node.digits is not None:
         return node.digits
@@ -1240,11 +1288,21 @@ def _arithmetic(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
             f = U.conversion(q.unit, first.unit, op)
             scaled.append((q.magnitude * f, q.error * f))
         pick = min if op == "min" else max
-        # min and max move a value by at most the largest error among them.
-        return _settle(pick(m for m, _ in scaled), first.unit, max(e for _, e in scaled), qs)  # type: ignore[arg-type]
+        if not rules_0_15_0():  # a record of version 12 or older: as it was made
+            # min and max move a value by at most the largest error among them.
+            return _settle(pick(m for m, _ in scaled), first.unit, max(e for _, e in scaled), qs)  # type: ignore[arg-type]
+        # The true value lies in [pick(lo), pick(hi)]: written as that interval, never wider on either side.
+        lo, hi = pick(m - e for m, e in scaled), pick(m + e for m, e in scaled)
+        m, e = pick(scaled, key=lambda me: me[0])
+        if (lo, hi) == (m - e, m + e):  # the one picked holds both ends: it is the value, with its own bound
+            return _settle(m, first.unit, e, qs)  # type: ignore[arg-type]
+        return _interval(lo, hi, first.unit, qs, upper=op == "min")  # type: ignore[arg-type]
     if op == "neg":
         return Quantity(-first.magnitude, first.unit, first.rounding)
     if op == "abs":
+        m, e = first.magnitude, first.error
+        if rules_0_15_0() and m - e < 0 < m + e:  # it may be either side of 0: |x| lies in [0, |m| + e]
+            return _interval(Fraction(0), abs(m) + e, first.unit, qs)  # type: ignore[arg-type]
         # | |t| - |m| | <= |t - m|, and half-even rounding is symmetric: the label carries over.
         return Quantity(abs(first.magnitude), first.unit, first.rounding)
     if op == "mul":
@@ -1419,9 +1477,11 @@ def _function(node: OpNode, qs: list[Quantity], guard: L.Guard) -> Quantity:
         s = _sign(x)
         if s == -1:
             raise Refusal(f'sqrt: "{names[0]}" is negative ({value_text(q)}), and a negative number has no real square root.', kind="out_of_domain")
-        if s is None:
+        from_zero = s is None and x.lo >= 0 and rules_0_15_0()  # [0, hi]: max(x, 0) or |x| of a rounded x (0.15.0)
+        if s is None and not from_zero:
             raise _undecidable(f'sqrt: "{names[0]}" may be negative within its error bound', q)
-        return _outcome(RM.evaluate(RM.SQRT, [x], places, guard), unit, node, qs, places)  # type: ignore[arg-type]
+        fn = RM.SQRT_FROM_ZERO if from_zero else RM.SQRT
+        return _outcome(RM.evaluate(fn, [x], places, guard), unit, node, qs, places)  # type: ignore[arg-type]
     x = _ball(_plain(op, q, names[0]))
     if op == "exp":
         # Sized before Arb is asked: exp(x) is about 10^(0.434 x).

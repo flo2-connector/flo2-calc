@@ -39,8 +39,13 @@ TWO MODES (dec:idea-how-arrays-are-computed).
   regression's slope and intercept). Element-wise logic over true/false
   arrays is exact. A root of an exact value is the rounded class: a standard
   deviation or a standard error is correctly rounded, as a single value is.
+  From 0.15.0, a function of the rounded class over exact arrays stays exact
+  where every element has an exact value, the cases a single value is found
+  exact by (realmath's Fn.exact: sqrt(1/4) = 1/2, cos(90 deg) = 0): see
+  _exact_case.
 - FLOAT64. An FFT, a function of the rounded class over an array (sqrt, exp,
-  ln, sin ...), an array of more elements than the host's max_exact_elements
+  ln, sin ...) with an element that has no exact value, an array of more
+  elements than the host's max_exact_elements
   (limits.py: 65,536 on a laptop, 4,096 on flo2.io; a record keeps the value
   it was made with, and re-runs with it), and
   anything that mixes such a value in (or a rounded value into an array) are
@@ -53,6 +58,9 @@ TWO MODES (dec:idea-how-arrays-are-computed).
 How each float64 bound is found:
 
 - an exact number taken into float64: its exact rounding error;
+- min, max and abs (0.15.0): the interval the arguments' balls give, written
+  from the end the operation guarantees, so max(x, 0) is never below 0 (see
+  _ball_of);
 - + - * / and conversions: each operation's IEEE rounding (at most half a
   unit in the last place, u = 2^-53) and the arguments' bounds carried
   through, with every bound computed then inflated by (1 + 2^-40) so that the
@@ -129,7 +137,7 @@ from flo2_calc import numbers as N
 from flo2_calc import realmath as RM
 from flo2_calc import temperature as T
 from flo2_calc import units as U
-from flo2_calc.errors import CallError, Refusal, at
+from flo2_calc.errors import CallError, LimitExceeded, Refusal, at
 
 # Past the host's max_exact_elements (limits.py; dec:v0-6-0-array-choices), an array is carried in float64: a
 # "large grid". A version 5 record (flo2-calc 0.6.0) was made with this fixed limit, and re-runs with it.
@@ -1230,6 +1238,114 @@ def _undecided(op: str, what: str, i: int, shape: tuple[int, ...], value: float,
     )
 
 
+# ---------------------------------------------------------------- min, max and abs: an interval, not a symmetric radius
+#
+# 0.15.0 (fact:a-clamp-at-zero-on-a-float64-array-keeps-a-two-sided-error-so-sqrt-refuses-the-edge-2026-10-27). A
+# float64 element is a ball (v, e). min, max and abs give a ONE-SIDED guarantee the old radius could not hold: max(x,
+# 0) at an element where x is 0 within 3.4e-16 was written 0.0 within 3.4e-16, so sqrt saw [-3.4e-16, 3.4e-16] and
+# refused, though max(x, 0) is never below 0. Each element is now the interval its arguments' enclosures give,
+# [max(lo), max(hi)] for max, [min(lo), min(hi)] for min, [0, |v| + e] for abs of an element that may be either side
+# of 0; where the argument picked holds both ends, it is that argument's own ball, unchanged.
+#
+# An interval [lo, hi] is written back as a ball from the end the operation guarantees, the lower end for max and abs
+# and the upper end for min: radius r >= (hi - lo) / 2, rounded up, and midpoint lo + r (hi - r) when that is exact in
+# float64, so that end is kept exactly: max(x, 0) is never below 0, min(x, 0) never above it. Where it is not exact (a
+# narrow interval around a large value), the ball is centred on the double nearest the interval's middle, its radius
+# the larger distance to an end, rounded up.
+#
+# READ BACK (_balls): an element whose ball lies at or above 0 (v >= e, an exact comparison of two doubles) is read as
+# an Arb ball cut to [0, inf) (Arb's nonnegative_part). Arb rounds every radius up as it reads it, so [0, 2r] read
+# as it stands reaches a hair below 0, and sqrt would still refuse. The cut is rigorous: the true value is >= 0.
+
+
+def _down(x: np.ndarray) -> np.ndarray:
+    return np.nextafter(x, -np.inf)
+
+
+def _up(x: np.ndarray) -> np.ndarray:
+    return np.nextafter(x, np.inf)
+
+
+def _exact_sum(a: np.ndarray, b: np.ndarray, s: np.ndarray) -> np.ndarray:
+    """Where s = fl(a + b) is a + b exactly (Knuth's TwoSum: its rounding error is 0)."""
+    with np.errstate(invalid="ignore", over="ignore"):
+        bb = s - a
+        err = (a - (s - bb)) + (b - bb)
+    return err == 0
+
+
+def _ends(v: np.ndarray, e: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """A ball's ends, rounded outward: [lo, hi] contains [v - e, v + e]."""
+    with np.errstate(over="ignore"):
+        lo, hi = v - e, v + e
+        lo = np.where((e == 0) | _exact_sum(v, -e, lo), lo, _down(lo))
+        hi = np.where((e == 0) | _exact_sum(v, e, hi), hi, _up(hi))
+    return lo, hi
+
+
+def _ball_of(lo: np.ndarray, hi: np.ndarray, upper: bool = False) -> tuple[np.ndarray, np.ndarray]:
+    """A ball (v, e) containing [lo, hi] (lo <= hi), from its lower end (its upper end, `upper`) where it can be (see
+    above)."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        w = hi - lo
+        w = np.where(_exact_sum(hi, -lo, w), w, _up(w))
+        half = w * 0.5
+        half = np.where(half * 2 == w, half, _up(half))
+        r = half
+        if upper:
+            v = hi - r
+            anchored = _exact_sum(hi, -r, v)
+        else:
+            v = lo + r
+            anchored = _exact_sum(lo, r, v)
+        mid = lo * 0.5 + hi * 0.5
+        d1, d2 = mid - lo, hi - mid
+        d1 = np.where(_exact_sum(mid, -lo, d1), d1, _up(d1))
+        d2 = np.where(_exact_sum(hi, -mid, d2), d2, _up(d2))
+        r_mid = np.maximum(d1, d2)
+    point = lo == hi
+    v = np.where(point, lo, np.where(anchored, v, mid))
+    e = np.where(point, 0.0, np.where(anchored, r, r_mid))
+    return v, e
+
+
+def _picked(op: str, parts: list[tuple[np.ndarray, np.ndarray]], shape: tuple[int, ...]) -> tuple[np.ndarray, np.ndarray]:
+    """min or max of float64 balls, element by element: the interval their enclosures give, as a ball."""
+    vs = [np.broadcast_to(v, shape) for v, _ in parts]
+    es = [np.broadcast_to(e, shape) for _, e in parts]
+    if not E.rules_0_15_0():  # a record of version 12 or older: as it was made
+        pick = np.minimum if op == "min" else np.maximum
+        v, e = vs[0], es[0]
+        for pv, pe in zip(vs[1:], es[1:]):
+            v, e = pick(v, pv), np.maximum(e, pe)
+        return v, e
+    ends = [_ends(v, e) for v, e in zip(vs, es)]
+    stack = np.stack(vs)
+    k = np.argmin(stack, axis=0) if op == "min" else np.argmax(stack, axis=0)  # the first one picked, as numpy picks
+    reduce = np.min if op == "min" else np.max
+    lo, hi = reduce(np.stack([a for a, _ in ends]), axis=0), reduce(np.stack([b for _, b in ends]), axis=0)
+    take = lambda xs: np.take_along_axis(np.stack(xs), k[None, ...], axis=0)[0]  # noqa: E731
+    pv, pe = take(vs), take(es)
+    plo, phi = take([a for a, _ in ends]), take([b for _, b in ends])
+    bv, be = _ball_of(lo, hi, upper=op == "min")
+    own = (plo == lo) & (phi == hi)  # the one picked holds both ends: its own ball, unchanged
+    return np.where(own, pv, bv), np.where(own, pe, be)
+
+
+def _abs_ball(v: np.ndarray, e: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """|x| of float64 balls: where an element may be either side of 0, the interval [0, |v| + e], as a ball."""
+    av = np.abs(v)
+    if not E.rules_0_15_0():
+        return av, e
+    lo, hi = _ends(v, e)
+    either = (lo < 0) & (hi > 0)
+    if not np.any(either):
+        return av, e
+    top = np.maximum(-lo, hi)
+    bv, be = _ball_of(np.zeros_like(top), top)
+    return np.where(either, bv, av), np.where(either, be, e)
+
+
 def _float_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -> Any:
     op, names = node.op, node.args
     units = [a.unit for a in args]
@@ -1255,10 +1371,7 @@ def _float_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guar
         if E.OPS[op][0] == "comparison":
             return _float_compare(node, parts, shape, units[0])
         if op in ("min", "max"):
-            pick = np.minimum if op == "min" else np.maximum
-            v, e = parts[0]
-            for pv, pe in parts[1:]:
-                v, e = pick(v, pv), np.maximum(e, pe)
+            v, e = _picked(op, parts, shape)
         else:
             v, e = parts[0]
             sign = -1.0 if op == "sub" else 1.0
@@ -1294,9 +1407,12 @@ def _float_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guar
         with np.errstate(over="ignore", invalid="ignore"):
             e = (np.abs(av) * be + np.abs(bv) * ae) / (np.abs(bv) * (np.abs(bv) - be)) + U53 * np.abs(v)
         e = (e + np.where((np.abs(v) < NORMAL_MIN) & (av != 0), TINY, 0.0)) * INFLATE
-    elif op in ("neg", "abs"):
+    elif op == "neg":
         v, e = args[0].floats(op, guard)
-        v = -v if op == "neg" else np.abs(v)
+        v = -v
+        unit = units[0]
+    elif op == "abs":
+        v, e = _abs_ball(*(np.asarray(x) for x in args[0].floats(op, guard)))
         unit = units[0]
     elif op == "convert":
         v, e = _scaled(op, args[0], U.conversion(units[0], node.unit, "convert"), guard)
@@ -1390,6 +1506,9 @@ class _Plan:
     scales: list[Fraction]
     unit: U.Unit
     check: Callable[[int, list[Any], list[Any]], None] | None = None  # (index, balls, exact elements or None)
+    # 0.15.0: the value at exact (scaled) arguments where it is rational, else None: the same cases a single value's
+    # realmath.Fn.exact finds first, so an exact array whose every element has one stays exact (_exact_case).
+    exact: Callable[..., Fraction | None] | None = None
 
 
 def _unit_refusal(op: str, name: str, unit: U.Unit, what: str) -> Refusal:
@@ -1446,17 +1565,17 @@ def _plan(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -
         def chk(i: int, b: list[Any], _x: list[Any]) -> None:
             _domain(op, names[0], i, shape, b[0] >= 0, b[0] < 0, "a number >= 0")
 
-        return _Plan(lambda x: x.sqrt(), [scale], tuple((s, e // 2) for s, e in folded), chk)
+        return _Plan(lambda x: x.sqrt(), [scale], tuple((s, e // 2) for s, e in folded), chk, RM.SQRT.exact)
     if op in ("exp", "ln", "log10"):
         scale = _plain_scale(op, names[0], units[0])
         if op == "exp":
-            return _Plan(lambda x: x.exp(), [scale], U.PLAIN)
+            return _Plan(lambda x: x.exp(), [scale], U.PLAIN, exact=RM.EXP.exact)
 
         def chk(i: int, b: list[Any], _x: list[Any]) -> None:
             _domain(op, names[0], i, shape, b[0] > 0, b[0] <= 0, "a number > 0")
 
         fn = (lambda x: x.log()) if op == "ln" else (lambda x: x.log() / F.arb.const_log10())
-        return _Plan(fn, [scale], U.PLAIN, chk)
+        return _Plan(fn, [scale], U.PLAIN, chk, (RM.LN if op == "ln" else RM.LOG10).exact)
     if op in ("sin", "cos", "tan"):
         kind_f = U.angle_kind(units[0])
         if kind_f is None:
@@ -1476,19 +1595,21 @@ def _plan(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -
                 if not (c > 0 or c < 0):
                     raise Refusal(f'tan: "{names[0]}" at element {at_(i)} may be a pole of the tangent within its error bound.', kind="undecidable")
 
-            return _Plan(RM.TAN[kind].arb, [f], U.PLAIN, chk)
-        return _Plan((RM.SIN if op == "sin" else RM.COS)[kind].arb, [f], U.PLAIN)
+            return _Plan(RM.TAN[kind].arb, [f], U.PLAIN, chk, RM.TAN[kind].exact)
+        trig = (RM.SIN if op == "sin" else RM.COS)[kind]
+        return _Plan(trig.arb, [f], U.PLAIN, exact=trig.exact)
     if op in ("asin", "acos", "atan"):
         scale = _plain_scale(op, names[0], units[0])
         kind, f = U.angle_kind(node.unit)  # type: ignore[misc]
-        fn = RM.scaled({"asin": RM.ASIN, "acos": RM.ACOS, "atan": RM.ATAN}[op][kind], 1 / f).arb
+        inverse = RM.scaled({"asin": RM.ASIN, "acos": RM.ACOS, "atan": RM.ATAN}[op][kind], 1 / f)
+        fn = inverse.arb
         if op == "atan":
-            return _Plan(fn, [scale], node.unit)
+            return _Plan(fn, [scale], node.unit, exact=inverse.exact)
 
         def chk(i: int, b: list[Any], _x: list[Any]) -> None:
             _domain(op, names[0], i, shape, b[0] >= -1 and b[0] <= 1, b[0] > 1 or b[0] < -1, "a number from -1 to 1")
 
-        return _Plan(fn, [scale], node.unit, chk)
+        return _Plan(fn, [scale], node.unit, chk, inverse.exact)
     if op == "atan2":
         fx = U.conversion(units[1], units[0], op)
         kind, f = U.angle_kind(node.unit)  # type: ignore[misc]
@@ -1500,39 +1621,43 @@ def _plan(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -
             if not _angle_decided(y, x):
                 raise Refusal(f'atan2: at element {at_(i)} the angle may be either side of 180 deg, or of the origin, within the error bounds.', kind="undecidable")
 
-        return _Plan(RM.scaled(RM.ATAN2[kind], 1 / f).arb, [Fraction(1), fx], node.unit, chk)
+        angle = RM.scaled(RM.ATAN2[kind], 1 / f)
+        return _Plan(angle.arb, [Fraction(1), fx], node.unit, chk, angle.exact)
     if op == "pow":
-        return _pow_plan(node, args, shape)
+        return _pow_plan(node, args, shape, guard)
     if op == "convert":
         turned = U.pi_conversion(units[0], node.unit)
         assert turned is not None
         f, k = turned
-        return _Plan(RM.angle_factor(k).arb, [f], node.unit)
+        turn = RM.angle_factor(k)
+        return _Plan(turn.arb, [f], node.unit, exact=turn.exact)
     if op in ("normal_cdf", "normal_sf"):
         fn = (RM.NORMAL_CDF if op == "normal_cdf" else RM.NORMAL_SF).arb
         if len(args) == 1:
             scale = _plain_scale(op, names[0], units[0], "a plain number (the standard normal), or [x, mean, sd] in one unit")
-            return _Plan(lambda x: fn(x, F.arb(0), F.arb(1)), [scale], U.PLAIN)
+            standard = (RM.NORMAL_CDF if op == "normal_cdf" else RM.NORMAL_SF).exact
+            return _Plan(lambda x: fn(x, F.arb(0), F.arb(1)), [scale], U.PLAIN, exact=lambda x: standard(x, Fraction(0), Fraction(1)))
         fm, fs = U.conversion(units[1], units[0], op), U.conversion(units[2], units[0], op)
 
         def chk(i: int, b: list[Any], _x: list[Any]) -> None:
             _domain(op, names[2], i, shape, b[2] > 0, b[2] <= 0, "a standard deviation > 0")
 
-        return _Plan(fn, [Fraction(1), fm, fs], U.PLAIN, chk)
+        return _Plan(fn, [Fraction(1), fm, fs], U.PLAIN, chk, (RM.NORMAL_CDF if op == "normal_cdf" else RM.NORMAL_SF).exact)
     if op == "normal_quantile":
         sp = _plain_scale(op, names[0], units[0], "a probability, a plain number")
         if len(args) == 1:
             def chk1(i: int, b: list[Any], _x: list[Any]) -> None:
                 _domain(op, names[0], i, shape, b[0] > 0 and b[0] < 1, b[0] <= 0 or b[0] >= 1, "a probability strictly between 0 and 1")
 
-            return _Plan(lambda p: RM.NORMAL_QUANTILE.arb(p, F.arb(0), F.arb(1)), [sp], U.PLAIN, chk1)
+            return _Plan(lambda p: RM.NORMAL_QUANTILE.arb(p, F.arb(0), F.arb(1)), [sp], U.PLAIN, chk1,
+                         lambda p: RM.NORMAL_QUANTILE.exact(p, Fraction(0), Fraction(1)))
         fs = U.conversion(units[2], units[1], op)
 
         def chk3(i: int, b: list[Any], _x: list[Any]) -> None:
             _domain(op, names[0], i, shape, b[0] > 0 and b[0] < 1, b[0] <= 0 or b[0] >= 1, "a probability strictly between 0 and 1")
             _domain(op, names[2], i, shape, b[2] > 0, b[2] <= 0, "a standard deviation > 0")
 
-        return _Plan(RM.NORMAL_QUANTILE.arb, [sp, Fraction(1), fs], units[1], chk3)
+        return _Plan(RM.NORMAL_QUANTILE.arb, [sp, Fraction(1), fs], units[1], chk3, RM.NORMAL_QUANTILE.exact)
     if op == "chi2_sf":
         sx = _plain_scale(op, names[0], units[0], "a chi-square statistic, a plain number")
         sd = _plain_scale(op, names[1], units[1], "degrees of freedom, a plain number")
@@ -1543,14 +1668,15 @@ def _plan(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -
             _domain(op, names[0], i, shape, b[0] >= 0, b[0] < 0, "a chi-square statistic >= 0")
             _domain(op, names[1], i, shape, b[1] > 0, b[1] <= 0, "degrees of freedom > 0")
 
-        return _Plan(RM.CHI2_SF.arb, [sx, sd], U.PLAIN, chk)
+        return _Plan(RM.CHI2_SF.arb, [sx, sd], U.PLAIN, chk, RM.CHI2_SF.exact)
     if op in ("db_to_ratio", "ratio_to_db"):
         k = D.DB_FACTOR[node.kind]
         if op == "db_to_ratio":
             if not U.gain_in(units[0]) or D.level_of(units[0]):
                 raise Refusal(f'db_to_ratio takes gains in dB, and "{names[0]}" is in {U.format_unit(units[0]) or "plain numbers"}.', kind="unit_mismatch", units=(U.format_unit(units[0]), "dB"))
             f = U.conversion(units[0], (("dB", 1),), op)
-            return _Plan(lambda x: F.arb(10) ** (x / k), [f], U.PLAIN)
+            ten = RM.pow_fn(guard).exact  # as a single value: 10^(x / k) is exact where x / k is whole
+            return _Plan(lambda x: F.arb(10) ** (x / k), [f], U.PLAIN, exact=lambda x: ten(Fraction(10), x / k))
         if U.gain_in(units[0]) or D.level_of(units[0]):
             raise Refusal(f'ratio_to_db takes plain ratios, and "{names[0]}" is already in decibels.', kind="unit_mismatch", units=(U.format_unit(units[0]), ""))
         scale = _plain_scale(op, names[0], units[0], "a ratio, a plain number")
@@ -1558,7 +1684,7 @@ def _plan(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -
         def chk(i: int, b: list[Any], _x: list[Any]) -> None:
             _domain(op, names[0], i, shape, b[0] > 0, b[0] <= 0, "a ratio greater than 0")
 
-        return _Plan(lambda r: k * r.log() / F.arb.const_log10(), [scale], (("dB", 1),), chk)
+        return _Plan(lambda r: k * r.log() / F.arb.const_log10(), [scale], (("dB", 1),), chk, RM.scaled(RM.LOG10, Fraction(k)).exact)
     raise Refusal(f"{op} does not work over arrays yet; apply it to single values (element picks one out).", kind="type_mismatch")
 
 
@@ -1572,7 +1698,7 @@ def _angle_decided(y: Any, x: Any) -> bool:
     return bool(x > 0)
 
 
-def _pow_plan(node: Any, args: list[_Arg], shape: tuple[int, ...]) -> _Plan:
+def _pow_plan(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -> _Plan:
     names = node.args
     base, ex = args
     _exponent_plain(node, ex)
@@ -1644,7 +1770,15 @@ def _pow_plan(node: Any, args: list[_Arg], shape: tuple[int, ...]) -> _Plan:
             return RM.flint().arb(0)
         return x**y
 
-    return _Plan(power, [scale, Fraction(1)], unit, chk)
+    rational = RM.pow_fn(guard).exact
+
+    def exact(x: Fraction, y: Fraction) -> Fraction | None:  # as a single value: a whole power, or a perfect root's
+        if y.denominator == 1:
+            guard.check_power(x, int(y))
+            return x ** int(y)
+        return rational(x, y)
+
+    return _Plan(power, [scale, Fraction(1)], unit, chk, exact)
 
 
 def _balls(a: _Arg, shape: tuple[int, ...], scale: Fraction) -> tuple[Any, Any]:
@@ -1662,10 +1796,14 @@ def _balls(a: _Arg, shape: tuple[int, ...], scale: Fraction) -> tuple[Any, Any]:
         return gen_exact(), [q * scale for q in xs]
     n = max(1, math.prod(shape))
 
+    cut = E.rules_0_15_0() and scale > 0  # 0.15.0: a ball at or above 0 is read as one (see _ball_of's note)
+
     def gen_float() -> Any:
         for x, r in zip(floats_in(np.broadcast_to(a.v, shape)), floats_in(np.broadcast_to(a.e, shape))):
             b = F.arb(x, r) if r else F.arb(x)
-            yield b * s if scale != 1 else b
+            if scale != 1:
+                b = b * s
+            yield b.nonnegative_part() if cut and r and x >= r else b
 
     return gen_float(), _Nones(n)
 
@@ -1689,6 +1827,11 @@ def _arb_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guard:
         return _t_quantile_elementwise(node, args, shape, guard)
     plan = _plan(node, args, shape, guard)
     n = max(1, math.prod(shape))
+    if plan.exact is not None and E.rules_0_15_0() and all(a.kind == EXACT for a in args) and n <= guard.limits.max_exact_elements:
+        found = _exact_case(node, plan, args, shape, guard)
+        if found is not None:
+            make_room(guard, shape, EXACT)
+            return _result(found, shape, plan.unit, node, guard)
     gens = [_balls(a, shape, s) for a, s in zip(args, plan.scales, strict=True)]
     iters = [g[0] for g in gens]
     exacts = [g[1] for g in gens]
@@ -1720,6 +1863,40 @@ def _arb_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guard:
             F.ctx.prec = saved
     lab = _own(node, args, how_function(op), always=True)
     return float_array(v.reshape(shape), e.reshape(shape), plan.unit, lab)
+
+
+def _exact_case(node: Any, plan: _Plan, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -> list[Fraction] | None:
+    """0.15.0 (fact:an-array-function-is-float64-where-the-same-scalar-is-exact-2026-10-27): a function of the
+    rounded class over EXACT arrays tries each element's exact case first, as a single value does (sqrt(1/4) = 1/2,
+    cos(90 deg) = 0), each element's domain checked as it is. Every element's value when each has one, so the array
+    stays exact; None at the first element without one (then the whole array is float64, as before). An exact case
+    that would pass the host's digits budget is not an exact case here: that element is left to float64."""
+    exacts = [_balls(a, shape, s)[1] for a, s in zip(args, plan.scales, strict=True)]
+    gens = [_balls(a, shape, s)[0] for a, s in zip(args, plan.scales, strict=True)] if plan.check is not None else None
+    out: list[Fraction] = []
+    F = RM.flint()
+    with RM._LOCK:
+        saved = F.ctx.prec
+        F.ctx.prec = ARB_BITS
+        try:
+            for i in range(max(1, math.prod(shape))):
+                if i % CHECK_EVERY == 0:
+                    guard.check_time()
+                xs = [x[i] for x in exacts]
+                if gens is not None:
+                    plan.check(i, [next(g) for g in gens], xs)  # type: ignore[misc]  # a refusal is the same either way
+                try:
+                    q = plan.exact(*xs)  # type: ignore[misc]
+                    if q is not None:
+                        guard.check_number(q, f"result at element {index_text(i, shape)}")
+                except (Refusal, LimitExceeded):
+                    q = None
+                if q is None:
+                    return None
+                out.append(q)
+        finally:
+            F.ctx.prec = saved
+    return out
 
 
 def _t_quantile_elementwise(node: Any, args: list[_Arg], shape: tuple[int, ...], guard: L.Guard) -> Any:
@@ -2051,7 +2228,16 @@ def _reduce_flat(node: Any, a: Array, xs: np.ndarray, es: np.ndarray | None, gua
         return float_array(np.asarray(s), np.asarray(err), a.unit, label)
     if op in ("min", "max"):
         k = int(np.argmin(xs) if op == "min" else np.argmax(xs))
-        return float_array(np.asarray(float(xs[k])), np.asarray(float(np.max(es))), a.unit, label)
+        if not E.rules_0_15_0():  # a record of version 12 or older: as it was made
+            return float_array(np.asarray(float(xs[k])), np.asarray(float(np.max(es))), a.unit, label)
+        # The least or greatest lies in [min(lo), min(hi)] or [max(lo), max(hi)] (0.15.0): as for min and max element by element.
+        los, his = _ends(xs, es)
+        reduce = np.min if op == "min" else np.max
+        lo, hi = reduce(los), reduce(his)
+        if (los[k], his[k]) == (lo, hi):
+            return float_array(np.asarray(float(xs[k])), np.asarray(float(es[k])), a.unit, label)
+        v, e = _ball_of(np.asarray(lo), np.asarray(hi), upper=op == "min")
+        return float_array(np.asarray(float(v)), np.asarray(float(e)), a.unit, label)
     if op == "product":
         unit, f = fold(a.unit)
         p, ep = 1.0, 0.0
